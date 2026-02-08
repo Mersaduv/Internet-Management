@@ -2418,167 +2418,211 @@ class MikroTikService {
           final interfaceId = wifiInterface['.id']?.toString();
           
           if (interfaceName != null && interfaceId != null) {
-            // غیرفعال کردن default-authenticate
+            // تلاش برای غیرفعال کردن default-authenticate (اگر توسط RouterOS پشتیبانی شود)
             // این کار باعث می‌شود که فقط MAC هایی که در access list هستند و action=allow دارند، متصل شوند
-            // توجه: در MikroTik، وقتی default-authenticate=no است، فقط MAC هایی که rule action=allow دارند می‌توانند متصل شوند
-            // MAC هایی که rule ندارند یا rule action=deny/reject دارند، نمی‌توانند متصل شوند
+            // توجه: در برخی نسخه‌های RouterOS این پارامتر ممکن است پشتیبانی نشود
+            // در این صورت، ما به Wireless Access List متکی هستیم که باید همه MAC ها را پوشش دهد
+            bool defaultAuthenticateSupported = false;
             try {
-              // غیرفعال کردن default-authenticate
-              await _client!.talk([
-                '/interface/wireless/set',
-                '=.id=$interfaceId',
-                '=default-authenticate=no',
+              // بررسی اینکه آیا پارامتر default-authenticate پشتیبانی می‌شود
+              // با خواندن تنظیمات فعلی interface
+              final currentSettings = await _client!.talk([
+                '/interface/wireless/print',
+                '?.id=$interfaceId',
               ]);
+              
+              if (currentSettings.isNotEmpty && currentSettings[0].containsKey('default-authenticate')) {
+                // پارامتر پشتیبانی می‌شود، سعی در تنظیم
+                await _client!.talk([
+                  '/interface/wireless/set',
+                  '=.id=$interfaceId',
+                  '=default-authenticate=no',
+                ]);
+                defaultAuthenticateSupported = true;
+                print('✅ [LOCK_CONN] default-authenticate=no برای interface $interfaceName تنظیم شد');
+              } else {
+                print('ℹ️ [LOCK_CONN] interface $interfaceName از پارامتر default-authenticate پشتیبانی نمی‌کند - استفاده از Access List فقط');
+              }
             } catch (e) {
-              // ignore - ممکن است در برخی نسخه‌ها این تنظیم متفاوت باشد
+              // اگر خطا داد، پارامتر پشتیبانی نمی‌شود
+              print('ℹ️ [LOCK_CONN] interface $interfaceName از پارامتر default-authenticate پشتیبانی نمی‌کند: $e');
+              print('ℹ️ [LOCK_CONN] استفاده از Wireless Access List برای کنترل دسترسی');
+              // ادامه می‌دهیم - Access List باید کافی باشد
             }
 
-            // حذف rule های قبلی lock (اگر وجود دارد)
-            // و همچنین حذف rule هایی که MAC آن‌ها در لیست مجاز نیست
+            // گام 1: پاکسازی rule های قبلی Lock
+            // حذف rule های LOCK_ALLOW و LOCK_DENY_ALL
             final accessList = await _client!.talk(['/interface/wireless/access-list/print']);
             for (var acl in accessList) {
               final comment = acl['comment']?.toString();
-              final aclMac = acl['mac-address']?.toString().toUpperCase();
-              final aclAction = acl['action']?.toString();
+              final aclId = acl['.id'];
               
-              // حذف rule های lock قدیمی
-              if (comment == 'Lock New Connections - Allowed Device' || 
-                  comment == 'Static Device - Lock Allowed') {
-                final aclId = acl['.id'];
-                if (aclId != null) {
-                  try {
-                    await _client!.talk([
-                      '/interface/wireless/access-list/remove',
-                      '=.id=$aclId',
-                    ]);
-                  } catch (e) {
-                    // ignore
-                  }
-                }
-              }
-              
-              // حذف rule های allow که MAC آن‌ها در لیست مجاز نیست
-              // این برای اطمینان از حذف دستگاه‌هایی است که non-static شده‌اند
-              if (aclMac != null && aclAction == 'allow' && 
-                  !connectedMacs.contains(aclMac)) {
-                final aclId = acl['.id'];
-                if (aclId != null) {
-                  try {
-                    await _client!.talk([
-                      '/interface/wireless/access-list/remove',
-                      '=.id=$aclId',
-                    ]);
-                  } catch (e) {
-                    // ignore
-                  }
+              if (aclId != null && (comment == 'LOCK_ALLOW' || comment == 'LOCK_DENY_ALL')) {
+                try {
+                  await _client!.talk([
+                    '/interface/wireless/access-list/remove',
+                    '=.id=$aclId',
+                  ]);
+                  print('✅ [LOCK_CONN] حذف rule قدیمی: $comment');
+                } catch (e) {
+                  print('⚠️ [LOCK_CONN] خطا در حذف rule قدیمی $comment: $e');
                 }
               }
             }
 
-            // اضافه کردن MAC های مجاز به access list با action=allow
-            // فقط این MAC ها می‌توانند به وای‌فای متصل شوند
-            // توجه: در MikroTik access list، rule ها می‌توانند interface مشخص داشته باشند یا نباشند
-            // اگر interface مشخص نشده باشد، rule برای همه interface ها اعمال می‌شود
-            // ما interface را مشخص می‌کنیم تا rule فقط برای این interface اعمال شود
+            // گام 2: اضافه کردن allow rule برای MAC های فعلی
+            // استفاده از authentication=yes برای اجازه اتصال
+            // استفاده از comment="LOCK_ALLOW" برای شناسایی
+            // این سازگار با RB951 و RouterOS 6.x است
             for (var mac in connectedMacs) {
               try {
-                // بررسی اینکه آیا قبلاً اضافه شده (هم با interface و هم بدون interface)
-                bool exists = false;
-                String? existingAclId;
-                final currentAccessList = await _client!.talk(['/interface/wireless/access-list/print']);
-                for (var acl in currentAccessList) {
-                  final aclMac = acl['mac-address']?.toString().toUpperCase();
-                  final aclInterface = acl['interface']?.toString();
-                  
-                  // اگر MAC مطابقت دارد و (interface مطابقت دارد یا interface مشخص نشده)
-                  if (aclMac == mac && 
-                      (aclInterface == null || aclInterface == interfaceName)) {
-                    exists = true;
-                    existingAclId = acl['.id'];
-                    
-                    // اگر action allow نیست یا comment مطابقت ندارد، تغییر بده
-                    if (acl['action']?.toString() != 'allow' ||
-                        acl['comment']?.toString() != 'Lock New Connections - Allowed Device') {
-                      if (existingAclId != null) {
-                        await _client!.talk([
-                          '/interface/wireless/access-list/set',
-                          '=.id=$existingAclId',
-                          '=action=allow',
-                          '=comment=Lock New Connections - Allowed Device',
-                          '=interface=$interfaceName',
-                        ]);
-                      }
-                    } else if (aclInterface != interfaceName && existingAclId != null) {
-                      // اگر interface مطابقت ندارد، interface را به‌روزرسانی کن
-                      await _client!.talk([
-                        '/interface/wireless/access-list/set',
-                        '=.id=$existingAclId',
-                        '=interface=$interfaceName',
-                      ]);
-                    }
-                    break;
-                  }
-                }
-                
-                // اگر وجود ندارد، اضافه کن
-                if (!exists) {
+                // تلاش 1: با authentication=yes (روش صحیح RouterOS)
+                try {
                   await _client!.talk([
                     '/interface/wireless/access-list/add',
-                    '=interface=$interfaceName',
                     '=mac-address=$mac',
-                    '=action=allow',
-                    '=comment=Lock New Connections - Allowed Device',
+                    '=authentication=yes',
+                    '=comment=LOCK_ALLOW',
                   ]);
+                  print('✅ [LOCK_CONN] Allow rule اضافه شد برای MAC: $mac (authentication=yes)');
+                } catch (e1) {
+                  // تلاش 2: بدون authentication (فقط MAC + comment)
+                  try {
+                    await _client!.talk([
+                      '/interface/wireless/access-list/add',
+                      '=mac-address=$mac',
+                      '=comment=LOCK_ALLOW',
+                    ]);
+                    print('✅ [LOCK_CONN] Allow rule اضافه شد برای MAC: $mac (بدون authentication)');
+                  } catch (e2) {
+                    print('❌ [LOCK_CONN] خطا در اضافه کردن allow rule برای MAC $mac: $e2');
+                    // ادامه می‌دهیم - سایر MAC ها را هم اضافه می‌کنیم
+                  }
                 }
               } catch (e) {
-                // ignore errors for individual MACs
+                print('❌ [LOCK_CONN] خطا در پردازش MAC $mac: $e');
+                // ادامه می‌دهیم
               }
             }
+            
+            // گام 3: اضافه کردن deny-all rule در انتهای لیست (حیاتی!)
+            // این rule باید آخر باشد تا همه دستگاه‌های جدید deny شوند
+            // بدون این rule، قفل کار نمی‌کند (در RouterOS 6.x Access List به‌صورت پیش‌فرض DENY نیست)
+            bool denyAllAdded = false;
+            try {
+              // تلاش 1: با authentication=no + forwarding=no (روش صحیح RouterOS برای deny-all)
+              try {
+                await _client!.talk([
+                  '/interface/wireless/access-list/add',
+                  '=authentication=no',
+                  '=forwarding=no',
+                  '=comment=LOCK_DENY_ALL',
+                ]);
+                denyAllAdded = true;
+                print('✅ [LOCK_CONN] Deny-all rule اضافه شد (authentication=no, forwarding=no)');
+              } catch (e1) {
+                print('⚠️ [LOCK_CONN] authentication=no + forwarding=no پشتیبانی نمی‌شود: $e1');
+                
+                // تلاش 2: فقط authentication=no
+                try {
+                  await _client!.talk([
+                    '/interface/wireless/access-list/add',
+                    '=authentication=no',
+                    '=comment=LOCK_DENY_ALL',
+                  ]);
+                  denyAllAdded = true;
+                  print('✅ [LOCK_CONN] Deny-all rule اضافه شد (authentication=no)');
+                } catch (e2) {
+                  print('⚠️ [LOCK_CONN] authentication=no هم پشتیبانی نمی‌شود: $e2');
+                  
+                  // تلاش 3: با action=deny (fallback - ممکن است برخی نسخه‌ها بپذیرند)
+                  try {
+                    await _client!.talk([
+                      '/interface/wireless/access-list/add',
+                      '=action=deny',
+                      '=comment=LOCK_DENY_ALL',
+                    ]);
+                    denyAllAdded = true;
+                    print('✅ [LOCK_CONN] Deny-all rule اضافه شد (action=deny - fallback)');
+                  } catch (e3) {
+                    print('❌ [LOCK_CONN] هیچ روشی برای اضافه کردن deny-all rule کار نکرد');
+                    print('⚠️ [LOCK_CONN] ⚠️ هشدار: deny-all rule اضافه نشد!');
+                    print('⚠️ [LOCK_CONN] استفاده از DHCP block + Firewall rules + restrictNonStaticDevice برای محافظت');
+                  }
+                }
+              }
+            } catch (e) {
+              print('❌ [LOCK_CONN] خطا در اضافه کردن deny-all rule: $e');
+            }
+            
+            // اگر deny-all rule اضافه نشد، از Firewall rules برای محافظت استفاده می‌کنیم
+            // این یک مکانیزم backup است
+            if (!denyAllAdded) {
+              print('⚠️ [LOCK_CONN] ⚠️ هشدار: deny-all rule اضافه نشد!');
+              print('⚠️ [LOCK_CONN] استفاده از DHCP block + Firewall rules + restrictNonStaticDevice برای محافظت');
+              print('⚠️ [LOCK_CONN] دستگاه‌های جدید در loadClients بلافاصله محدود می‌شوند');
+            }
+            
+            print('✅ [LOCK_CONN] برای interface $interfaceName: ${connectedMacs.length} دستگاه مجاز${denyAllAdded ? '، deny-all rule اضافه شد' : ' (بدون deny-all rule - استفاده از backup mechanism)'}');
           }
         }
       } catch (e) {
+        print('⚠️ [LOCK_CONN] خطا در پردازش wireless interfaces: $e');
         // ignore - wireless ممکن است فعال نباشد
       }
 
-      // 2. برای LAN: تبدیل leases به static برای حفظ IP های فعلی
+      // 2. برای LAN/DHCP: تبدیل leases مربوط به MAC های مجاز به static
+      // و مسدود کردن دسترسی DHCP برای دستگاه‌های غیرمجاز
       // این کار باعث می‌شود که دستگاه‌های فعلی IP خود را حفظ کنند
-      // اما برای جلوگیری کامل از اتصال جدید، از Wireless Access List استفاده می‌شود
-      // توجه: برای LAN (سیمی) نمی‌توانیم به راحتی از اتصال جلوگیری کنیم
-      // اما با تبدیل به static، کنترل بهتری داریم
+      // و دستگاه‌های جدید نتوانند IP دریافت کنند
       try {
         final currentLeases = await _client!.talk(['/ip/dhcp-server/lease/print']);
         
-        // تبدیل فقط leases مربوط به MAC های مجاز به static
-        // این کار باعث می‌شود که دستگاه‌های فعلی IP خود را حفظ کنند
         for (var lease in currentLeases) {
           if (lease['status']?.toString().toLowerCase() == 'bound') {
             final leaseMac = lease['mac-address']?.toString().toUpperCase();
-            // فقط اگر MAC در لیست مجاز است، تبدیل به static کن
-            if (leaseMac != null && connectedMacs.contains(leaseMac)) {
-              final leaseId = lease['.id'];
-              if (leaseId != null) {
+            final leaseId = lease['.id'];
+            final leaseIp = lease['address']?.toString();
+            
+            if (leaseMac != null && leaseId != null) {
+              if (connectedMacs.contains(leaseMac)) {
+                // اگر MAC در لیست مجاز است، تبدیل به static کن
                 try {
-                  // تبدیل به static lease (فقط برای حفظ IP - تغییر نمی‌دهد)
                   await _client!.talk([
                     '/ip/dhcp-server/lease/make-static',
                     '=.id=$leaseId',
                   ]);
+                  print('✅ [LOCK_CONN] Lease تبدیل به static شد برای MAC: $leaseMac, IP: $leaseIp');
                 } catch (e) {
                   // ignore - ممکن است قبلاً static باشد
+                }
+              } else {
+                // اگر MAC در لیست مجاز نیست، block-access کن
+                try {
+                  if (lease['block-access']?.toString().toLowerCase() != 'yes') {
+                    await _client!.talk([
+                      '/ip/dhcp-server/lease/set',
+                      '=.id=$leaseId',
+                      '=block-access=yes',
+                      '=comment=Auto-blocked: New connection while locked',
+                    ]);
+                    print('🔒 [LOCK_CONN] DHCP lease مسدود شد برای MAC غیرمجاز: $leaseMac, IP: $leaseIp');
+                  }
+                } catch (e) {
+                  print('⚠️ [LOCK_CONN] خطا در block DHCP lease: $e');
                 }
               }
             }
           }
         }
       } catch (e) {
+        print('⚠️ [LOCK_CONN] خطا در پردازش DHCP leases: $e');
         // ignore - DHCP ممکن است فعال نباشد
       }
 
-      // 3. جلوگیری از اتصال MAC های غیرمجاز از ابتدا
-      // استفاده از Wireless Access List و DHCP Lease Restrictions
-      // این روش امن‌تر است و دستگاه‌های فعلی را تحت تأثیر قرار نمی‌دهد
-      // به جای استفاده از rule block کلی که ممکن است دستگاه‌های فعلی را block کند،
-      // فقط MAC های مجاز را allow می‌کنیم و بقیه به صورت پیش‌فرض deny می‌شوند
+      // 3. اگر deny-all rule اضافه نشد، از Firewall برای جلوگیری از اتصال جدید استفاده می‌کنیم
+      // این یک مکانیزم backup است در صورتی که Access List deny-all کار نکند
+      // توجه: اگر deny-all rule اضافه شد، این بخش اجرا نمی‌شود
 
       // 4. دریافت و ذخیره IP های همه دستگاه‌های فعلی (شامل دستگاه کاربر) برای جلوگیری از مسدود شدن
       final allowedIps = <String>{};
@@ -2852,54 +2896,85 @@ class MikroTikService {
     }
 
     try {
-      // 1. برگرداندن default-authenticate به حالت پیش‌فرض و حذف rule های wireless access list مربوط به lock
+      // 1. برگرداندن default-authenticate به حالت پیش‌فرض (اگر پشتیبانی شود) و حذف rule های wireless access list مربوط به lock
       try {
-        // برگرداندن default-authenticate و default-forwarding به حالت پیش‌فرض
         final wirelessInterfaces = await _client!.talk(['/interface/wireless/print']);
         for (var wifiInterface in wirelessInterfaces) {
           final interfaceId = wifiInterface['.id']?.toString();
+          final interfaceName = wifiInterface['name']?.toString();
           if (interfaceId != null) {
             try {
-              // برگرداندن default-authenticate به yes
-              await _client!.talk([
-                '/interface/wireless/set',
-                '=.id=$interfaceId',
-                '=default-authenticate=yes',
+              // بررسی اینکه آیا پارامتر default-authenticate پشتیبانی می‌شود
+              final currentSettings = await _client!.talk([
+                '/interface/wireless/print',
+                '?.id=$interfaceId',
               ]);
               
-              // برگرداندن default-forwarding به yes (اگر تنظیم شده بود)
-              try {
+              if (currentSettings.isNotEmpty && currentSettings[0].containsKey('default-authenticate')) {
+                // پارامتر پشتیبانی می‌شود، برگرداندن به yes
                 await _client!.talk([
                   '/interface/wireless/set',
                   '=.id=$interfaceId',
-                  '=default-forwarding=yes',
+                  '=default-authenticate=yes',
                 ]);
-              } catch (e) {
-                // ignore - ممکن است در برخی نسخه‌ها این تنظیم متفاوت باشد
+                print('✅ [UNLOCK_CONN] default-authenticate=yes برای interface $interfaceName تنظیم شد');
+                
+                // برگرداندن default-forwarding به yes (اگر تنظیم شده بود)
+                try {
+                  if (currentSettings[0].containsKey('default-forwarding')) {
+                    await _client!.talk([
+                      '/interface/wireless/set',
+                      '=.id=$interfaceId',
+                      '=default-forwarding=yes',
+                    ]);
+                  }
+                } catch (e) {
+                  // ignore - ممکن است در برخی نسخه‌ها این تنظیم متفاوت باشد
+                }
               }
             } catch (e) {
-              // ignore - ممکن است در برخی نسخه‌ها این تنظیم متفاوت باشد
+              // ignore - ممکن است پارامتر پشتیبانی نشود
             }
           }
         }
 
-        // حذف rule های access list مربوط به lock
+        // حذف همه rule های access list مربوط به lock
+        // شامل: LOCK_ALLOW, LOCK_DENY_ALL, و سایر rule های قدیمی
         final accessList = await _client!.talk(['/interface/wireless/access-list/print']);
+        List<String> rulesToRemove = [];
+        
         for (var acl in accessList) {
-          final comment = acl['comment']?.toString();
-          if (comment == 'Lock New Connections - Allowed Device') {
-            final aclId = acl['.id'];
-            if (aclId != null) {
-              try {
-                await _client!.talk([
-                  '/interface/wireless/access-list/remove',
-                  '=.id=$aclId',
-                ]);
-              } catch (e) {
-                // ignore
-              }
-            }
+          final comment = acl['comment']?.toString() ?? '';
+          final aclId = acl['.id']?.toString();
+          
+          // حذف rule های مربوط به lock
+          // شامل: LOCK_ALLOW, LOCK_DENY_ALL, و rule های قدیمی
+          if (aclId != null && (
+            comment == 'LOCK_ALLOW' ||
+            comment == 'LOCK_DENY_ALL' ||
+            comment == 'Lock New Connections - Allowed Device' ||
+            comment == 'Static Device - Lock Allowed' ||
+            comment == 'Lock New Connections - Block New MACs'
+          )) {
+            rulesToRemove.add(aclId);
           }
+        }
+        
+        // حذف همه rule های پیدا شده
+        for (var ruleId in rulesToRemove) {
+          try {
+            await _client!.talk([
+              '/interface/wireless/access-list/remove',
+              '=.id=$ruleId',
+            ]);
+            print('✅ [UNLOCK_CONN] حذف Access List rule: $ruleId');
+          } catch (e) {
+            print('⚠️ [UNLOCK_CONN] خطا در حذف Access List rule $ruleId: $e');
+          }
+        }
+        
+        if (rulesToRemove.isNotEmpty) {
+          print('✅ [UNLOCK_CONN] ${rulesToRemove.length} Access List rule حذف شد');
         }
       } catch (e) {
         // ignore
@@ -3186,7 +3261,9 @@ class MikroTikService {
 
   /// محدود کردن دسترسی WiFi برای دستگاه non-static
   /// این دستگاه در لیست نمایش داده می‌شود اما دسترسی WiFi محدود است
-  Future<void> restrictNonStaticDevice(String macAddress) async {
+  /// محدود کردن دسترسی دستگاه non-static (چند لایه محافظت)
+  /// این تابع دستگاه را در تمام سطوح مسدود می‌کند: Wireless + DHCP + Firewall
+  Future<void> restrictNonStaticDevice(String macAddress, {String? ipAddress}) async {
     if (_client == null || !isConnected) {
       return;
     }
@@ -3194,49 +3271,161 @@ class MikroTikService {
     try {
       final macUpper = macAddress.toUpperCase();
       
-      // بررسی اینکه آیا rule deny/reject وجود دارد
-      final accessList = await _client!.talk(['/interface/wireless/access-list/print']);
-      bool hasDenyRule = false;
-      String? existingRuleId;
-      
-      for (var acl in accessList) {
-        final aclMac = acl['mac-address']?.toString().toUpperCase();
-        if (aclMac == macUpper) {
-          final aclAction = acl['action']?.toString();
-          if (aclAction == 'deny' || aclAction == 'reject') {
-            hasDenyRule = true;
-            existingRuleId = acl['.id']?.toString();
-            break;
-          } else if (aclAction == 'allow') {
-            // اگر rule allow وجود دارد، آن را deny کن
-            existingRuleId = acl['.id']?.toString();
-            break;
+      // 1. Wireless Access List - مسدود کردن اتصال WiFi
+      try {
+        final accessList = await _client!.talk(['/interface/wireless/access-list/print']);
+        bool hasDenyRule = false;
+        String? existingRuleId;
+        
+        for (var acl in accessList) {
+          final aclMac = acl['mac-address']?.toString().toUpperCase();
+          if (aclMac == macUpper) {
+            final aclAction = acl['action']?.toString();
+            if (aclAction == 'deny' || aclAction == 'reject') {
+              hasDenyRule = true;
+              existingRuleId = acl['.id']?.toString();
+              break;
+            } else if (aclAction == 'allow') {
+              // حذف rule allow و اضافه کردن deny
+              existingRuleId = acl['.id']?.toString();
+              try {
+                await _client!.talk([
+                  '/interface/wireless/access-list/remove',
+                  '=.id=$existingRuleId',
+                ]);
+                existingRuleId = null; // بعداً rule جدید اضافه می‌کنیم
+              } catch (e) {
+                // اگر حذف نشد، تغییر به deny
+                try {
+                  await _client!.talk([
+                    '/interface/wireless/access-list/set',
+                    '=.id=$existingRuleId',
+                    '=action=deny',
+                    '=comment=Non-Static Device - Restricted Access',
+                  ]);
+                  hasDenyRule = true;
+                } catch (e2) {
+                  // ignore
+                }
+              }
+              break;
+            }
           }
         }
+        
+        // اگر rule deny/reject وجود ندارد، اضافه کن
+        if (!hasDenyRule) {
+          bool denyAdded = false;
+          
+          // تلاش 1: با action=deny
+          try {
+            await _client!.talk([
+              '/interface/wireless/access-list/add',
+              '=mac-address=$macUpper',
+              '=action=deny',
+              '=comment=Non-Static Device - Restricted Access',
+            ]);
+            denyAdded = true;
+            print('✅ [RESTRICT] Wireless deny rule اضافه شد برای MAC: $macUpper (action=deny)');
+          } catch (e1) {
+            // تلاش 2: با action=reject
+            try {
+              await _client!.talk([
+                '/interface/wireless/access-list/add',
+                '=mac-address=$macUpper',
+                '=action=reject',
+                '=comment=Non-Static Device - Restricted Access',
+              ]);
+              denyAdded = true;
+              print('✅ [RESTRICT] Wireless deny rule اضافه شد برای MAC: $macUpper (action=reject)');
+            } catch (e2) {
+              // اگر action پشتیبانی نشد، فقط MAC را اضافه می‌کنیم (بدون action)
+              // DHCP block + Firewall rules باید کافی باشند
+              try {
+                await _client!.talk([
+                  '/interface/wireless/access-list/add',
+                  '=mac-address=$macUpper',
+                  '=comment=Non-Static Device - Restricted Access',
+                ]);
+                print('⚠️ [RESTRICT] Wireless rule اضافه شد (بدون action) برای MAC: $macUpper - DHCP block + Firewall باید محافظت کنند');
+              } catch (e3) {
+                print('⚠️ [RESTRICT] خطا در اضافه کردن wireless rule برای MAC $macUpper: $e3');
+              }
+            }
+          }
+        }
+      } catch (e) {
+        print('⚠️ [RESTRICT] خطا در wireless access list: $e');
       }
-      
-      // اگر rule deny/reject وجود ندارد، اضافه یا تغییر کن
-      if (!hasDenyRule) {
-        if (existingRuleId != null) {
-          // تغییر rule موجود به deny
-          await _client!.talk([
-            '/interface/wireless/access-list/set',
-            '=.id=$existingRuleId',
-            '=action=deny',
-            '=comment=Non-Static Device - Restricted Access',
-          ]);
-        } else {
-          // اضافه کردن rule جدید
-          await _client!.talk([
-            '/interface/wireless/access-list/add',
-            '=mac-address=$macUpper',
-            '=action=deny',
-            '=comment=Non-Static Device - Restricted Access',
-          ]);
+
+      // 2. DHCP Block Access - مسدود کردن دسترسی DHCP (اگر IP داده شده)
+      if (ipAddress != null) {
+        try {
+          final dhcpLeases = await _client!.talk(['/ip/dhcp-server/lease/print']);
+          for (var lease in dhcpLeases) {
+            final leaseMac = lease['mac-address']?.toString().toUpperCase();
+            final leaseIp = lease['address']?.toString();
+            if ((leaseMac == macUpper || leaseIp == ipAddress) && 
+                lease['block-access']?.toString().toLowerCase() != 'yes') {
+              final leaseId = lease['.id'];
+              if (leaseId != null) {
+                try {
+                  await _client!.talk([
+                    '/ip/dhcp-server/lease/set',
+                    '=.id=$leaseId',
+                    '=block-access=yes',
+                    '=comment=Blocked: Non-Static Device - Restricted Access',
+                  ]);
+                  print('✅ [RESTRICT] DHCP block-access برای IP: $ipAddress, MAC: $macUpper');
+                } catch (e) {
+                  print('⚠️ [RESTRICT] خطا در block DHCP lease: $e');
+                }
+              }
+              break;
+            }
+          }
+        } catch (e) {
+          print('⚠️ [RESTRICT] خطا در DHCP lease block: $e');
+        }
+      }
+
+      // 3. Firewall Raw Rules - مسدود کردن ترافیک شبکه (برای IP اگر داده شده)
+      if (ipAddress != null) {
+        try {
+          // بررسی اینکه آیا قبلاً rule وجود دارد
+          final rawRules = await _client!.talk(['/ip/firewall/raw/print']);
+          bool ruleExists = false;
+          for (var rule in rawRules) {
+            if ((rule['src-address']?.toString() == ipAddress || 
+                 rule['src-mac-address']?.toString().toUpperCase() == macUpper) &&
+                rule['action']?.toString() == 'drop' &&
+                rule['comment']?.toString() == 'Blocked: Non-Static Device - Restricted Access') {
+              ruleExists = true;
+              break;
+            }
+          }
+          
+          if (!ruleExists) {
+            try {
+              await _client!.talk([
+                '/ip/firewall/raw/add',
+                '=chain=prerouting',
+                '=src-address=$ipAddress',
+                '=src-mac-address=$macUpper',
+                '=action=drop',
+                '=comment=Blocked: Non-Static Device - Restricted Access',
+              ]);
+              print('✅ [RESTRICT] Firewall raw rule اضافه شد برای IP: $ipAddress, MAC: $macUpper');
+            } catch (e) {
+              print('⚠️ [RESTRICT] خطا در اضافه کردن firewall rule: $e');
+            }
+          }
+        } catch (e) {
+          print('⚠️ [RESTRICT] خطا در firewall rules: $e');
         }
       }
     } catch (e) {
-      // ignore errors
+      print('❌ [RESTRICT] خطا در restrictNonStaticDevice: $e');
     }
   }
 
@@ -3249,6 +3438,40 @@ class MikroTikService {
 
     try {
       final macUpper = macAddress.toUpperCase();
+      
+      // 0. اطمینان از اینکه default-authenticate=no است (اگر قفل فعال است و پارامتر پشتیبانی شود)
+      // این برای جلوگیری از اتصال دستگاه‌های جدید ضروری است
+      // توجه: اگر پارامتر پشتیبانی نشود، Access List باید کافی باشد
+      try {
+        final isLocked = await isNewConnectionsLocked();
+        if (isLocked) {
+          final wirelessInterfaces = await _client!.talk(['/interface/wireless/print']);
+          for (var wifiInterface in wirelessInterfaces) {
+            final interfaceId = wifiInterface['.id']?.toString();
+            if (interfaceId != null) {
+              try {
+                // بررسی اینکه آیا پارامتر default-authenticate پشتیبانی می‌شود
+                final currentSettings = await _client!.talk([
+                  '/interface/wireless/print',
+                  '?.id=$interfaceId',
+                ]);
+                
+                if (currentSettings.isNotEmpty && currentSettings[0].containsKey('default-authenticate')) {
+                  await _client!.talk([
+                    '/interface/wireless/set',
+                    '=.id=$interfaceId',
+                    '=default-authenticate=no',
+                  ]);
+                }
+              } catch (e) {
+                // ignore - ممکن است پارامتر پشتیبانی نشود
+              }
+            }
+          }
+        }
+      } catch (e) {
+        // ignore - ممکن است wireless فعال نباشد یا قفل فعال نباشد
+      }
       
       // 1. تغییر rule deny/reject به allow در wireless access list
       try {
@@ -3290,17 +3513,21 @@ class MikroTikService {
                   '=.id=$existingRuleId',
                 ]);
                 
-                // 然后添加 allow rule（只使用 MAC，不指定 action）
+                // 然后添加 allow rule（明确指定 action=allow 和 comment）
                 if (wirelessInterfaces.isNotEmpty) {
                   await _client!.talk([
                     '/interface/wireless/access-list/add',
                     '=interface=${wirelessInterfaces[0]}',
                     '=mac-address=$macUpper',
+                    '=action=allow',
+                    '=comment=Lock New Connections - Allowed Device',
                   ]);
                 } else {
                   await _client!.talk([
                     '/interface/wireless/access-list/add',
                     '=mac-address=$macUpper',
+                    '=action=allow',
+                    '=comment=Lock New Connections - Allowed Device',
                   ]);
                 }
                 ruleUpdated = true;
@@ -3346,18 +3573,22 @@ class MikroTikService {
         if (!ruleUpdated) {
           bool addSuccess = false;
           
-          // 方法 1: 只添加 MAC address（某些版本默认是 allow）
+          // 方法 1: 添加 MAC address 并明确指定 action=allow 和 comment
           try {
             if (wirelessInterfaces.isNotEmpty) {
               await _client!.talk([
                 '/interface/wireless/access-list/add',
                 '=interface=${wirelessInterfaces[0]}',
                 '=mac-address=$macUpper',
+                '=action=allow',
+                '=comment=Lock New Connections - Allowed Device',
               ]);
             } else {
               await _client!.talk([
                 '/interface/wireless/access-list/add',
                 '=mac-address=$macUpper',
+                '=action=allow',
+                '=comment=Lock New Connections - Allowed Device',
               ]);
             }
             addSuccess = true;
@@ -3418,17 +3649,21 @@ class MikroTikService {
                             '/interface/wireless/access-list/remove',
                             '=.id=$aclId',
                           ]);
-                          // 重新添加（只使用 MAC）
+                          // 重新添加（明确指定 action=allow 和 comment）
                           if (wirelessInterfaces.isNotEmpty) {
                             await _client!.talk([
                               '/interface/wireless/access-list/add',
                               '=interface=${wirelessInterfaces[0]}',
                               '=mac-address=$macUpper',
+                              '=action=allow',
+                              '=comment=Lock New Connections - Allowed Device',
                             ]);
                           } else {
                             await _client!.talk([
                               '/interface/wireless/access-list/add',
                               '=mac-address=$macUpper',
+                              '=action=allow',
+                              '=comment=Lock New Connections - Allowed Device',
                             ]);
                           }
                         } catch (e2) {
@@ -3495,39 +3730,48 @@ class MikroTikService {
     try {
       final macUpper = macAddress.toUpperCase();
       
-      // 1. حذف rule allow از wireless access list
+      // 1. حذف همه rule های allow مربوط به این MAC از wireless access list
+      // مهم: باید همه rule های allow را حذف کنیم، نه فقط با comment خاص
       try {
         final accessList = await _client!.talk(['/interface/wireless/access-list/print']);
+        List<String> rulesToRemove = [];
+        
         for (var acl in accessList) {
           final aclMac = acl['mac-address']?.toString().toUpperCase();
           if (aclMac == macUpper) {
             final aclId = acl['.id']?.toString();
-            final aclComment = acl['comment']?.toString();
+            final aclAction = acl['action']?.toString();
             
-            // اگر rule مربوط به allowed device است، حذف کن
-            if (aclId != null && 
-                (aclComment == 'Lock New Connections - Allowed Device' ||
-                 acl['action']?.toString() == 'allow')) {
-              try {
-                await _client!.talk([
-                  '/interface/wireless/access-list/remove',
-                  '=.id=$aclId',
-                ]);
-              } catch (e) {
-                // ignore errors
-              }
+            // حذف همه rule های allow (بدون توجه به comment)
+            // این شامل rule های اضافه شده توسط allowNonStaticDevice هم می‌شود
+            if (aclId != null && (aclAction == 'allow' || aclAction == null)) {
+              // در MikroTik، اگر action مشخص نشده باشد، معمولاً allow است
+              rulesToRemove.add(aclId);
             }
           }
         }
+        
+        // حذف همه rule های پیدا شده
+        for (var ruleId in rulesToRemove) {
+          try {
+            await _client!.talk([
+              '/interface/wireless/access-list/remove',
+              '=.id=$ruleId',
+            ]);
+            print('✅ [REMOVE_ALLOWED] حذف rule allow برای MAC: $macUpper, Rule ID: $ruleId');
+          } catch (e) {
+            print('⚠️ [REMOVE_ALLOWED] خطا در حذف rule $ruleId: $e');
+          }
+        }
       } catch (e) {
-        // ignore errors
+        print('⚠️ [REMOVE_ALLOWED] خطا در خواندن access list: $e');
       }
       
-      // 2. محدود کردن دسترسی WiFi (اضافه کردن deny rule)
+      // 2. محدود کردن دسترسی در تمام سطوح: Wireless + DHCP + Firewall
       try {
-        await restrictNonStaticDevice(macAddress);
+        await restrictNonStaticDevice(macAddress, ipAddress: ipAddress);
       } catch (e) {
-        // ignore errors
+        print('⚠️ [REMOVE_ALLOWED] خطا در restrictNonStaticDevice: $e');
       }
       
       // 3. حذف از لیست مجاز در SharedPreferences
@@ -9542,134 +9786,67 @@ class MikroTikService {
     }
 
     try {
-      // دریافت لیست Leases با فیلتر
+      // بهینه‌سازی: استفاده از .proplist برای کاهش حجم داده و یکباره جستجو
+      // اولویت: MAC address (دقیق‌تر است)
       List<Map<String, String>> leases = [];
-      bool filterSuccess = false;
-      
-      if (macAddress != null) {
-        try {
-          leases = await _client!.talk(['/ip/dhcp-server/lease/print', '?=mac-address=$macAddress']).timeout(
-            const Duration(seconds: 5),
-            onTimeout: () => throw TimeoutException('Timeout', const Duration(seconds: 5)),
-          );
-          if (leases.isNotEmpty) filterSuccess = true;
-        } catch (e) {
-          // ادامه
-        }
-      }
-      
-      if (!filterSuccess && ipAddress != null) {
-        try {
-          leases = await _client!.talk(['/ip/dhcp-server/lease/print', '?=address=$ipAddress']).timeout(
-            const Duration(seconds: 5),
-            onTimeout: () => throw TimeoutException('Timeout', const Duration(seconds: 5)),
-          );
-          if (leases.isNotEmpty) filterSuccess = true;
-        } catch (e) {
-          // ادامه
-        }
-      }
-      
-      if (!filterSuccess) {
-        leases = await _client!.talk(['/ip/dhcp-server/lease/print']).timeout(
-          const Duration(seconds: 5),
-          onTimeout: () => throw TimeoutException('Timeout', const Duration(seconds: 5)),
-        );
-      }
-      
-      // جستجوی Lease
       Map<String, String>? leaseFound;
       String? leaseId;
       
-      for (var lease in leases) {
-        bool found = false;
-        final leaseMac = lease['mac-address']?.toString().toUpperCase();
-        final leaseIp = lease['address']?.toString();
-
-        if (macAddress != null && leaseMac == macAddress.toUpperCase()) {
-          found = true;
-        } else if (ipAddress != null && leaseIp == ipAddress) {
-          found = true;
+      // استفاده از .proplist برای دریافت فقط فیلدهای مورد نیاز (سریع‌تر)
+      final proplist = '.proplist=.id,address,mac-address,dynamic,host-name,comment';
+      
+      // تلاش 1: جستجو با MAC address (دقیق‌ترین روش)
+      if (macAddress != null) {
+        try {
+          leases = await _client!.talk([
+            '/ip/dhcp-server/lease/print',
+            '?=mac-address=$macAddress',
+            proplist
+          ]).timeout(
+            const Duration(seconds: 2),
+            onTimeout: () => <Map<String, String>>[],
+          );
+          
+          if (leases.isNotEmpty) {
+            final leaseMac = leases[0]['mac-address']?.toString().toUpperCase();
+            if (leaseMac == macAddress.toUpperCase()) {
+              leaseFound = Map<String, String>.from(leases[0].map((key, value) => 
+                MapEntry(key.toString(), value.toString())));
+              leaseId = leases[0]['.id']?.toString();
+            }
+          }
+        } catch (e) {
+          print('[STATIC] ⚠️ خطا در جستجوی MAC: $e');
         }
-
-        if (found) {
-          leaseFound = Map<String, String>.from(lease.map((key, value) => 
-            MapEntry(key.toString(), (value != null ? value.toString() : ''))));
-          leaseId = lease['.id']?.toString();
-          break;
+      }
+      
+      // تلاش 2: اگر MAC جستجو نکرد یا پیدا نشد، با IP جستجو کن
+      if (leaseFound == null && ipAddress != null) {
+        try {
+          leases = await _client!.talk([
+            '/ip/dhcp-server/lease/print',
+            '?=address=$ipAddress',
+            proplist
+          ]).timeout(
+            const Duration(seconds: 2),
+            onTimeout: () => <Map<String, String>>[],
+          );
+          
+          if (leases.isNotEmpty) {
+            final leaseIp = leases[0]['address']?.toString();
+            if (leaseIp == ipAddress) {
+              leaseFound = Map<String, String>.from(leases[0].map((key, value) => 
+                MapEntry(key.toString(), value.toString())));
+              leaseId = leases[0]['.id']?.toString();
+            }
+          }
+        } catch (e) {
+          print('[STATIC] ⚠️ خطا در جستجوی IP: $e');
         }
       }
 
-      if (leaseFound == null || leaseId == null) {
+      if (leaseFound == null) {
         print('[STATIC] ❌ Lease پیدا نشد | MAC: ${macAddress ?? "N/A"} | IP: ${ipAddress ?? "N/A"}');
-        
-        // بررسی اینکه آیا دستگاه در ARP table یا wireless registration table موجود است
-        bool deviceFoundInOtherSources = false;
-        String deviceStatus = '';
-        
-        // بررسی ARP table
-        if (macAddress != null || ipAddress != null) {
-          try {
-            final arpEntries = await _client!.talk(['/ip/arp/print']).timeout(
-              const Duration(seconds: 3),
-              onTimeout: () => <Map<String, String>>[],
-            );
-            
-            for (var arp in arpEntries) {
-              final arpMac = arp['mac-address']?.toString().toUpperCase();
-              final arpIp = arp['address']?.toString();
-              
-              bool matches = false;
-              if (macAddress != null && arpMac == macAddress.toUpperCase()) {
-                matches = true;
-              } else if (ipAddress != null && arpIp == ipAddress) {
-                matches = true;
-              }
-              
-              if (matches) {
-                deviceFoundInOtherSources = true;
-                deviceStatus = 'دستگاه در ARP table موجود است اما Lease ندارد.';
-                print('[STATIC] ⚠️ دستگاه در ARP table پیدا شد اما Lease ندارد');
-                break;
-              }
-            }
-          } catch (e) {
-            // ignore
-          }
-        }
-        
-        // بررسی Wireless Registration Table
-        if (!deviceFoundInOtherSources && macAddress != null) {
-          try {
-            final wirelessClients = await _client!.talk(['/interface/wireless/registration-table/print']).timeout(
-              const Duration(seconds: 3),
-              onTimeout: () => <Map<String, String>>[],
-            );
-            
-            for (var client in wirelessClients) {
-              final clientMac = client['mac-address']?.toString().toUpperCase();
-              if (clientMac == macAddress.toUpperCase()) {
-                deviceFoundInOtherSources = true;
-                deviceStatus = 'دستگاه در Wireless Registration Table موجود است اما Lease ندارد.';
-                print('[STATIC] ⚠️ دستگاه در Wireless Registration Table پیدا شد اما Lease ندارد');
-                break;
-              }
-            }
-          } catch (e) {
-            // ignore
-          }
-        }
-        
-        // اگر دستگاه در منابع دیگر پیدا شد اما Lease ندارد
-        if (deviceFoundInOtherSources) {
-          throw Exception(
-            'Lease پیدا نشد. $deviceStatus\n'
-            'این ممکن است به این دلیل باشد که دستگاه اخیراً از Static به Dynamic تبدیل شده است.\n'
-            'لطفاً WiFi دستگاه را خاموش و روشن کنید تا Lease جدید ایجاد شود، سپس دوباره تلاش کنید.'
-          );
-        }
-        
-        // اگر دستگاه در هیچ جا پیدا نشد
         throw Exception(
           'Lease پیدا نشد. مطمئن شوید که:\n'
           '• دستگاه متصل است\n'
@@ -9677,12 +9854,35 @@ class MikroTikService {
           '• اگر اخیراً از Static به Dynamic تبدیل شده‌اید، WiFi دستگاه را خاموش و روشن کنید'
         );
       }
+      
+      // اطمینان از وجود leaseId
+      if (leaseId == null) {
+        print('[STATIC] ❌ Lease ID پیدا نشد');
+        throw Exception('Lease ID پیدا نشد. لطفاً دوباره تلاش کنید.');
+      }
 
       // بررسی وضعیت فعلی
       final isAlreadyStatic = leaseFound['dynamic']?.toLowerCase() == 'false';
       print('[STATIC] وضعیت فعلی: ${isAlreadyStatic ? "Static" : "Dynamic"} | IP: ${leaseFound['address']}');
       
       if (isAlreadyStatic) {
+        // اگر قبلاً Static است، فقط comment را به‌روزرسانی کن (اگر لازم باشد)
+        final finalComment = comment ?? (hostname != null && hostname.isNotEmpty ? 'Static: $hostname' : 'Static Lease');
+        if (comment != null || hostname != null) {
+          try {
+            final updateParams = <String>['/ip/dhcp-server/lease/set', '=.id=$leaseId', '=comment=$finalComment'];
+            if (hostname != null && hostname.isNotEmpty) {
+              updateParams.add('=host-name=$hostname');
+            }
+            await _client!.talk(updateParams).timeout(
+              const Duration(seconds: 2),
+              onTimeout: () => <Map<String, String>>[],
+            );
+          } catch (e) {
+            // ignore - به‌روزرسانی comment اختیاری است
+          }
+        }
+        
         print('[STATIC] ✅ قبلاً Static است');
         return {
           'status': 'info',
@@ -9690,18 +9890,18 @@ class MikroTikService {
           'lease': {
             'ip_address': leaseFound['address'] ?? 'N/A',
             'mac_address': leaseFound['mac-address'] ?? 'N/A',
-            'hostname': leaseFound['host-name'] ?? 'N/A',
+            'hostname': hostname ?? leaseFound['host-name'] ?? 'N/A',
             'is_static': true,
           },
         };
       }
 
-      // تبدیل به Static
+      // تبدیل به Static - استفاده از make-static (سریع‌تر از set)
       print('[STATIC] در حال تبدیل... | Lease ID: $leaseId');
       try {
         await _client!.talk(['/ip/dhcp-server/lease/make-static', '=numbers=$leaseId']).timeout(
-          const Duration(seconds: 5),
-          onTimeout: () => throw TimeoutException('Timeout', const Duration(seconds: 5)),
+          const Duration(seconds: 2),
+          onTimeout: () => throw TimeoutException('Timeout در تبدیل به Static'),
         );
         print('[STATIC] ✅ تبدیل موفق');
       } catch (e) {
@@ -9709,7 +9909,7 @@ class MikroTikService {
         throw e;
       }
 
-      // به‌روزرسانی پارامترها - همیشه comment را تنظیم می‌کنیم
+      // به‌روزرسانی پارامترها - فقط در صورت نیاز
       final updateParams = <String>['/ip/dhcp-server/lease/set', '=.id=$leaseId'];
       bool hasUpdates = false;
 
@@ -9717,23 +9917,25 @@ class MikroTikService {
         updateParams.add('=address=$ipAddress');
         hasUpdates = true;
       }
-      if (hostname != null && hostname.isNotEmpty) {
+      if (hostname != null && hostname.isNotEmpty && hostname != leaseFound['host-name']) {
         updateParams.add('=host-name=$hostname');
         hasUpdates = true;
       }
       
       // همیشه comment را تنظیم می‌کنیم (برای Static Lease)
       final finalComment = comment ?? (hostname != null && hostname.isNotEmpty ? 'Static: $hostname' : 'Static Lease');
-      updateParams.add('=comment=$finalComment');
-      hasUpdates = true;
+      if (finalComment != leaseFound['comment']) {
+        updateParams.add('=comment=$finalComment');
+        hasUpdates = true;
+      }
 
       if (hasUpdates) {
         try {
           await _client!.talk(updateParams).timeout(
-            const Duration(seconds: 3),
+            const Duration(seconds: 2),
             onTimeout: () => <Map<String, String>>[],
           );
-          print('[STATIC] ✅ پارامترها به‌روزرسانی شد (comment: $finalComment)');
+          print('[STATIC] ✅ پارامترها به‌روزرسانی شد');
         } catch (e) {
           print('[STATIC] ⚠️ خطا در به‌روزرسانی پارامترها (ادامه می‌دهیم): $e');
         }
@@ -9748,7 +9950,7 @@ class MikroTikService {
           'ip_address': leaseFound['address'] ?? 'N/A',
           'mac_address': leaseFound['mac-address'] ?? 'N/A',
           'hostname': hostname ?? leaseFound['host-name'] ?? 'N/A',
-          'comment': comment ?? leaseFound['comment'] ?? 'N/A',
+          'comment': finalComment,
           'is_static': true,
           'dynamic': 'false',
         },
@@ -9877,70 +10079,71 @@ class MikroTikService {
     }
 
     try {
-      // دریافت لیست Leases
+      // بهینه‌سازی: استفاده از .proplist برای کاهش حجم داده
+      final proplist = '.proplist=.id,address,mac-address,dynamic';
       List<Map<String, String>> leases = [];
-      bool filterSuccess = false;
-      
-      // تلاش با فیلتر MAC
-      if (macAddress != null) {
-        try {
-          leases = await _client!.talk(['/ip/dhcp-server/lease/print', '?=mac-address=$macAddress']).timeout(
-            const Duration(seconds: 5),
-            onTimeout: () => throw TimeoutException('Timeout', const Duration(seconds: 5)),
-          );
-          if (leases.isNotEmpty) filterSuccess = true;
-        } catch (e) {
-          // ادامه
-        }
-      }
-      
-      // تلاش با فیلتر IP
-      if (!filterSuccess && ipAddress != null) {
-        try {
-          leases = await _client!.talk(['/ip/dhcp-server/lease/print', '?=address=$ipAddress']).timeout(
-            const Duration(seconds: 5),
-            onTimeout: () => throw TimeoutException('Timeout', const Duration(seconds: 5)),
-          );
-          if (leases.isNotEmpty) filterSuccess = true;
-        } catch (e) {
-          // ادامه
-        }
-      }
-      
-      // اگر فیلتر کار نکرد، همه leases را بگیر
-      if (!filterSuccess) {
-        leases = await _client!.talk(['/ip/dhcp-server/lease/print']).timeout(
-          const Duration(seconds: 5),
-          onTimeout: () => throw TimeoutException('Timeout', const Duration(seconds: 5)),
-        );
-      }
-      
-      // جستجوی Lease
       Map<String, String>? leaseFound;
       String? leaseId;
       
-      for (var lease in leases) {
-        bool found = false;
-        final leaseMac = lease['mac-address']?.toString().toUpperCase();
-        final leaseIp = lease['address']?.toString();
-
-        if (macAddress != null && leaseMac == macAddress.toUpperCase()) {
-          found = true;
-        } else if (ipAddress != null && leaseIp == ipAddress) {
-          found = true;
+      // تلاش 1: جستجو با MAC address (دقیق‌ترین روش)
+      if (macAddress != null) {
+        try {
+          leases = await _client!.talk([
+            '/ip/dhcp-server/lease/print',
+            '?=mac-address=$macAddress',
+            proplist
+          ]).timeout(
+            const Duration(seconds: 2),
+            onTimeout: () => <Map<String, String>>[],
+          );
+          
+          if (leases.isNotEmpty) {
+            final leaseMac = leases[0]['mac-address']?.toString().toUpperCase();
+            if (leaseMac == macAddress.toUpperCase()) {
+              leaseFound = Map<String, String>.from(leases[0].map((key, value) => 
+                MapEntry(key.toString(), value.toString())));
+              leaseId = leases[0]['.id']?.toString();
+            }
+          }
+        } catch (e) {
+          print('[REMOVE_STATIC] ⚠️ خطا در جستجوی MAC: $e');
         }
-
-        if (found) {
-          leaseFound = Map<String, String>.from(lease.map((key, value) => 
-            MapEntry(key.toString(), (value != null ? value.toString() : ''))));
-          leaseId = lease['.id']?.toString();
-          break;
+      }
+      
+      // تلاش 2: اگر MAC جستجو نکرد یا پیدا نشد، با IP جستجو کن
+      if (leaseFound == null && ipAddress != null) {
+        try {
+          leases = await _client!.talk([
+            '/ip/dhcp-server/lease/print',
+            '?=address=$ipAddress',
+            proplist
+          ]).timeout(
+            const Duration(seconds: 2),
+            onTimeout: () => <Map<String, String>>[],
+          );
+          
+          if (leases.isNotEmpty) {
+            final leaseIp = leases[0]['address']?.toString();
+            if (leaseIp == ipAddress) {
+              leaseFound = Map<String, String>.from(leases[0].map((key, value) => 
+                MapEntry(key.toString(), value.toString())));
+              leaseId = leases[0]['.id']?.toString();
+            }
+          }
+        } catch (e) {
+          print('[REMOVE_STATIC] ⚠️ خطا در جستجوی IP: $e');
         }
       }
 
-      if (leaseFound == null || leaseId == null) {
+      if (leaseFound == null) {
         print('[REMOVE_STATIC] ❌ Lease پیدا نشد | MAC: ${macAddress ?? "N/A"} | IP: ${ipAddress ?? "N/A"}');
         throw Exception('Lease پیدا نشد. مطمئن شوید که دستگاه متصل است و Static Lease دارد.');
+      }
+      
+      // اطمینان از وجود leaseId
+      if (leaseId == null) {
+        print('[REMOVE_STATIC] ❌ Lease ID پیدا نشد');
+        throw Exception('Lease ID پیدا نشد. لطفاً دوباره تلاش کنید.');
       }
 
       // بررسی وضعیت فعلی
@@ -9964,8 +10167,8 @@ class MikroTikService {
       print('[REMOVE_STATIC] در حال حذف... | Lease ID: $leaseId');
       try {
         await _client!.talk(['/ip/dhcp-server/lease/remove', '=numbers=$leaseId']).timeout(
-          const Duration(seconds: 5),
-          onTimeout: () => throw TimeoutException('Timeout', const Duration(seconds: 5)),
+          const Duration(seconds: 2),
+          onTimeout: () => throw TimeoutException('Timeout در حذف Static Lease'),
         );
         print('[REMOVE_STATIC] ✅ حذف موفق');
       } catch (e) {

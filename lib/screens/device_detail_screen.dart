@@ -1220,7 +1220,7 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> with WidgetsBin
         ipAddress: widget.device.ipAddress,
         hostname: widget.device.hostName,
         comment: widget.device.hostName != null ? 'Static: ${widget.device.hostName}' : 'Static Lease',
-      ).timeout(const Duration(seconds: 30), onTimeout: () {
+      ).timeout(const Duration(seconds: 10), onTimeout: () {
         throw Exception('زمان تبدیل به Static به پایان رسید. لطفاً دوباره تلاش کنید.');
       });
       
@@ -1333,7 +1333,7 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> with WidgetsBin
       final result = await serviceManager.service!.removeStaticLease(
         macAddress: widget.device.macAddress,
         ipAddress: widget.device.ipAddress,
-      ).timeout(const Duration(seconds: 30), onTimeout: () {
+      ).timeout(const Duration(seconds: 10), onTimeout: () {
         throw Exception('زمان حذف Static Lease به پایان رسید. لطفاً دوباره تلاش کنید.');
       });
       

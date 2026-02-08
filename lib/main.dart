@@ -989,359 +989,537 @@ class _HomePageState extends State<HomePage> {
 
     return Material(
       color: Colors.white,
-      child: GestureDetector(
-        onTap: () {
-          Navigator.pushNamed(
-            context,
-            '/device-detail',
-            arguments: {
-              'device': client,
-              'isCurrentDevice': isCurrentDevice,
+      child: FutureBuilder<bool>(
+        future: provider.isDeviceAllowed(client.macAddress, client.ipAddress),
+        builder: (context, snapshot) {
+          final isAllowed = snapshot.hasData && snapshot.data == true;
+          
+          // 如果设备未被允许且不是 static 设备，禁用点击
+          final shouldDisableClick = provider.isNewConnectionsLocked && 
+                                     !_isStaticDevice(client) && 
+                                     !isCurrentDevice && 
+                                     !isAllowed;
+          
+          return GestureDetector(
+            onTap: shouldDisableClick ? null : () {
+              Navigator.pushNamed(
+                context,
+                '/device-detail',
+                arguments: {
+                  'device': client,
+                  'isCurrentDevice': isCurrentDevice,
+                },
+              );
             },
-          );
-        },
-        onLongPress: () {
-          // نمایش منوی dropdown
-          _showDeviceContextMenu(context, client, provider, isCurrentDevice);
-        },
-        child: InkWell(
-          onTap: () {
-            Navigator.pushNamed(
-              context,
-              '/device-detail',
-              arguments: {
-                'device': client,
-                'isCurrentDevice': isCurrentDevice,
+            onLongPress: () {
+              // نمایش منوی dropdown
+              _showDeviceContextMenu(context, client, provider, isCurrentDevice);
+            },
+            child: InkWell(
+              onTap: shouldDisableClick ? null : () {
+                Navigator.pushNamed(
+                  context,
+                  '/device-detail',
+                  arguments: {
+                    'device': client,
+                    'isCurrentDevice': isCurrentDevice,
+                  },
+                );
               },
-            );
-          },
-          splashColor: const Color(0xFF428B7C).withOpacity(0.1),
-          highlightColor: const Color(0xFF428B7C).withOpacity(0.05),
-          child: Container(
-          width: double.infinity,
-          margin: const EdgeInsets.symmetric(vertical: 1),
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          child: Row(
-          children: [
-            // آیکون دستگاه
-            Stack(
-              children: [
-                CircleAvatar(
-                  backgroundColor: isCurrentDevice
-                      ? const Color(0xFF428B7C).withOpacity(0.2)
-                      : typeColor.withOpacity(0.2),
-                  child: Icon(
-                    typeIcon,
-                    color: isCurrentDevice ? const Color(0xFF428B7C) : typeColor,
-                    size: 24,
+              splashColor: shouldDisableClick ? Colors.transparent : const Color(0xFF428B7C).withOpacity(0.1),
+              highlightColor: shouldDisableClick ? Colors.transparent : const Color(0xFF428B7C).withOpacity(0.05),
+              child: Container(
+                width: double.infinity,
+                margin: const EdgeInsets.symmetric(vertical: 1),
+                decoration: BoxDecoration(
+                  border: Border(
+                    bottom: BorderSide(
+                      color: Colors.grey.shade300,
+                      width: 1,
+                    ),
                   ),
                 ),
-                if (isCurrentDevice)
-                  Positioned(
-                    right: 0,
-                    bottom: 0,
-                    child: Container(
-                      padding: const EdgeInsets.all(2),
-                      decoration: const BoxDecoration(
-                        color: Color(0xFF428B7C),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(
-                        Icons.check,
-                        color: Colors.white,
-                        size: 12,
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-            const SizedBox(width: 16),
-            // اطلاعات دستگاه
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          _getDeviceDisplayName(client),
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 16,
-                            color: isCurrentDevice
-                                ? const Color(0xFF428B7C)
-                                : Colors.black87,
-                          ),
-                        ),
-                      ),
-                      // Static Lease Badge - 调试：显示所有状态
-                      // 注意：从 rawData 检查 dynamic 字段（如果 isStaticLease 为 null）
-                      if (_isStaticDevice(client))
-                        Container(
-                          margin: const EdgeInsets.only(left: 6),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 6,
-                            vertical: 3,
-                          ),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF428B7C).withOpacity(0.15),
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(
-                              color: const Color(0xFF428B7C),
-                              width: 1,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                child: Row(
+                  children: [
+                    // آیکون دستگاه
+                    Opacity(
+                      opacity: shouldDisableClick ? 0.6 : 1.0,
+                      child: Stack(
+                        children: [
+                          CircleAvatar(
+                            backgroundColor: isCurrentDevice
+                                ? const Color(0xFF428B7C).withOpacity(0.2)
+                                : typeColor.withOpacity(0.2),
+                            child: Icon(
+                              typeIcon,
+                              color: isCurrentDevice ? const Color(0xFF428B7C) : typeColor,
+                              size: 24,
                             ),
                           ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                Icons.lock,
-                                size: 12,
-                                color: const Color(0xFF428B7C),
-                              ),
-                              const SizedBox(width: 3),
-                              Text(
-                                'Static',
-                                style: TextStyle(
-                                  color: const Color(0xFF428B7C),
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.bold,
+                          if (isCurrentDevice)
+                            Positioned(
+                              right: 0,
+                              bottom: 0,
+                              child: Container(
+                                padding: const EdgeInsets.all(2),
+                                decoration: const BoxDecoration(
+                                  color: Color(0xFF428B7C),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: const Icon(
+                                  Icons.check,
+                                  color: Colors.white,
+                                  size: 12,
                                 ),
                               ),
-                            ],
+                            ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    // اطلاعات دستگاه
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // 设备名称 - 单独一行，完整显示
+                          Opacity(
+                            opacity: shouldDisableClick ? 0.6 : 1.0,
+                            child: Text(
+                              _getDeviceDisplayName(client),
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                                color: isCurrentDevice
+                                    ? const Color(0xFF428B7C)
+                                    : Colors.black87,
+                              ),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
                           ),
-                        ),
-                      // نمایش badge "Pending Approval" برای دستگاه‌های non-static که در لیست مجاز نیستند
-                      if (provider.isNewConnectionsLocked && 
-                          !_isStaticDevice(client) && 
-                          !isCurrentDevice)
-                        FutureBuilder<bool>(
-                          key: ValueKey('allowed_${client.macAddress}_${client.ipAddress}'),
-                          future: provider.isDeviceAllowed(client.macAddress, client.ipAddress),
-                          builder: (context, snapshot) {
-                            // اگر در حال بررسی است یا در لیست مجاز است، badge را نمایش نده
-                            if (snapshot.connectionState == ConnectionState.waiting || 
-                                (snapshot.hasData && snapshot.data == true)) {
-                              return const SizedBox.shrink();
-                            }
-                            
-                            // اگر در لیست مجاز نیست، badge را نمایش بده
-                            return Container(
-                              margin: const EdgeInsets.only(left: 6),
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 6,
-                                vertical: 3,
-                              ),
-                              decoration: BoxDecoration(
-                                color: Colors.orange.withOpacity(0.15),
-                                borderRadius: BorderRadius.circular(8),
-                                border: Border.all(
-                                  color: Colors.orange,
-                                  width: 1,
-                                ),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(
-                                    Icons.pending,
-                                    size: 12,
-                                    color: Colors.orange,
-                                  ),
-                                  const SizedBox(width: 3),
-                                  Text(
-                                    'Pending Approval',
-                                    style: TextStyle(
-                                      color: Colors.orange,
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.bold,
+                          const SizedBox(height: 4),
+                          // Badge 行
+                          Opacity(
+                            opacity: shouldDisableClick ? 0.6 : 1.0,
+                            child: Wrap(
+                              spacing: 6,
+                              runSpacing: 4,
+                              children: [
+                                // Static Lease Badge
+                                if (_isStaticDevice(client))
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 6,
+                                      vertical: 3,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFF428B7C).withOpacity(0.15),
+                                      borderRadius: BorderRadius.circular(8),
+                                      border: Border.all(
+                                        color: const Color(0xFF428B7C),
+                                        width: 1,
+                                      ),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(
+                                          Icons.lock,
+                                          size: 12,
+                                          color: const Color(0xFF428B7C),
+                                        ),
+                                        const SizedBox(width: 3),
+                                        Text(
+                                          'Static',
+                                          style: TextStyle(
+                                            color: const Color(0xFF428B7C),
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ],
                                     ),
                                   ),
-                                ],
-                              ),
-                            );
-                          },
-                        ),
-                      if (isCurrentDevice)
-                        Container(
-                          margin: const EdgeInsets.only(left: 6),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 4,
-                          ),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF428B7C),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: const Text(
-                            'شما',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 11,
-                              fontWeight: FontWeight.bold,
+                                // Pending Approval Badge
+                                if (provider.isNewConnectionsLocked && 
+                                    !_isStaticDevice(client) && 
+                                    !isCurrentDevice)
+                                  FutureBuilder<bool>(
+                                    key: ValueKey('allowed_${client.macAddress}_${client.ipAddress}'),
+                                    future: provider.isDeviceAllowed(client.macAddress, client.ipAddress),
+                                    builder: (context, snapshot) {
+                                      if (snapshot.connectionState == ConnectionState.waiting || 
+                                          (snapshot.hasData && snapshot.data == true)) {
+                                        return const SizedBox.shrink();
+                                      }
+                                      
+                                      return Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 6,
+                                          vertical: 3,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: Colors.orange.withOpacity(0.15),
+                                          borderRadius: BorderRadius.circular(8),
+                                          border: Border.all(
+                                            color: Colors.orange,
+                                            width: 1,
+                                          ),
+                                        ),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(
+                                              Icons.pending,
+                                              size: 12,
+                                              color: Colors.orange,
+                                            ),
+                                            const SizedBox(width: 3),
+                                            Text(
+                                              'Pending',
+                                              style: TextStyle(
+                                                color: Colors.orange,
+                                                fontSize: 10,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                // Current Device Badge
+                                if (isCurrentDevice)
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 4,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFF428B7C),
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: const Text(
+                                      'شما',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                              ],
                             ),
                           ),
-                        ),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  if (client.ipAddress != null)
-                    Text(
-                      'IP: ${client.ipAddress}',
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: Colors.grey.shade600,
-                      ),
-                    ),
-                  if (client.macAddress != null)
-                    Text(
-                      'MAC: ${client.macAddress}',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey.shade500,
-                      ),
-                    ),
-                ],
-              ),
-            ),
-            // دکمه "Allow Access" برای دستگاه‌های non-static که در لیست مجاز نیستند
-            if (provider.isNewConnectionsLocked && 
-                !_isStaticDevice(client) && 
-                !isCurrentDevice)
-              FutureBuilder<bool>(
-                key: ValueKey('allow_btn_${client.macAddress}_${client.ipAddress}'),
-                future: provider.isDeviceAllowed(client.macAddress, client.ipAddress),
-                builder: (context, snapshot) {
-                  // اگر در حال بررسی است
-                  if (snapshot.connectionState == ConnectionState.waiting) {
-                    return const SizedBox(
-                      width: 40,
-                      height: 40,
-                      child: Center(
-                        child: SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        ),
-                      ),
-                    );
-                  }
-                  
-                  // اگر در لیست مجاز است، دکمه را نمایش نده
-                  if (snapshot.hasData && snapshot.data == true) {
-                    return const SizedBox.shrink();
-                  }
-                  
-                  // اگر در لیست مجاز نیست، دکمه را نمایش بده
-                  return IconButton(
-                    icon: const Icon(Icons.check_circle, color: Colors.green),
-                    tooltip: 'Allow Access',
-                    onPressed: () async {
-                      if (client.macAddress == null) return;
-                      
-                      final confirmed = await showDialog<bool>(
-                        context: context,
-                        builder: (context) => AlertDialog(
-                          title: const Text('Allow Device Access'),
-                          content: Text(
-                            'Allow device ${client.hostName ?? client.ipAddress ?? "Unknown"} to fully connect to WiFi?',
+                          const SizedBox(height: 4),
+                          Opacity(
+                            opacity: shouldDisableClick ? 0.6 : 1.0,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                if (client.ipAddress != null)
+                                  Text(
+                                    'IP: ${client.ipAddress}',
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      color: Colors.grey.shade600,
+                                    ),
+                                  ),
+                                if (client.macAddress != null)
+                                  Text(
+                                    'MAC: ${client.macAddress}',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.grey.shade500,
+                                    ),
+                                  ),
+                              ],
+                            ),
                           ),
-                          actions: [
-                            TextButton(
-                              onPressed: () => Navigator.pop(context, false),
-                              child: const Text('Cancel'),
-                            ),
-                            ElevatedButton(
-                              onPressed: () => Navigator.pop(context, true),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.green,
-                                foregroundColor: Colors.white,
-                              ),
-                              child: const Text('Allow'),
-                            ),
-                          ],
-                        ),
-                      );
-
-                      if (confirmed == true) {
-                        try {
-                          final success = await provider.allowNonStaticDevice(
-                            client.macAddress!,
-                            ipAddress: client.ipAddress,
-                          );
-                          
-                          if (mounted) {
-                            if (success) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Row(
+                          // Approve/Reject 按钮 - 显示在设备名称下方（不受Opacity影响）
+                          FutureBuilder<bool>(
+                            future: provider.isDeviceAllowed(client.macAddress, client.ipAddress),
+                            builder: (context, snapshot) {
+                              final isAllowed = snapshot.hasData && snapshot.data == true;
+                              final isLoading = snapshot.connectionState == ConnectionState.waiting;
+                              
+                              // 如果设备未被允许且不是 static 设备，显示 approve/reject 按钮
+                              final shouldShowButtons = provider.isNewConnectionsLocked && 
+                                                        !_isStaticDevice(client) && 
+                                                        !isCurrentDevice && 
+                                                        !isAllowed;
+                              
+                              if (shouldShowButtons) {
+                                return Padding(
+                                  padding: const EdgeInsets.only(top: 8),
+                                  child: Row(
                                     children: [
-                                      Icon(Icons.check_circle, color: Colors.white),
-                                      SizedBox(width: 8),
+                                      // Approve 按钮
                                       Expanded(
-                                        child: Text('Device has been allowed access and can now fully connect to WiFi'),
+                                        child: ElevatedButton.icon(
+                                          onPressed: isLoading ? null : () async {
+                                            if (client.macAddress == null) return;
+                                            
+                                            final confirmed = await showDialog<bool>(
+                                              context: context,
+                                              builder: (context) => AlertDialog(
+                                                title: const Text('Approve Device'),
+                                                content: Text(
+                                                  'Allow device ${client.hostName ?? client.ipAddress ?? "Unknown"} to fully connect to WiFi?',
+                                                ),
+                                                actions: [
+                                                  TextButton(
+                                                    onPressed: () => Navigator.pop(context, false),
+                                                    child: const Text('Cancel'),
+                                                  ),
+                                                  ElevatedButton(
+                                                    onPressed: () => Navigator.pop(context, true),
+                                                    style: ElevatedButton.styleFrom(
+                                                      backgroundColor: Colors.green,
+                                                      foregroundColor: Colors.white,
+                                                    ),
+                                                    child: const Text('Approve'),
+                                                  ),
+                                                ],
+                                              ),
+                                            );
+
+                                            if (confirmed == true && mounted) {
+                                              try {
+                                                final success = await provider.allowNonStaticDevice(
+                                                  client.macAddress!,
+                                                  ipAddress: client.ipAddress,
+                                                );
+                                                
+                                                if (mounted) {
+                                                  if (success) {
+                                                    ScaffoldMessenger.of(context).showSnackBar(
+                                                      const SnackBar(
+                                                        content: Row(
+                                                          children: [
+                                                            Icon(Icons.check_circle, color: Colors.white),
+                                                            SizedBox(width: 8),
+                                                            Expanded(
+                                                              child: Text('Device has been approved and can now fully connect to WiFi'),
+                                                            ),
+                                                          ],
+                                                        ),
+                                                        backgroundColor: Colors.green,
+                                                        behavior: SnackBarBehavior.floating,
+                                                        duration: Duration(seconds: 3),
+                                                      ),
+                                                    );
+                                                    provider.refresh();
+                                                  } else {
+                                                    ScaffoldMessenger.of(context).showSnackBar(
+                                                      SnackBar(
+                                                        content: Text('خطا: ${provider.errorMessage ?? "خطا در اجازه دادن به دستگاه"}'),
+                                                        backgroundColor: Colors.red,
+                                                        behavior: SnackBarBehavior.floating,
+                                                      ),
+                                                    );
+                                                  }
+                                                }
+                                              } catch (e) {
+                                                if (mounted) {
+                                                  ScaffoldMessenger.of(context).showSnackBar(
+                                                    SnackBar(
+                                                      content: Text('خطا: $e'),
+                                                      backgroundColor: Colors.red,
+                                                      behavior: SnackBarBehavior.floating,
+                                                    ),
+                                                  );
+                                                }
+                                              }
+                                            }
+                                          },
+                                          icon: const Icon(Icons.check_circle, size: 20),
+                                          label: const Text(
+                                            'Approve',
+                                            style: TextStyle(
+                                              fontSize: 14,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                          style: ElevatedButton.styleFrom(
+                                            backgroundColor: Colors.green.shade700,
+                                            foregroundColor: Colors.white,
+                                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                                            minimumSize: const Size(0, 44),
+                                            elevation: 3,
+                                            shape: RoundedRectangleBorder(
+                                              borderRadius: BorderRadius.circular(8),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      // Reject 按钮
+                                      Expanded(
+                                        child: ElevatedButton.icon(
+                                          onPressed: isLoading ? null : () async {
+                                            if (client.macAddress == null) return;
+                                            
+                                            final confirmed = await showDialog<bool>(
+                                              context: context,
+                                              builder: (context) => AlertDialog(
+                                                title: const Text('Reject Device'),
+                                                content: Text(
+                                                  'Are you sure you want to reject device ${client.hostName ?? client.ipAddress ?? "Unknown"}? The device will be banned.',
+                                                ),
+                                                actions: [
+                                                  TextButton(
+                                                    onPressed: () => Navigator.pop(context, false),
+                                                    child: const Text('Cancel'),
+                                                  ),
+                                                  ElevatedButton(
+                                                    onPressed: () => Navigator.pop(context, true),
+                                                    style: ElevatedButton.styleFrom(
+                                                      backgroundColor: Colors.red,
+                                                      foregroundColor: Colors.white,
+                                                    ),
+                                                    child: const Text('Reject'),
+                                                  ),
+                                                ],
+                                              ),
+                                            );
+
+                                            if (confirmed == true && mounted) {
+                                              try {
+                                                final success = await provider.banClient(
+                                                  client.ipAddress!,
+                                                  macAddress: client.macAddress,
+                                                  hostname: client.hostName,
+                                                  ssid: client.ssid,
+                                                );
+                                                
+                                                if (mounted) {
+                                                  if (success) {
+                                                    ScaffoldMessenger.of(context).showSnackBar(
+                                                      const SnackBar(
+                                                        content: Row(
+                                                          children: [
+                                                            Icon(Icons.block, color: Colors.white),
+                                                            SizedBox(width: 8),
+                                                            Expanded(
+                                                              child: Text('Device has been rejected and banned'),
+                                                            ),
+                                                          ],
+                                                        ),
+                                                        backgroundColor: Colors.orange,
+                                                        behavior: SnackBarBehavior.floating,
+                                                        duration: Duration(seconds: 3),
+                                                      ),
+                                                    );
+                                                    provider.refresh();
+                                                  } else {
+                                                    ScaffoldMessenger.of(context).showSnackBar(
+                                                      SnackBar(
+                                                        content: Text('خطا: ${provider.errorMessage ?? "خطا در مسدود کردن دستگاه"}'),
+                                                        backgroundColor: Colors.red,
+                                                        behavior: SnackBarBehavior.floating,
+                                                      ),
+                                                    );
+                                                  }
+                                                }
+                                              } catch (e) {
+                                                if (mounted) {
+                                                  ScaffoldMessenger.of(context).showSnackBar(
+                                                    SnackBar(
+                                                      content: Text('خطا: $e'),
+                                                      backgroundColor: Colors.red,
+                                                      behavior: SnackBarBehavior.floating,
+                                                    ),
+                                                  );
+                                                }
+                                              }
+                                            }
+                                          },
+                                          icon: const Icon(Icons.cancel, size: 20),
+                                          label: const Text(
+                                            'Reject',
+                                            style: TextStyle(
+                                              fontSize: 14,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                          style: ElevatedButton.styleFrom(
+                                            backgroundColor: Colors.red.shade700,
+                                            foregroundColor: Colors.white,
+                                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                                            minimumSize: const Size(0, 44),
+                                            elevation: 3,
+                                            shape: RoundedRectangleBorder(
+                                              borderRadius: BorderRadius.circular(8),
+                                            ),
+                                          ),
+                                        ),
                                       ),
                                     ],
                                   ),
-                                  backgroundColor: Colors.green,
-                                  behavior: SnackBarBehavior.floating,
-                                  duration: Duration(seconds: 3),
-                                ),
-                              );
-                              // به‌روزرسانی لیست
-                              provider.refresh();
-                            } else {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text('خطا: ${provider.errorMessage ?? "خطا در اجازه دادن به دستگاه"}'),
-                                  backgroundColor: Colors.red,
-                                  behavior: SnackBarBehavior.floating,
-                                ),
-                              );
-                            }
+                                );
+                              }
+                              return const SizedBox.shrink();
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+                    // نوع دستگاه (只在设备已批准时显示)
+                    Opacity(
+                      opacity: shouldDisableClick ? 0.6 : 1.0,
+                      child: FutureBuilder<bool>(
+                        future: provider.isDeviceAllowed(client.macAddress, client.ipAddress),
+                        builder: (context, snapshot) {
+                          final isAllowed = snapshot.hasData && snapshot.data == true;
+                          
+                          // 如果设备未被允许且不是 static 设备，不显示类型标签
+                          final shouldShowButtons = provider.isNewConnectionsLocked && 
+                                                    !_isStaticDevice(client) && 
+                                                    !isCurrentDevice && 
+                                                    !isAllowed;
+                          
+                          if (shouldShowButtons) {
+                            return const SizedBox.shrink();
                           }
-                        } catch (e) {
-                          if (mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text('خطا: $e'),
-                                backgroundColor: Colors.red,
-                                behavior: SnackBarBehavior.floating,
+                          
+                          // 如果设备已被允许或是 static 设备，显示类型标签
+                          return Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: typeColor.withOpacity(0.2),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Text(
+                                  typeLabel,
+                                  style: TextStyle(
+                                    color: typeColor,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
                               ),
-                            );
-                          }
-                        }
-                      }
-                    },
-                  );
-                },
-              ),
-            // نوع دستگاه
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: typeColor.withOpacity(0.2),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Text(
-                typeLabel,
-                style: TextStyle(
-                  color: typeColor,
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold,
+                              const SizedBox(width: 8),
+                              const Icon(
+                                Icons.chevron_right,
+                                color: Colors.grey,
+                              ),
+                            ],
+                          );
+                        },
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),
-            const SizedBox(width: 8),
-            const Icon(
-              Icons.chevron_right,
-              color: Colors.grey,
-            ),
-          ],
-        ),
-          ),
-        ),
+          );
+        },
       ),
     );
   }

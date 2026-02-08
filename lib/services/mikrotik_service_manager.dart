@@ -141,11 +141,11 @@ class MikroTikServiceManager {
   }
 
   /// محدود کردن دسترسی WiFi برای دستگاه non-static
-  Future<void> restrictNonStaticDevice(String macAddress) async {
+  Future<void> restrictNonStaticDevice(String macAddress, {String? ipAddress}) async {
     if (_service == null || !isConnected) {
       return;
     }
-    return await _service!.restrictNonStaticDevice(macAddress);
+    return await _service!.restrictNonStaticDevice(macAddress, ipAddress: ipAddress);
   }
 
   /// اجازه دادن به دستگاه non-static برای اتصال کامل به WiFi

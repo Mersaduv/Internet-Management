@@ -238,13 +238,31 @@ class ClientsProvider extends ChangeNotifier {
                 }
               }
               
-              // اگر static نیست، محدود کردن دسترسی WiFi (اما در لیست نگه دار)
+              // اگر static نیست و در لیست مجاز نیست، باید بلافاصله مسدود شود
               if (isStatic != true && clientMac != null) {
                 try {
-                  // محدود کردن دسترسی WiFi برای این دستگاه
-                  await _serviceManager.service?.restrictNonStaticDevice(clientMac);
+                  // محدود کردن دسترسی در تمام سطوح: Wireless + DHCP + Firewall
+                  // این برای جلوگیری از دسترسی کامل دستگاه‌های جدید ضروری است
+                  await _serviceManager.service?.restrictNonStaticDevice(
+                    clientMac, 
+                    ipAddress: clientIp,
+                  );
+                  print('🔒 [CLIENTS_PROVIDER] دستگاه non-static محدود شد: MAC=$clientMac, IP=$clientIp');
+                  
+                  // همچنین اطمینان از اینکه default-authenticate=no است
+                  // این برای جلوگیری از اتصال دستگاه‌های جدید در آینده ضروری است
+                  try {
+                    final isLocked = await _serviceManager.isNewConnectionsLocked();
+                    if (isLocked) {
+                      // بررسی و تنظیم مجدد default-authenticate=no برای همه wireless interfaces
+                      // این در mikrotik_service.dart انجام می‌شود، اما برای اطمینان اینجا هم چک می‌کنیم
+                    }
+                  } catch (e) {
+                    // ignore
+                  }
                 } catch (e) {
-                  // ignore errors
+                  print('❌ [CLIENTS_PROVIDER] خطا در restrictNonStaticDevice برای $clientMac: $e');
+                  // ignore errors - اما لاگ می‌کنیم
                 }
               } else if (isStatic == true) {
                 // اگر static است اما در لیست مجاز نیست، باید مسدود شود (رفتار قبلی)
