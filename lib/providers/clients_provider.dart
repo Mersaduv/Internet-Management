@@ -188,10 +188,8 @@ class ClientsProvider extends ChangeNotifier {
           }
           
           // بررسی همه دستگاه‌های متصل فعلی
-          // هر دستگاهی که MAC یا IP آن در لیست اولیه نیست، باید مسدود شود
-          // این شامل دستگاه‌هایی می‌شود که:
-          // 1. برای اولین بار بعد از فعال شدن قفل وصل شده‌اند
-          // 2. قبلاً وصل شده بودند اما disconnect شده‌اند و دوباره وصل شده‌اند
+          // تغییر: به جای مسدود کردن، بررسی می‌کنیم که آیا دستگاه static است یا نه
+          // اگر static نیست و در لیست مجاز نیست، باید محدود شود (اما در لیست نمایش داده شود)
           bool anyDeviceBanned = false;
           for (var client in clientsList.toList()) {
             final clientMac = client.macAddress?.toUpperCase();
@@ -222,30 +220,53 @@ class ClientsProvider extends ChangeNotifier {
               }
             }
             
-            // اگر مجاز نیست، مسدود کن و از لیست حذف کن
-            // این شامل دستگاه‌هایی می‌شود که:
-            // - برای اولین بار بعد از فعال شدن قفل وصل شده‌اند
-            // - قبلاً وصل شده بودند اما disconnect شده‌اند و دوباره وصل شده‌اند
+            // اگر مجاز نیست، بررسی می‌کنیم که آیا static است
+            // اگر static نیست، باید محدود شود (اما در لیست نمایش داده شود)
             if (!isAllowed) {
-              bool wasBanned = false;
-              try {
-                // مسدود کردن دستگاه جدید یا دستگاه که دوباره وصل شده
-                if (client.ipAddress != null) {
-                  final banResult = await _serviceManager.service?.banClient(
-                    client.ipAddress!,
-                    macAddress: client.macAddress,
-                    comment: 'Auto-banned: New connection while locked',
+              // بررسی وضعیت static lease
+              bool? isStatic = client.isStaticLease;
+              
+              // اگر وضعیت static مشخص نیست، از RouterOS دریافت کن
+              if (isStatic == null && clientMac != null) {
+                try {
+                  isStatic = await _serviceManager.service?.getLeaseStatus(
+                    macAddress: clientMac,
+                    ipAddress: clientIp,
                   );
-                  wasBanned = banResult == true;
-                  if (wasBanned) {
-                    anyDeviceBanned = true;
-                  }
+                } catch (e) {
+                  // ignore errors
                 }
-              } catch (e) {
-                // ignore errors
               }
-              // حذف از لیست متصل (حتی اگر banClient خطا داد)
-              clientsList.remove(client);
+              
+              // اگر static نیست، محدود کردن دسترسی WiFi (اما در لیست نگه دار)
+              if (isStatic != true && clientMac != null) {
+                try {
+                  // محدود کردن دسترسی WiFi برای این دستگاه
+                  await _serviceManager.service?.restrictNonStaticDevice(clientMac);
+                } catch (e) {
+                  // ignore errors
+                }
+              } else if (isStatic == true) {
+                // اگر static است اما در لیست مجاز نیست، باید مسدود شود (رفتار قبلی)
+                bool wasBanned = false;
+                try {
+                  if (client.ipAddress != null) {
+                    final banResult = await _serviceManager.service?.banClient(
+                      client.ipAddress!,
+                      macAddress: client.macAddress,
+                      comment: 'Auto-banned: New connection while locked',
+                    );
+                    wasBanned = banResult == true;
+                    if (wasBanned) {
+                      anyDeviceBanned = true;
+                    }
+                  }
+                } catch (e) {
+                  // ignore errors
+                }
+                // حذف از لیست متصل (حتی اگر banClient خطا داد)
+                clientsList.remove(client);
+              }
             }
           }
           
@@ -803,176 +824,6 @@ class ClientsProvider extends ChangeNotifier {
     }
   }
 
-  /// تبدیل Dynamic DHCP Lease به Static Lease
-  Future<Map<String, dynamic>> makeStaticLease({
-    required String? macAddress,
-    required String? ipAddress,
-    String? hostname,
-    String? comment,
-  }) async {
-    print('═══════════════════════════════════════════════════════════');
-    print('📱 [PROVIDER_STATIC] شروع فرآیند Static در Provider');
-    print('📱 [PROVIDER_STATIC] MAC: ${macAddress ?? "N/A"}');
-    print('📱 [PROVIDER_STATIC] IP: ${ipAddress ?? "N/A"}');
-    print('📱 [PROVIDER_STATIC] Hostname: ${hostname ?? "N/A"}');
-    print('📱 [PROVIDER_STATIC] Comment: ${comment ?? "N/A"}');
-    
-    if (!_serviceManager.isConnected) {
-      print('❌ [PROVIDER_STATIC] خطا: اتصال برقرار نشده');
-      _errorMessage = 'اتصال برقرار نشده است.';
-      notifyListeners();
-      return {'success': false, 'error': _errorMessage};
-    }
-
-    print('✅ [PROVIDER_STATIC] اتصال برقرار است');
-    print('📞 [PROVIDER_STATIC] فراخوانی MikroTikServiceManager.makeStaticLease()...');
-
-    try {
-      final result = await _serviceManager.makeStaticLease(
-        macAddress: macAddress,
-        ipAddress: ipAddress,
-        hostname: hostname,
-        comment: comment,
-      ).timeout(
-        const Duration(seconds: 60),
-        onTimeout: () {
-          print('❌ [PROVIDER_STATIC] Timeout در فراخوانی Service Manager (60 ثانیه)');
-          return {
-            'status': 'error',
-            'message': 'Timeout: زمان تبدیل به Static Lease به پایان رسید. لطفاً دوباره تلاش کنید.',
-          };
-        },
-      );
-
-      print('📥 [PROVIDER_STATIC] نتیجه از Service Manager دریافت شد');
-      print('   Status: ${result['status']}');
-      print('   Message: ${result['message']}');
-
-      if (result['status'] == 'success' || result['status'] == 'info') {
-        print('✅ [PROVIDER_STATIC] تبدیل موفق - به‌روزرسانی state...');
-        // به‌روزرسانی فوری state
-        await refresh();
-        print('✅ [PROVIDER_STATIC] State به‌روزرسانی شد');
-        print('═══════════════════════════════════════════════════════════');
-        return {
-          'success': true,
-          'message': result['message'],
-          'lease': result['lease'],
-        };
-      }
-      
-      // Handle error or timeout status
-      print('❌ [PROVIDER_STATIC] تبدیل ناموفق');
-      print('   Status: ${result['status']}');
-      print('   Message: ${result['message']}');
-      print('═══════════════════════════════════════════════════════════');
-      return {
-        'success': false,
-        'error': result['message'] ?? 'خطای نامشخص',
-      };
-    } catch (e, stackTrace) {
-      print('❌ [PROVIDER_STATIC] خطای استثنا: $e');
-      print('   Type: ${e.runtimeType}');
-      print('   Stack: $stackTrace');
-      print('═══════════════════════════════════════════════════════════');
-      _errorMessage = 'خطا در تبدیل به Static Lease: $e';
-      notifyListeners();
-      return {'success': false, 'error': _errorMessage};
-    }
-  }
-
-  /// دریافت وضعیت Lease (Static/Dynamic)
-  /// Returns: true = static, false = dynamic, null = not found
-  Future<bool?> getLeaseStatus({
-    String? macAddress,
-    String? ipAddress,
-  }) async {
-    if (!_serviceManager.isConnected) {
-      return null;
-    }
-
-    try {
-      final service = _serviceManager.service;
-      if (service == null) {
-        return null;
-      }
-      return await service.getLeaseStatus(
-        macAddress: macAddress,
-        ipAddress: ipAddress,
-      );
-    } catch (e) {
-      return null;
-    }
-  }
-
-  /// تبدیل Static DHCP Lease به Dynamic Lease
-  Future<Map<String, dynamic>> makeDynamicLease({
-    required String? macAddress,
-    required String? ipAddress,
-  }) async {
-    print('═══════════════════════════════════════════════════════════');
-    print('📱 [PROVIDER_DYNAMIC] شروع فرآیند Dynamic در Provider');
-    print('📱 [PROVIDER_DYNAMIC] MAC: ${macAddress ?? "N/A"}');
-    print('📱 [PROVIDER_DYNAMIC] IP: ${ipAddress ?? "N/A"}');
-    
-    if (!_serviceManager.isConnected) {
-      print('❌ [PROVIDER_DYNAMIC] خطا: اتصال برقرار نشده');
-      _errorMessage = 'اتصال برقرار نشده است.';
-      notifyListeners();
-      return {'success': false, 'error': _errorMessage};
-    }
-
-    print('✅ [PROVIDER_DYNAMIC] اتصال برقرار است');
-    print('📞 [PROVIDER_DYNAMIC] فراخوانی MikroTikServiceManager.makeDynamicLease()...');
-
-    try {
-      final result = await _serviceManager.makeDynamicLease(
-        macAddress: macAddress,
-        ipAddress: ipAddress,
-      ).timeout(
-        const Duration(seconds: 30), // کاهش timeout از 60 به 30 ثانیه
-        onTimeout: () {
-          print('❌ [PROVIDER_DYNAMIC] Timeout در فراخوانی Service Manager (30 ثانیه)');
-          return {
-            'status': 'error',
-            'message': 'Timeout: زمان تبدیل به Dynamic Lease به پایان رسید. لطفاً دوباره تلاش کنید.',
-          };
-        },
-      );
-
-      print('📥 [PROVIDER_DYNAMIC] نتیجه از Service Manager دریافت شد');
-      print('   Status: ${result['status']}');
-      print('   Message: ${result['message']}');
-
-      if (result['status'] == 'success' || result['status'] == 'info') {
-        print('✅ [PROVIDER_DYNAMIC] تبدیل موفق - به‌روزرسانی state...');
-        await refresh();
-        print('✅ [PROVIDER_DYNAMIC] State به‌روزرسانی شد');
-        print('═══════════════════════════════════════════════════════════');
-        return {
-          'success': true,
-          'message': result['message'],
-          'lease': result['lease'],
-        };
-      }
-      
-      print('❌ [PROVIDER_DYNAMIC] تبدیل ناموفق');
-      print('═══════════════════════════════════════════════════════════');
-      return {
-        'success': false,
-        'error': result['message'] ?? 'خطای نامشخص',
-      };
-    } catch (e, stackTrace) {
-      print('❌ [PROVIDER_DYNAMIC] خطای استثنا: $e');
-      print('   Type: ${e.runtimeType}');
-      print('   Stack: $stackTrace');
-      print('═══════════════════════════════════════════════════════════');
-      _errorMessage = 'خطا در تبدیل به Dynamic Lease: $e';
-      notifyListeners();
-      return {'success': false, 'error': _errorMessage};
-    }
-  }
-
   /// فیلتر/رفع فیلتر یک پلتفرم خاص برای یک دستگاه
   Future<Map<String, dynamic>> togglePlatformFilter(
     String deviceIp,
@@ -1031,6 +882,94 @@ class ClientsProvider extends ChangeNotifier {
     }
   }
 
+
+  /// بررسی اینکه آیا دستگاه در لیست مجاز است
+  Future<bool> isDeviceAllowed(String? macAddress, String? ipAddress) async {
+    if (!_serviceManager.isConnected || (!_isNewConnectionsLocked)) {
+      return true; // اگر قفل فعال نیست، همه مجاز هستند
+    }
+
+    try {
+      final allowedMacs = await _serviceManager.service?.getAllowedMacsForLock() ?? <String>{};
+      final allowedIps = await _serviceManager.service?.getAllowedIpsForLock() ?? <String>{};
+      
+      // اضافه کردن IP دستگاه کاربر به لیست مجاز
+      if (_deviceIp != null && !allowedIps.contains(_deviceIp)) {
+        allowedIps.add(_deviceIp!);
+      }
+      
+      // بررسی MAC
+      if (macAddress != null) {
+        final macUpper = macAddress.toUpperCase();
+        if (allowedMacs.contains(macUpper)) {
+          return true;
+        }
+      }
+      
+      // بررسی IP
+      if (ipAddress != null && allowedIps.contains(ipAddress)) {
+        return true;
+      }
+      
+      return false;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  /// اجازه دادن به دستگاه non-static برای اتصال کامل به WiFi
+  Future<bool> allowNonStaticDevice(String macAddress, {String? ipAddress}) async {
+    if (!_serviceManager.isConnected) {
+      _errorMessage = 'اتصال برقرار نشده است.';
+      notifyListeners();
+      return false;
+    }
+
+    try {
+      final success = await _serviceManager.allowNonStaticDevice(macAddress, ipAddress: ipAddress);
+      if (success) {
+        // به‌روزرسانی لیست
+        await refresh();
+        notifyListeners();
+        return true;
+      } else {
+        _errorMessage = 'خطا در اجازه دادن به دستگاه: عملیات ناموفق بود';
+        notifyListeners();
+        return false;
+      }
+    } catch (e) {
+      _errorMessage = 'خطا در اجازه دادن به دستگاه: $e';
+      notifyListeners();
+      return false;
+    }
+  }
+
+  /// حذف دستگاه از لیست مجاز
+  Future<bool> removeFromAllowedList(String macAddress, {String? ipAddress}) async {
+    if (!_serviceManager.isConnected) {
+      _errorMessage = 'اتصال برقرار نشده است.';
+      notifyListeners();
+      return false;
+    }
+
+    try {
+      final success = await _serviceManager.removeFromAllowedList(macAddress, ipAddress: ipAddress);
+      if (success) {
+        // به‌روزرسانی لیست
+        await refresh();
+        notifyListeners();
+        return true;
+      } else {
+        _errorMessage = 'خطا در حذف از لیست مجاز: عملیات ناموفق بود';
+        notifyListeners();
+        return false;
+      }
+    } catch (e) {
+      _errorMessage = 'خطا در حذف از لیست مجاز: $e';
+      notifyListeners();
+      return false;
+    }
+  }
 
   @override
   void dispose() {

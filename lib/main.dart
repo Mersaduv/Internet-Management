@@ -669,7 +669,7 @@ class _HomePageState extends State<HomePage> {
         itemCount: provider.clients.length,
         itemBuilder: (context, index) {
           final client = provider.clients[index];
-          return _buildClientCard(client, provider.deviceIp);
+          return _buildClientCard(client, provider.deviceIp, provider);
         },
       ),
     );
@@ -893,13 +893,31 @@ class _HomePageState extends State<HomePage> {
                         if (success) {
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(
-                              content: Text('مسدودیت دستگاه با موفقیت برداشته شد'),
+                              content: Row(
+                                children: [
+                                  Icon(Icons.check_circle, color: Colors.white),
+                                  SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text('مسدودیت دستگاه با موفقیت برداشته شد'),
+                                  ),
+                                ],
+                              ),
                               backgroundColor: Colors.green,
                               behavior: SnackBarBehavior.floating,
+                              duration: Duration(seconds: 3),
                             ),
                           );
                           // به‌روزرسانی لیست
                           provider.loadBannedClients();
+                          // هدایت به صفحه اصلی
+                          Future.delayed(const Duration(milliseconds: 300), () {
+                            if (mounted) {
+                              Navigator.of(context).pushNamedAndRemoveUntil(
+                                '/home',
+                                (route) => false,
+                              );
+                            }
+                          });
                         } else {
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
@@ -936,7 +954,7 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  Widget _buildClientCard(ClientInfo client, String? deviceIp) {
+  Widget _buildClientCard(ClientInfo client, String? deviceIp, ClientsProvider provider) {
     Color typeColor;
     IconData typeIcon;
     String typeLabel;
@@ -971,7 +989,7 @@ class _HomePageState extends State<HomePage> {
 
     return Material(
       color: Colors.white,
-      child: InkWell(
+      child: GestureDetector(
         onTap: () {
           Navigator.pushNamed(
             context,
@@ -982,9 +1000,24 @@ class _HomePageState extends State<HomePage> {
             },
           );
         },
-        splashColor: const Color(0xFF428B7C).withOpacity(0.1),
-        highlightColor: const Color(0xFF428B7C).withOpacity(0.05),
-        child: Container(
+        onLongPress: () {
+          // نمایش منوی dropdown
+          _showDeviceContextMenu(context, client, provider, isCurrentDevice);
+        },
+        child: InkWell(
+          onTap: () {
+            Navigator.pushNamed(
+              context,
+              '/device-detail',
+              arguments: {
+                'device': client,
+                'isCurrentDevice': isCurrentDevice,
+              },
+            );
+          },
+          splashColor: const Color(0xFF428B7C).withOpacity(0.1),
+          highlightColor: const Color(0xFF428B7C).withOpacity(0.05),
+          child: Container(
           width: double.infinity,
           margin: const EdgeInsets.symmetric(vertical: 1),
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -1042,8 +1075,97 @@ class _HomePageState extends State<HomePage> {
                           ),
                         ),
                       ),
+                      // Static Lease Badge - 调试：显示所有状态
+                      // 注意：从 rawData 检查 dynamic 字段（如果 isStaticLease 为 null）
+                      if (_isStaticDevice(client))
+                        Container(
+                          margin: const EdgeInsets.only(left: 6),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 3,
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF428B7C).withOpacity(0.15),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: const Color(0xFF428B7C),
+                              width: 1,
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.lock,
+                                size: 12,
+                                color: const Color(0xFF428B7C),
+                              ),
+                              const SizedBox(width: 3),
+                              Text(
+                                'Static',
+                                style: TextStyle(
+                                  color: const Color(0xFF428B7C),
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      // نمایش badge "Pending Approval" برای دستگاه‌های non-static که در لیست مجاز نیستند
+                      if (provider.isNewConnectionsLocked && 
+                          !_isStaticDevice(client) && 
+                          !isCurrentDevice)
+                        FutureBuilder<bool>(
+                          key: ValueKey('allowed_${client.macAddress}_${client.ipAddress}'),
+                          future: provider.isDeviceAllowed(client.macAddress, client.ipAddress),
+                          builder: (context, snapshot) {
+                            // اگر در حال بررسی است یا در لیست مجاز است، badge را نمایش نده
+                            if (snapshot.connectionState == ConnectionState.waiting || 
+                                (snapshot.hasData && snapshot.data == true)) {
+                              return const SizedBox.shrink();
+                            }
+                            
+                            // اگر در لیست مجاز نیست، badge را نمایش بده
+                            return Container(
+                              margin: const EdgeInsets.only(left: 6),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 3,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.orange.withOpacity(0.15),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(
+                                  color: Colors.orange,
+                                  width: 1,
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    Icons.pending,
+                                    size: 12,
+                                    color: Colors.orange,
+                                  ),
+                                  const SizedBox(width: 3),
+                                  Text(
+                                    'Pending Approval',
+                                    style: TextStyle(
+                                      color: Colors.orange,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
+                        ),
                       if (isCurrentDevice)
                         Container(
+                          margin: const EdgeInsets.only(left: 6),
                           padding: const EdgeInsets.symmetric(
                             horizontal: 8,
                             vertical: 4,
@@ -1083,6 +1205,118 @@ class _HomePageState extends State<HomePage> {
                 ],
               ),
             ),
+            // دکمه "Allow Access" برای دستگاه‌های non-static که در لیست مجاز نیستند
+            if (provider.isNewConnectionsLocked && 
+                !_isStaticDevice(client) && 
+                !isCurrentDevice)
+              FutureBuilder<bool>(
+                key: ValueKey('allow_btn_${client.macAddress}_${client.ipAddress}'),
+                future: provider.isDeviceAllowed(client.macAddress, client.ipAddress),
+                builder: (context, snapshot) {
+                  // اگر در حال بررسی است
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const SizedBox(
+                      width: 40,
+                      height: 40,
+                      child: Center(
+                        child: SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                      ),
+                    );
+                  }
+                  
+                  // اگر در لیست مجاز است، دکمه را نمایش نده
+                  if (snapshot.hasData && snapshot.data == true) {
+                    return const SizedBox.shrink();
+                  }
+                  
+                  // اگر در لیست مجاز نیست، دکمه را نمایش بده
+                  return IconButton(
+                    icon: const Icon(Icons.check_circle, color: Colors.green),
+                    tooltip: 'Allow Access',
+                    onPressed: () async {
+                      if (client.macAddress == null) return;
+                      
+                      final confirmed = await showDialog<bool>(
+                        context: context,
+                        builder: (context) => AlertDialog(
+                          title: const Text('Allow Device Access'),
+                          content: Text(
+                            'Allow device ${client.hostName ?? client.ipAddress ?? "Unknown"} to fully connect to WiFi?',
+                          ),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.pop(context, false),
+                              child: const Text('Cancel'),
+                            ),
+                            ElevatedButton(
+                              onPressed: () => Navigator.pop(context, true),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.green,
+                                foregroundColor: Colors.white,
+                              ),
+                              child: const Text('Allow'),
+                            ),
+                          ],
+                        ),
+                      );
+
+                      if (confirmed == true) {
+                        try {
+                          final success = await provider.allowNonStaticDevice(
+                            client.macAddress!,
+                            ipAddress: client.ipAddress,
+                          );
+                          
+                          if (mounted) {
+                            if (success) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Row(
+                                    children: [
+                                      Icon(Icons.check_circle, color: Colors.white),
+                                      SizedBox(width: 8),
+                                      Expanded(
+                                        child: Text('Device has been allowed access and can now fully connect to WiFi'),
+                                      ),
+                                    ],
+                                  ),
+                                  backgroundColor: Colors.green,
+                                  behavior: SnackBarBehavior.floating,
+                                  duration: Duration(seconds: 3),
+                                ),
+                              );
+                              // به‌روزرسانی لیست
+                              provider.refresh();
+                            } else {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('خطا: ${provider.errorMessage ?? "خطا در اجازه دادن به دستگاه"}'),
+                                  backgroundColor: Colors.red,
+                                  behavior: SnackBarBehavior.floating,
+                                ),
+                              );
+                            }
+                          }
+                        } catch (e) {
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('خطا: $e'),
+                                backgroundColor: Colors.red,
+                                behavior: SnackBarBehavior.floating,
+                              ),
+                            );
+                          }
+                        }
+                      }
+                    },
+                  );
+                },
+              ),
             // نوع دستگاه
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -1106,9 +1340,243 @@ class _HomePageState extends State<HomePage> {
             ),
           ],
         ),
+          ),
         ),
       ),
     );
+  }
+
+  /// نمایش منوی context برای دستگاه
+  void _showDeviceContextMenu(BuildContext context, ClientInfo client, ClientsProvider provider, bool isCurrentDevice) async {
+    // بررسی اینکه آیا دستگاه در لیست مجاز است
+    final isAllowed = await provider.isDeviceAllowed(client.macAddress, client.ipAddress);
+    
+    final RenderBox? overlay = Overlay.of(context).context.findRenderObject() as RenderBox?;
+    if (overlay == null) return;
+    
+    final RenderBox? button = context.findRenderObject() as RenderBox?;
+    if (button == null) return;
+    
+    final RelativeRect position = RelativeRect.fromRect(
+      Rect.fromPoints(
+        button.localToGlobal(Offset.zero, ancestor: overlay),
+        button.localToGlobal(button.size.bottomRight(Offset.zero), ancestor: overlay),
+      ),
+      Offset.zero & overlay.size,
+    );
+
+    final String? value = await showMenu<String>(
+      context: context,
+      position: position,
+      items: [
+        // اگر设备在允许列表中，显示"从允许列表删除"
+        if (provider.isNewConnectionsLocked && !isCurrentDevice && isAllowed)
+          const PopupMenuItem<String>(
+            value: 'remove_from_allowed',
+            child: Row(
+              children: [
+                Icon(Icons.remove_circle_outline, color: Colors.red, size: 20),
+                SizedBox(width: 12),
+                Text('Remove from Allowed List'),
+              ],
+            ),
+          ),
+        // 如果设备不在允许列表中且不是 static，显示"添加到允许列表"
+        if (provider.isNewConnectionsLocked && 
+            !_isStaticDevice(client) && 
+            !isCurrentDevice &&
+            !isAllowed)
+          const PopupMenuItem<String>(
+            value: 'add_to_allowed',
+            child: Row(
+              children: [
+                Icon(Icons.check_circle_outline, color: Colors.green, size: 20),
+                SizedBox(width: 12),
+                Text('Add to Allowed List'),
+              ],
+            ),
+          ),
+      ],
+    );
+
+    if (value == null) return;
+
+    if (value == 'remove_from_allowed') {
+      // 从允许列表中删除
+      if (client.macAddress == null) return;
+      
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Remove from Allowed List'),
+          content: Text(
+            'Are you sure you want to remove device ${client.hostName ?? client.ipAddress ?? "Unknown"} from the allowed list?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context, true),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red,
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('Remove'),
+            ),
+          ],
+        ),
+      );
+
+      if (confirmed == true && mounted) {
+        try {
+          final success = await provider.removeFromAllowedList(
+            client.macAddress!,
+            ipAddress: client.ipAddress,
+          );
+          
+          if (mounted) {
+            if (success) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Row(
+                    children: [
+                      Icon(Icons.check_circle, color: Colors.white),
+                      SizedBox(width: 8),
+                      Expanded(
+                        child: Text('Device has been removed from allowed list'),
+                      ),
+                    ],
+                  ),
+                  backgroundColor: Colors.green,
+                  behavior: SnackBarBehavior.floating,
+                  duration: Duration(seconds: 3),
+                ),
+              );
+              // 更新列表
+              provider.refresh();
+            } else {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('خطا: ${provider.errorMessage ?? "خطا در حذف از لیست مجاز"}'),
+                  backgroundColor: Colors.red,
+                  behavior: SnackBarBehavior.floating,
+                ),
+              );
+            }
+          }
+        } catch (e) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('خطا: $e'),
+                backgroundColor: Colors.red,
+                behavior: SnackBarBehavior.floating,
+              ),
+            );
+          }
+        }
+      }
+    } else if (value == 'add_to_allowed') {
+      // 添加到允许列表
+      if (client.macAddress == null) return;
+      
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Add to Allowed List'),
+          content: Text(
+            'Allow device ${client.hostName ?? client.ipAddress ?? "Unknown"} to fully connect to WiFi?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context, true),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.green,
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('Allow'),
+            ),
+          ],
+        ),
+      );
+
+      if (confirmed == true && mounted) {
+        try {
+          final success = await provider.allowNonStaticDevice(
+            client.macAddress!,
+            ipAddress: client.ipAddress,
+          );
+          
+          if (mounted) {
+            if (success) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Row(
+                    children: [
+                      Icon(Icons.check_circle, color: Colors.white),
+                      SizedBox(width: 8),
+                      Expanded(
+                        child: Text('Device has been allowed access and can now fully connect to WiFi'),
+                      ),
+                    ],
+                  ),
+                  backgroundColor: Colors.green,
+                  behavior: SnackBarBehavior.floating,
+                  duration: Duration(seconds: 3),
+                ),
+              );
+              // 更新列表
+              provider.refresh();
+            } else {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('خطا: ${provider.errorMessage ?? "خطا در اجازه دادن به دستگاه"}'),
+                  backgroundColor: Colors.red,
+                  behavior: SnackBarBehavior.floating,
+                ),
+              );
+            }
+          }
+        } catch (e) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('خطا: $e'),
+                backgroundColor: Colors.red,
+                behavior: SnackBarBehavior.floating,
+              ),
+            );
+          }
+        }
+      }
+    }
+  }
+
+  /// بررسی اینکه آیا دستگاه Static است
+  /// بررسی هم از isStaticLease و هم از rawData
+  bool _isStaticDevice(ClientInfo client) {
+    // 1. بررسی مستقیم isStaticLease
+    if (client.isStaticLease == true) {
+      return true;
+    }
+    
+    // 2. اگر isStaticLease null است، از rawData  بررسی کن
+    if (client.isStaticLease == null && client.rawData.isNotEmpty) {
+      if (client.rawData.containsKey('dynamic')) {
+        final dynamicValue = client.rawData['dynamic']?.toString().toLowerCase();
+        if (dynamicValue == 'false' || dynamicValue == 'no') {
+          return true; // Static
+        }
+      }
+    }
+    
+    return false;
   }
 
   String _getDeviceDisplayName(ClientInfo client) {

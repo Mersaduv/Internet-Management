@@ -140,36 +140,28 @@ class MikroTikServiceManager {
     return await _service!.getAllowedIpsForLock();
   }
 
-  /// تبدیل Dynamic DHCP Lease به Static Lease
-  Future<Map<String, dynamic>> makeStaticLease({
-    required String? macAddress,
-    required String? ipAddress,
-    String? hostname,
-    String? comment,
-  }) async {
+  /// محدود کردن دسترسی WiFi برای دستگاه non-static
+  Future<void> restrictNonStaticDevice(String macAddress) async {
     if (_service == null || !isConnected) {
-      throw Exception('اتصال برقرار نشده');
+      return;
     }
-    return await _service!.makeStaticLease(
-      macAddress: macAddress,
-      ipAddress: ipAddress,
-      hostname: hostname,
-      comment: comment,
-    );
+    return await _service!.restrictNonStaticDevice(macAddress);
   }
 
-  /// تبدیل Static DHCP Lease به Dynamic Lease
-  Future<Map<String, dynamic>> makeDynamicLease({
-    required String? macAddress,
-    required String? ipAddress,
-  }) async {
+  /// اجازه دادن به دستگاه non-static برای اتصال کامل به WiFi
+  Future<bool> allowNonStaticDevice(String macAddress, {String? ipAddress}) async {
     if (_service == null || !isConnected) {
-      throw Exception('اتصال برقرار نشده');
+      return false;
     }
-    return await _service!.makeDynamicLease(
-      macAddress: macAddress,
-      ipAddress: ipAddress,
-    );
+    return await _service!.allowNonStaticDevice(macAddress, ipAddress: ipAddress);
+  }
+
+  /// حذف دستگاه از لیست مجاز
+  Future<bool> removeFromAllowedList(String macAddress, {String? ipAddress}) async {
+    if (_service == null || !isConnected) {
+      return false;
+    }
+    return await _service!.removeFromAllowedList(macAddress, ipAddress: ipAddress);
   }
 
 }
