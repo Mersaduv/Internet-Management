@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/client_info.dart';
 import '../services/mikrotik_service_manager.dart';
 
@@ -16,13 +17,21 @@ class ClientsProvider extends ChangeNotifier {
   String? _deviceIp;
   bool _isRefreshing = false;
   Map<String, dynamic>? _routerInfo;
+  // قفل اتصال جدید - 状态变量
   bool _isNewConnectionsLocked = false;
   // Map برای ذخیره وضعیت فیلترینگ شبکه‌های اجتماعی (key: deviceIp, value: Map<String, bool>)
   final Map<String, Map<String, bool>> _deviceFilterStatus = {};
+  
+  // Set برای跟踪已批准的设备 (MAC addresses)
+  Set<String> _approvedDevices = {};
+  // Set برای跟踪已见过的设备 (用于检测新设备)
+  Set<String> _seenDevices = {};
+  // Set برای跟踪待批准的新设备 (首次出现的设备，等待用户批准)
+  Set<String> _pendingApprovalDevices = {};
 
-  // Timer برای بررسی دوره‌ای دستگاه‌های جدید (real-time auto-ban)
-  Timer? _autoBanCheckTimer;
-  static const Duration _autoBanCheckInterval = Duration(seconds: 5); // هر 5 ثانیه یکبار بررسی
+  // Timer برای بررسی دوره‌ای دستگاه‌های جدید - حذف شده (قفل اتصال جدید حذف شده)
+  // Timer? _autoBanCheckTimer;
+  // static const Duration _autoBanCheckInterval = Duration(seconds: 5);
 
   // Getters
   bool get isLoading => _isLoading;
@@ -34,6 +43,7 @@ class ClientsProvider extends ChangeNotifier {
   bool get isRefreshing => _isRefreshing;
   bool get isConnected => _serviceManager.isConnected;
   Map<String, dynamic>? get routerInfo => _routerInfo;
+  // قفل اتصال جدید - Getter
   bool get isNewConnectionsLocked => _isNewConnectionsLocked;
 
   /// بارگذاری IP دستگاه
@@ -99,6 +109,168 @@ class ClientsProvider extends ChangeNotifier {
           .map((c) => ClientInfo.fromMap(c as Map<String, dynamic>))
           .toList();
 
+      // 检测新设备并标记为待批准
+      // 更新已见过的设备列表
+      final currentMacs = clientsList
+          .where((client) => client.macAddress != null && client.macAddress!.isNotEmpty)
+          .map((client) => client.macAddress!.toUpperCase())
+          .toSet();
+      
+      // 检测新设备（首次出现的 MAC）
+      final newDevices = currentMacs.where((mac) => !_seenDevices.contains(mac)).toSet();
+      
+      // 只有当"新连接锁定"激活时，才限制动态设备
+      if (_isNewConnectionsLocked) {
+        // 检查所有已连接的设备（不仅仅是新设备），限制动态设备
+        for (var client in clientsList) {
+          // 跳过静态设备 - 静态设备总是允许完全连接
+          if (_isStaticDevice(client)) {
+            continue;
+          }
+          
+          // 跳过当前设备
+          if (_deviceIp != null && client.ipAddress == _deviceIp) {
+            continue;
+          }
+          
+          // 跳过已批准的设备
+          if (client.macAddress != null && _approvedDevices.contains(client.macAddress!.toUpperCase())) {
+            continue;
+          }
+          
+          // 跳过被封禁的设备（它们不应该显示批准/拒绝消息）
+          // 检查设备是否被封禁
+          bool isBanned = false;
+          if (client.macAddress != null || client.ipAddress != null) {
+            isBanned = await isDeviceBanned(client.macAddress, client.ipAddress);
+          }
+          if (isBanned) {
+            continue; // 跳过被封禁的设备
+          }
+          
+          // 如果是动态设备，需要限制访问
+          if (client.macAddress != null) {
+            final macUpper = client.macAddress!.toUpperCase();
+            
+            // 再次检查设备是否被封禁（双重检查，确保不会添加被封禁的设备）
+            final isBannedCheck = await isDeviceBanned(client.macAddress, client.ipAddress);
+            if (isBannedCheck) {
+              continue; // 如果被封禁，跳过
+            }
+            
+            // 检查是否是新设备
+            final isNewDevice = newDevices.contains(macUpper);
+            
+            // 如果是新设备，添加到待批准列表
+            if (isNewDevice) {
+              // 确保设备没有被封禁
+              if (!isBannedCheck) {
+                _pendingApprovalDevices.add(macUpper);
+                print('🔔 [NEW_DEVICE] دستگاه جدید (Dynamic) شناسایی شد: MAC=$macUpper, IP=${client.ipAddress}');
+              }
+            } else {
+              // 如果是已存在的动态设备，也添加到待批准列表（如果还没有批准且没有被封禁）
+              if (!_pendingApprovalDevices.contains(macUpper) && !isBannedCheck) {
+                _pendingApprovalDevices.add(macUpper);
+                print('🔔 [EXISTING_DEVICE] دستگاه موجود (Dynamic) نیاز به تایید: MAC=$macUpper, IP=${client.ipAddress}');
+              }
+            }
+            
+            // 限制动态设备的访问（只对未封禁的设备）
+            if (!isBannedCheck) {
+              try {
+                print('🔒 [LOCK_DYNAMIC] محدود کردن دسترسی دستگاه Dynamic: MAC=$macUpper, IP=${client.ipAddress}');
+                await _serviceManager.restrictNonStaticDevice(
+                  client.macAddress!,
+                  ipAddress: client.ipAddress,
+                );
+              } catch (e) {
+                print('⚠️ [LOCK_DYNAMIC] خطا در محدود کردن دسترسی: $e');
+              }
+            }
+          }
+        }
+        
+        if (newDevices.isNotEmpty) {
+          print('🔔 [NEW_DEVICES] ${newDevices.length} دستگاه جدید شناسایی شد (قفل فعال): $newDevices');
+        }
+      } else if (newDevices.isNotEmpty) {
+        // 如果锁定未激活，所有设备直接完全连接（不需要限制）
+        print('🔔 [NEW_DEVICES] ${newDevices.length} دستگاه جدید شناسایی شد (قفل غیرفعال - دسترسی کامل): $newDevices');
+      }
+      
+      // 清理已断开连接的设备（在更新_seenDevices之前）
+      // 这样当设备重新连接时，会被识别为新设备，需要重新批准
+      
+      // 清理已断开连接的已批准设备
+      // 如果已批准的设备不在当前连接列表中，从批准列表中移除
+      if (_approvedDevices.isNotEmpty) {
+        final disconnectedApprovedDevices = <String>[];
+        for (var approvedMac in _approvedDevices) {
+          // 检查这个已批准的设备是否还在当前连接列表中
+          final isStillConnected = clientsList.any(
+            (client) => client.macAddress?.toUpperCase() == approvedMac,
+          );
+          
+          // 如果设备不在连接列表中，标记为需要移除
+          if (!isStillConnected) {
+            disconnectedApprovedDevices.add(approvedMac);
+          }
+        }
+        
+        // 从批准列表中移除已断开连接的设备
+        if (disconnectedApprovedDevices.isNotEmpty) {
+          for (var mac in disconnectedApprovedDevices) {
+            _approvedDevices.remove(mac);
+            _pendingApprovalDevices.remove(mac);
+            // 同时从_seenDevices中移除，这样重新连接时会被识别为新设备
+            _seenDevices.remove(mac);
+            print('🗑️ [CLEANUP_APPROVED] دستگاه تایید شده از لیست حذف شد (قطع اتصال): MAC=$mac');
+          }
+          
+          // 保存更新后的批准列表
+          await _saveApprovedDevices();
+          
+          if (disconnectedApprovedDevices.length > 0) {
+            print('✅ [CLEANUP_APPROVED] ${disconnectedApprovedDevices.length} دستگاه تایید شده از لیست حذف شدند (باید دوباره تایید شوند)');
+          }
+        }
+      }
+      
+      // 清理待批准列表中已断开连接的设备
+      if (_pendingApprovalDevices.isNotEmpty) {
+        final disconnectedPendingDevices = <String>[];
+        for (var pendingMac in _pendingApprovalDevices) {
+          // 检查这个待批准设备是否还在当前连接列表中
+          final isStillConnected = clientsList.any(
+            (client) => client.macAddress?.toUpperCase() == pendingMac,
+          );
+          
+          // 如果设备不在连接列表中，标记为需要移除
+          if (!isStillConnected) {
+            disconnectedPendingDevices.add(pendingMac);
+          }
+        }
+        
+        // 从待批准列表中移除已断开连接的设备
+        if (disconnectedPendingDevices.isNotEmpty) {
+          for (var mac in disconnectedPendingDevices) {
+            _pendingApprovalDevices.remove(mac);
+            // 同时从_seenDevices中移除，这样重新连接时会被识别为新设备
+            _seenDevices.remove(mac);
+            print('🗑️ [CLEANUP_PENDING] دستگاه待批准 از لیست حذف شد (قطع اتصال): MAC=$mac');
+          }
+          
+          if (disconnectedPendingDevices.length > 0) {
+            print('✅ [CLEANUP_PENDING] ${disconnectedPendingDevices.length} دستگاه待批准 از لیست حذف شدند');
+          }
+        }
+      }
+      
+      // 更新已见过的设备列表（在清理之后，只保留当前连接的设备）
+      // 这样断开连接的设备会被移除，重新连接时会被识别为新设备
+      _seenDevices = currentMacs;
+
       // بررسی کامل بودن داده‌ها
       bool dataComplete = true;
       if (clientsList.isEmpty) {
@@ -150,201 +322,8 @@ class ClientsProvider extends ChangeNotifier {
         }
       }
 
-      // بررسی وضعیت قفل اتصال جدید
-      bool wasLocked = _isNewConnectionsLocked;
-      try {
-        _isNewConnectionsLocked = await _serviceManager.isNewConnectionsLocked();
-        notifyListeners();
-        
-        // اگر وضعیت قفل تغییر کرد، Timer را به‌روزرسانی کن
-        if (wasLocked != _isNewConnectionsLocked) {
-          _updateAutoBanTimer();
-        }
-      } catch (e) {
-        // ignore
-      }
-
-      // اگر قفل فعال است، بررسی و مسدود کردن دستگاه‌های جدید
-      // هر دستگاهی که بعد از فعال شدن قفل وصل شود (حتی اگر قبلاً وصل شده بوده) باید مسدود شود
-      if (_isNewConnectionsLocked) {
-        try {
-          // دریافت لیست MAC ها و IP های مجاز (لیست اولیه در زمان فعال شدن قفل)
-          final allowedMacs = await _serviceManager.service?.getAllowedMacsForLock() ?? <String>{};
-          final allowedIps = await _serviceManager.service?.getAllowedIpsForLock() ?? <String>{};
-          
-          // اضافه کردن IP دستگاه کاربر به لیست مجاز (اگر هنوز اضافه نشده)
-          if (_deviceIp != null && !allowedIps.contains(_deviceIp)) {
-            allowedIps.add(_deviceIp!);
-          }
-          
-          // ایجاد یک Set از دستگاه‌های مجاز بر اساس MAC و IP
-          // این برای بررسی سریع‌تر استفاده می‌شود
-          final allowedDevices = <String>{};
-          for (var mac in allowedMacs) {
-            allowedDevices.add('mac:$mac');
-          }
-          for (var ip in allowedIps) {
-            allowedDevices.add('ip:$ip');
-          }
-          
-          // بررسی همه دستگاه‌های متصل فعلی
-          // تغییر: به جای مسدود کردن، بررسی می‌کنیم که آیا دستگاه static است یا نه
-          // اگر static نیست و در لیست مجاز نیست، باید محدود شود (اما در لیست نمایش داده شود)
-          bool anyDeviceBanned = false;
-          for (var client in clientsList.toList()) {
-            final clientMac = client.macAddress?.toUpperCase();
-            final clientIp = client.ipAddress;
-            
-            // بررسی اینکه آیا دستگاه مجاز است یا نه
-            bool isAllowed = false;
-            
-            // اگر IP دستگاه کاربر است، همیشه مجاز است
-            if (clientIp != null && clientIp == _deviceIp) {
-              isAllowed = true;
-            }
-            
-            // بررسی اینکه آیا دستگاه در لیست مجاز است
-            if (!isAllowed && clientIp != null) {
-              // بررسی MAC
-              if (clientMac != null && clientMac.isNotEmpty) {
-                if (allowedDevices.contains('mac:$clientMac')) {
-                  isAllowed = true;
-                }
-              }
-              
-              // بررسی IP
-              if (!isAllowed && clientIp.isNotEmpty) {
-                if (allowedDevices.contains('ip:$clientIp')) {
-                  isAllowed = true;
-                }
-              }
-            }
-            
-            // اگر مجاز نیست، بررسی می‌کنیم که آیا static است
-            // اگر static نیست، باید محدود شود (اما در لیست نمایش داده شود)
-            if (!isAllowed) {
-              // بررسی وضعیت static lease
-              bool? isStatic = client.isStaticLease;
-              
-              // اگر وضعیت static مشخص نیست، از RouterOS دریافت کن
-              if (isStatic == null && clientMac != null) {
-                try {
-                  isStatic = await _serviceManager.service?.getLeaseStatus(
-                    macAddress: clientMac,
-                    ipAddress: clientIp,
-                  );
-                } catch (e) {
-                  // ignore errors
-                }
-              }
-              
-              // اگر static نیست و در لیست مجاز نیست، باید بلافاصله مسدود شود
-              if (isStatic != true && clientMac != null) {
-                try {
-                  // محدود کردن دسترسی در تمام سطوح: Wireless + DHCP + Firewall
-                  // این برای جلوگیری از دسترسی کامل دستگاه‌های جدید ضروری است
-                  await _serviceManager.service?.restrictNonStaticDevice(
-                    clientMac, 
-                    ipAddress: clientIp,
-                  );
-                  print('🔒 [CLIENTS_PROVIDER] دستگاه non-static محدود شد: MAC=$clientMac, IP=$clientIp');
-                  
-                  // همچنین اطمینان از اینکه default-authenticate=no است
-                  // این برای جلوگیری از اتصال دستگاه‌های جدید در آینده ضروری است
-                  try {
-                    final isLocked = await _serviceManager.isNewConnectionsLocked();
-                    if (isLocked) {
-                      // بررسی و تنظیم مجدد default-authenticate=no برای همه wireless interfaces
-                      // این در mikrotik_service.dart انجام می‌شود، اما برای اطمینان اینجا هم چک می‌کنیم
-                    }
-                  } catch (e) {
-                    // ignore
-                  }
-                } catch (e) {
-                  print('❌ [CLIENTS_PROVIDER] خطا در restrictNonStaticDevice برای $clientMac: $e');
-                  // ignore errors - اما لاگ می‌کنیم
-                }
-              } else if (isStatic == true) {
-                // اگر static است اما در لیست مجاز نیست، باید مسدود شود (رفتار قبلی)
-                bool wasBanned = false;
-                try {
-                  if (client.ipAddress != null) {
-                    final banResult = await _serviceManager.service?.banClient(
-                      client.ipAddress!,
-                      macAddress: client.macAddress,
-                      comment: 'Auto-banned: New connection while locked',
-                    );
-                    wasBanned = banResult == true;
-                    if (wasBanned) {
-                      anyDeviceBanned = true;
-                    }
-                  }
-                } catch (e) {
-                  // ignore errors
-                }
-                // حذف از لیست متصل (حتی اگر banClient خطا داد)
-                clientsList.remove(client);
-              }
-            }
-          }
-          
-          // اگر دستگاهی مسدود شد، لیست banned clients را به‌روزرسانی کن (یک بار)
-          if (anyDeviceBanned) {
-            try {
-              await loadBannedClients();
-            } catch (e) {
-              // ignore errors
-            }
-          }
-        } catch (e) {
-          // ignore errors
-        }
-      }
-
-      // حذف دستگاه‌های مسدود شده از لیست متصل
-      // استفاده از Device Fingerprint برای شناسایی دستگاه‌های مسدود شده
-      try {
-        // بررسی و مسدود کردن خودکار دستگاه‌هایی که Device Fingerprint آن‌ها مسدود شده است
-        try {
-          await _serviceManager.service?.checkAndBanBannedDevices();
-        } catch (e) {
-          // ignore errors in auto-ban check
-        }
-
-        // دریافت لیست دستگاه‌های مسدود شده (شامل auto-banned)
-        final bannedClients = await _serviceManager.getBannedClients();
-        final bannedIps = bannedClients
-            .map((b) => b['address']?.toString())
-            .where((ip) => ip != null && ip.isNotEmpty)
-            .toSet();
-
-        final bannedMacs = <String>{};
-        for (var banned in bannedClients) {
-          final mac = banned['mac_address']?.toString();
-          if (mac != null && mac.isNotEmpty) {
-            bannedMacs.add(mac.toUpperCase());
-          }
-        }
-
-        // حذف دستگاه‌های مسدود شده از لیست متصل
-        clientsList.removeWhere((client) {
-          // بررسی IP
-          if (client.ipAddress != null &&
-              bannedIps.contains(client.ipAddress)) {
-            return true;
-          }
-          // بررسی MAC
-          if (client.macAddress != null) {
-            final clientMacUpper = client.macAddress!.toUpperCase();
-            if (bannedMacs.contains(clientMacUpper)) {
-              return true;
-            }
-          }
-          return false;
-        });
-      } catch (e) {
-        // اگر خطا در دریافت لیست مسدود شده‌ها رخ داد، ادامه بده
-      }
+      // 不使用自动封禁功能 - 只使用 Access List 限制访问
+      // 设备不会被封禁，只会被限制访问（通过 Access List）
 
       // مرتب‌سازی: دستگاه کاربر در صدر لیست
       // اگر IP دستگاه کاربر هنوز تشخیص داده نشده، دوباره تلاش کن
@@ -415,6 +394,7 @@ class ClientsProvider extends ChangeNotifier {
 
   /// مسدود کردن کلاینت با استفاده از Device Fingerprint
   /// این تابع Device Fingerprint را محاسبه و ذخیره می‌کند
+  /// بهینه‌سازی: refresh در پس‌زمینه انجام می‌شود تا UI فوراً پاسخ دهد
   Future<bool> banClient(String ipAddress, {String? macAddress, String? hostname, String? ssid}) async {
     if (!_serviceManager.isConnected) {
       _errorMessage = 'اتصال برقرار نشده است.';
@@ -431,15 +411,24 @@ class ClientsProvider extends ChangeNotifier {
       );
 
       if (success == true) {
-        // بررسی و مسدود کردن خودکار دستگاه‌های دیگر که Device Fingerprint آن‌ها مسدود شده است
-        try {
-          await _serviceManager.service?.checkAndBanBannedDevices();
-        } catch (e) {
-          // ignore errors in auto-ban
-        }
+        // بررسی و مسدود کردن خودکار دستگاه‌های دیگر (در پس‌زمینه)
+        // این عملیات را non-blocking می‌کنیم تا UI فوراً پاسخ دهد
+        Future.microtask(() async {
+          try {
+            await _serviceManager.service?.checkAndBanBannedDevices();
+          } catch (e) {
+            // ignore errors in auto-ban
+          }
+          
+          // به‌روزرسانی state در پس‌زمینه (non-blocking)
+          try {
+            await refresh();
+          } catch (e) {
+            // ignore errors in refresh
+          }
+        });
         
-        // به‌روزرسانی فوری state
-        await refresh();
+        // فوراً return true تا UI بتواند navigation کند
         return true;
       }
       return false;
@@ -451,6 +440,8 @@ class ClientsProvider extends ChangeNotifier {
   }
 
   /// رفع مسدودیت کلاینت با استفاده از Device Fingerprint
+  /// 解除封禁后，如果锁定激活且设备是动态的，应该再次显示批准/拒绝消息
+  /// بهینه‌سازی: refresh در پس‌زمینه انجام می‌شود تا UI فوراً پاسخ دهد
   Future<bool> unbanClient(String ipAddress, {String? macAddress, String? hostname, String? ssid}) async {
     if (!_serviceManager.isConnected) {
       _errorMessage = 'اتصال برقرار نشده است.';
@@ -467,13 +458,36 @@ class ClientsProvider extends ChangeNotifier {
       );
 
       if (success == true) {
-        // به‌روزرسانی فوری state
-        // ابتدا لیست banned clients را به‌روزرسانی کن تا دستگاه از لیست حذف شود
-        await loadBannedClients();
-        // سپس لیست متصل را به‌روزرسانی کن
-        await loadClients(showLoading: false);
-        // اطمینان از به‌روزرسانی UI
-        notifyListeners();
+        // 如果锁定激活且有 MAC 地址，将设备添加到待批准列表（如果设备是动态的）
+        // 这样当设备重新连接时，会显示批准/拒绝消息
+        if (_isNewConnectionsLocked && macAddress != null && macAddress.isNotEmpty) {
+          final macUpper = macAddress.toUpperCase();
+          
+          // 从_seenDevices中移除，这样重新连接时会被识别为新设备
+          _seenDevices.remove(macUpper);
+          
+          // 添加到待批准列表（如果设备是动态的，会在loadClients中确认）
+          // 先添加到待批准列表，在loadClients中会检查设备是否是动态的
+          _pendingApprovalDevices.add(macUpper);
+          print('🔔 [UNBAN_DEVICE] دستگاه解除封禁 - 添加到待批准列表: MAC=$macUpper, IP=$ipAddress');
+        }
+        
+        // به‌روزرسانی state در پس‌زمینه (non-blocking)
+        // این عملیات را non-blocking می‌کنیم تا UI فوراً پاسخ دهد
+        Future.microtask(() async {
+          try {
+            // ابتدا لیست banned clients را به‌روزرسانی کن تا دستگاه از لیست حذف شود
+            await loadBannedClients();
+            // سپس لیست متصل را به‌روزرسانی کن
+            await loadClients(showLoading: false);
+            // اطمینان از به‌روزرسانی UI
+            notifyListeners();
+          } catch (e) {
+            // ignore errors in refresh
+          }
+        });
+        
+        // فوراً return true تا UI بتواند navigation کند
         return true;
       }
       return false;
@@ -565,7 +579,7 @@ class ClientsProvider extends ChangeNotifier {
 
   /// پاک کردن state (برای logout)
   void clear() {
-    _cancelAutoBanTimer(); // توقف Timer
+    // _cancelAutoBanTimer(); // حذف شده
     _isLoading = false;
     _isDataComplete = false;
     _clients = [];
@@ -574,47 +588,295 @@ class ClientsProvider extends ChangeNotifier {
     _deviceIp = null;
     _isRefreshing = false;
     _routerInfo = null;
-    _isNewConnectionsLocked = false;
+    // 不清除锁定状态，保持用户设置
+    // _isNewConnectionsLocked = false;
     _deviceFilterStatus.clear(); // پاک کردن cache وضعیت فیلترینگ
+    _pendingApprovalDevices.clear(); // 清除待批准设备列表
     notifyListeners();
+  }
+
+  /// بارگذاری لیست دستگاه‌های مجاز از SharedPreferences
+  Future<void> _loadApprovedDevices() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final approvedMacsList = prefs.getStringList('approved_devices') ?? [];
+      _approvedDevices = approvedMacsList.map((mac) => mac.toUpperCase()).toSet();
+    } catch (e) {
+      _approvedDevices = {};
+    }
+  }
+
+  /// 加载锁定状态从 SharedPreferences
+  Future<void> _loadLockStatus() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      _isNewConnectionsLocked = prefs.getBool('new_connections_locked') ?? false;
+      print('📋 [LOAD_LOCK_STATUS] قفل اتصال جدید: ${_isNewConnectionsLocked ? "فعال" : "غیرفعال"}');
+    } catch (e) {
+      _isNewConnectionsLocked = false;
+      print('⚠️ [LOAD_LOCK_STATUS] خطا در بارگذاری وضعیت قفل: $e');
+    }
+  }
+
+  /// 保存锁定状态到 SharedPreferences
+  Future<void> _saveLockStatus() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('new_connections_locked', _isNewConnectionsLocked);
+      print('💾 [SAVE_LOCK_STATUS] وضعیت قفل ذخیره شد: $_isNewConnectionsLocked');
+    } catch (e) {
+      print('⚠️ [SAVE_LOCK_STATUS] خطا در ذخیره وضعیت قفل: $e');
+    }
+  }
+
+  /// ذخیره لیست دستگاه‌های مجاز در SharedPreferences
+  Future<void> _saveApprovedDevices() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setStringList('approved_devices', _approvedDevices.toList());
+    } catch (e) {
+      // ignore errors
+    }
+  }
+
+  /// بررسی اینکه آیا دستگاه مجاز است (已批准)
+  Future<bool> isDeviceApproved(String? macAddress) async {
+    if (macAddress == null || macAddress.isEmpty) {
+      return false;
+    }
+    
+    // اگر لیست مجاز خالی است، از SharedPreferences بارگذاری کن
+    if (_approvedDevices.isEmpty) {
+      await _loadApprovedDevices();
+    }
+    
+    return _approvedDevices.contains(macAddress.toUpperCase());
+  }
+
+  /// بررسی اینکه آیا دستگاه نیاز به تایید دارد
+  /// 只有当"新连接锁定"激活时，动态设备才需要批准
+  /// 静态设备总是允许，不需要批准
+  /// 如果设备被封禁，不需要批准（直到解除封禁）
+  Future<bool> isDevicePendingApproval(String? macAddress, String? ipAddress, {ClientInfo? client}) async {
+    // 如果锁定未激活，不需要批准
+    if (!_isNewConnectionsLocked) {
+      return false;
+    }
+    
+    if (macAddress == null || macAddress.isEmpty) {
+      return false;
+    }
+    
+    final macUpper = macAddress.toUpperCase();
+    
+    // 如果设备被封禁，不需要批准（直到解除封禁）
+    if (await isDeviceBanned(macAddress, ipAddress)) {
+      return false;
+    }
+    
+    // 如果设备是静态设备，不需要批准
+    if (client != null && _isStaticDevice(client)) {
+      return false;
+    }
+    
+    // 如果无法从client判断，尝试从clients列表中查找
+    if (client == null) {
+      final foundClient = _clients.firstWhere(
+        (c) => c.macAddress?.toUpperCase() == macUpper,
+        orElse: () => ClientInfo(type: 'unknown', source: 'unknown', rawData: {}),
+      );
+      if (foundClient.type != 'unknown' && _isStaticDevice(foundClient)) {
+        return false;
+      }
+    }
+    
+    // 如果设备是当前设备，不需要批准
+    if (ipAddress != null && ipAddress == _deviceIp) {
+      return false;
+    }
+    
+    // 如果设备已批准，不需要批准
+    if (await isDeviceApproved(macAddress)) {
+      return false;
+    }
+    
+    // 如果设备在待批准列表中，需要批准
+    return _pendingApprovalDevices.contains(macUpper);
+  }
+  
+  /// 检查设备是否被封禁
+  Future<bool> isDeviceBanned(String? macAddress, String? ipAddress) async {
+    if (macAddress == null && ipAddress == null) {
+      return false;
+    }
+    
+    // 检查封禁列表
+    for (var banned in _bannedClients) {
+      final bannedMac = banned['mac_address']?.toString().toUpperCase();
+      final bannedIp = banned['address']?.toString();
+      
+      // 检查 MAC 地址
+      if (macAddress != null && bannedMac != null) {
+        if (macAddress.toUpperCase() == bannedMac) {
+          return true;
+        }
+      }
+      
+      // 检查 IP 地址
+      if (ipAddress != null && bannedIp != null) {
+        if (ipAddress == bannedIp) {
+          return true;
+        }
+      }
+    }
+    
+    return false;
+  }
+  
+  /// 检查设备是否是静态设备
+  bool _isStaticDevice(ClientInfo client) {
+    // 1. 直接检查 isStaticLease
+    if (client.isStaticLease == true) {
+      return true;
+    }
+    
+    // 2. 如果 isStaticLease 为 null，从 rawData 检查
+    if (client.isStaticLease == null && client.rawData.isNotEmpty) {
+      if (client.rawData.containsKey('dynamic')) {
+        final dynamicValue = client.rawData['dynamic']?.toString().toLowerCase();
+        if (dynamicValue == 'false' || dynamicValue == 'no') {
+          return true; // Static
+        }
+      }
+    }
+    
+    return false;
+  }
+
+  /// تایید دستگاه (批准设备)
+  Future<bool> approveDevice(String macAddress, {String? ipAddress}) async {
+    if (macAddress.isEmpty) {
+      _errorMessage = 'MAC address خالی است';
+      notifyListeners();
+      return false;
+    }
+
+    try {
+      final macUpper = macAddress.toUpperCase();
+      
+      // اضافه کردن به لیست مجاز
+      _approvedDevices.add(macUpper);
+      await _saveApprovedDevices();
+      
+      // 从待批准列表中移除
+      _pendingApprovalDevices.remove(macUpper);
+      
+      // 允许设备完整访问（移除限制）
+      if (_serviceManager.isConnected) {
+        try {
+          final success = await _serviceManager.allowNonStaticDevice(
+            macAddress,
+            ipAddress: ipAddress,
+          );
+          if (success) {
+            print('✅ [APPROVE_DEVICE] دستگاه با موفقیت تایید شد و دسترسی کامل داده شد: MAC=$macUpper, IP=$ipAddress');
+          } else {
+            print('⚠️ [APPROVE_DEVICE] دستگاه تایید شد اما حذف محدودیت ناموفق بود: MAC=$macUpper');
+          }
+        } catch (e) {
+          print('⚠️ [APPROVE_DEVICE] خطا در حذف محدودیت دستگاه: $e');
+          // 即使移除限制失败，也继续（因为设备已经在批准列表中）
+        }
+      }
+      
+      notifyListeners();
+      return true;
+    } catch (e) {
+      _errorMessage = 'خطا در تایید دستگاه: $e';
+      notifyListeners();
+      return false;
+    }
+  }
+
+  /// رد دستگاه (拒绝设备)
+  /// 当拒绝设备时，封禁设备
+  /// 确保设备不会再次显示为待批准状态
+  Future<bool> rejectDevice(String macAddress, {String? ipAddress}) async {
+    if (macAddress.isEmpty) {
+      _errorMessage = 'MAC address خالی است';
+      notifyListeners();
+      return false;
+    }
+
+    try {
+      final macUpper = macAddress.toUpperCase();
+      
+      // 从批准列表中移除（如果存在）
+      _approvedDevices.remove(macUpper);
+      await _saveApprovedDevices();
+      
+      // 从待批准列表中移除（确保不会再次显示）
+      _pendingApprovalDevices.remove(macUpper);
+      
+      // 从_seenDevices中移除，这样即使重新连接也不会立即显示为待批准
+      // 只有当解除封禁后，才会再次显示
+      _seenDevices.remove(macUpper);
+      
+      // 封禁设备
+      if (_serviceManager.isConnected && ipAddress != null && ipAddress.isNotEmpty) {
+        try {
+          // 使用 banClient 封禁设备
+          await _serviceManager.service?.banClient(
+            ipAddress,
+            macAddress: macAddress,
+            comment: 'Rejected by user - New connection lock',
+          );
+          print('✅ [REJECT_DEVICE] دستگاه reject و مسدود شد: MAC=$macUpper, IP=$ipAddress');
+          
+          // 刷新封禁列表，确保设备在封禁列表中
+          await loadBannedClients();
+        } catch (e) {
+          print('⚠️ [REJECT_DEVICE] خطا در مسدود کردن دستگاه: $e');
+          // 即使封禁失败，也继续（因为设备已经从批准列表中移除）
+        }
+      } else {
+        print('⚠️ [REJECT_DEVICE] IP address داده نشده - فقط MAC: $macUpper - مسدود نشد');
+      }
+      
+      // 从连接列表中移除设备（因为设备已被封禁）
+      _clients.removeWhere((client) => 
+        client.macAddress?.toUpperCase() == macUpper
+      );
+      
+      notifyListeners();
+      return true;
+    } catch (e) {
+      _errorMessage = 'خطا در رد دستگاه: $e';
+      notifyListeners();
+      return false;
+    }
   }
 
   /// مقداردهی اولیه (برای بعد از login)
   Future<void> initialize() async {
+    await _loadApprovedDevices();
+    await _loadLockStatus(); // 加载锁定状态
     await loadDeviceIp();
     await loadRouterInfo();
     await loadClients();
     await loadBannedClients();
-    // بررسی وضعیت قفل
-    try {
-      _isNewConnectionsLocked = await _serviceManager.isNewConnectionsLocked();
-      _updateAutoBanTimer(); // شروع Timer اگر قفل فعال است
-      notifyListeners();
-    } catch (e) {
-      // ignore
-    }
   }
 
   /// قفل کردن اتصال دستگاه‌های جدید
   Future<bool> lockNewConnections() async {
-    if (!_serviceManager.isConnected) {
-      _errorMessage = 'اتصال برقرار نشده است.';
-      notifyListeners();
-      return false;
-    }
-
     try {
-      final success = await _serviceManager.lockNewConnections();
-      if (success) {
-        _isNewConnectionsLocked = true;
-        _updateAutoBanTimer(); // شروع Timer برای بررسی دوره‌ای
-        await refresh();
-        notifyListeners();
-        return true;
-      }
-      return false;
+      _isNewConnectionsLocked = true;
+      await _saveLockStatus();
+      notifyListeners();
+      print('✅ [LOCK_NEW_CONNECTIONS] قفل اتصال جدید فعال شد');
+      return true;
     } catch (e) {
-      _errorMessage = 'خطا در قفل کردن اتصال جدید: $e';
+      _errorMessage = 'خطا در فعال کردن قفل: $e';
       notifyListeners();
       return false;
     }
@@ -622,67 +884,17 @@ class ClientsProvider extends ChangeNotifier {
 
   /// رفع قفل اتصال دستگاه‌های جدید
   Future<bool> unlockNewConnections() async {
-    if (!_serviceManager.isConnected) {
-      _errorMessage = 'اتصال برقرار نشده است.';
-      notifyListeners();
-      return false;
-    }
-
     try {
-      final success = await _serviceManager.unlockNewConnections();
-      if (success) {
-        _isNewConnectionsLocked = false;
-        _updateAutoBanTimer(); // توقف Timer
-        // به‌روزرسانی لیست banned clients برای حذف دستگاه‌های auto-banned که رفع مسدودیت شدند
-        await loadBannedClients();
-        await refresh();
-        notifyListeners();
-        return true;
-      }
-      return false;
+      _isNewConnectionsLocked = false;
+      await _saveLockStatus();
+      notifyListeners();
+      print('✅ [UNLOCK_NEW_CONNECTIONS] قفل اتصال جدید غیرفعال شد');
+      return true;
     } catch (e) {
-      _errorMessage = 'خطا در رفع قفل اتصال جدید: $e';
+      _errorMessage = 'خطا در غیرفعال کردن قفل: $e';
       notifyListeners();
       return false;
     }
-  }
-
-  /// به‌روزرسانی Timer برای بررسی دوره‌ای دستگاه‌های جدید
-  /// Timer فقط زمانی فعال است که قفل اتصال جدید فعال باشد
-  void _updateAutoBanTimer() {
-    // توقف Timer قبلی (اگر وجود دارد)
-    _autoBanCheckTimer?.cancel();
-    _autoBanCheckTimer = null;
-
-    // اگر قفل فعال است و اتصال برقرار است، Timer را شروع کن
-    if (_isNewConnectionsLocked && _serviceManager.isConnected) {
-      _autoBanCheckTimer = Timer.periodic(_autoBanCheckInterval, (timer) async {
-        // بررسی اینکه آیا هنوز قفل فعال است و اتصال برقرار است
-        if (!_isNewConnectionsLocked || !_serviceManager.isConnected) {
-          timer.cancel();
-          _autoBanCheckTimer = null;
-          return;
-        }
-
-        // بررسی و مسدود کردن دستگاه‌های جدید (بدون نمایش loading)
-        try {
-          // بررسی و مسدود کردن دستگاه‌های جدید
-          await loadClients(showLoading: false);
-          // به‌روزرسانی لیست banned clients برای نمایش دستگاه‌های auto-banned
-          await loadBannedClients();
-          // اطمینان از به‌روزرسانی UI
-          notifyListeners();
-        } catch (e) {
-          // ignore errors - Timer ادامه می‌دهد
-        }
-      });
-    }
-  }
-
-  /// پاک کردن Timer (برای cleanup)
-  void _cancelAutoBanTimer() {
-    _autoBanCheckTimer?.cancel();
-    _autoBanCheckTimer = null;
   }
 
   /// فعال‌سازی فیلترینگ شبکه‌های اجتماعی برای یک دستگاه
@@ -902,37 +1114,40 @@ class ClientsProvider extends ChangeNotifier {
 
 
   /// بررسی اینکه آیا دستگاه در لیست مجاز است
-  Future<bool> isDeviceAllowed(String? macAddress, String? ipAddress) async {
-    if (!_serviceManager.isConnected || (!_isNewConnectionsLocked)) {
-      return true; // اگر قفل فعال نیست، همه مجاز هستند
+  /// 静态设备总是允许，动态设备需要检查是否已批准
+  Future<bool> isDeviceAllowed(String? macAddress, String? ipAddress, {ClientInfo? client}) async {
+    // 如果锁定未激活，所有设备都允许
+    if (!_isNewConnectionsLocked) {
+      return true;
     }
-
-    try {
-      final allowedMacs = await _serviceManager.service?.getAllowedMacsForLock() ?? <String>{};
-      final allowedIps = await _serviceManager.service?.getAllowedIpsForLock() ?? <String>{};
-      
-      // اضافه کردن IP دستگاه کاربر به لیست مجاز
-      if (_deviceIp != null && !allowedIps.contains(_deviceIp)) {
-        allowedIps.add(_deviceIp!);
-      }
-      
-      // بررسی MAC
-      if (macAddress != null) {
-        final macUpper = macAddress.toUpperCase();
-        if (allowedMacs.contains(macUpper)) {
-          return true;
-        }
-      }
-      
-      // بررسی IP
-      if (ipAddress != null && allowedIps.contains(ipAddress)) {
+    
+    if (macAddress == null || macAddress.isEmpty) {
+      return false;
+    }
+    
+    // 如果是当前设备，总是允许
+    if (ipAddress != null && ipAddress == _deviceIp) {
+      return true;
+    }
+    
+    // 如果设备是静态设备，总是允许
+    if (client != null && _isStaticDevice(client)) {
+      return true;
+    }
+    
+    // 如果无法从client判断，尝试从clients列表中查找
+    if (client == null) {
+      final foundClient = _clients.firstWhere(
+        (c) => c.macAddress?.toUpperCase() == macAddress.toUpperCase(),
+        orElse: () => ClientInfo(type: 'unknown', source: 'unknown', rawData: {}),
+      );
+      if (foundClient.type != 'unknown' && _isStaticDevice(foundClient)) {
         return true;
       }
-      
-      return false;
-    } catch (e) {
-      return false;
     }
+    
+    // 对于动态设备，检查是否已批准
+    return await isDeviceApproved(macAddress);
   }
 
   /// اجازه دادن به دستگاه non-static برای اتصال کامل به WiFi
@@ -991,7 +1206,7 @@ class ClientsProvider extends ChangeNotifier {
 
   @override
   void dispose() {
-    _cancelAutoBanTimer();
+    // _cancelAutoBanTimer(); // حذف شده (قفل اتصال جدید حذف شده)
     super.dispose();
   }
 

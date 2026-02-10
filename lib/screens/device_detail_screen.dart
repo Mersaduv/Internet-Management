@@ -1220,7 +1220,7 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> with WidgetsBin
         ipAddress: widget.device.ipAddress,
         hostname: widget.device.hostName,
         comment: widget.device.hostName != null ? 'Static: ${widget.device.hostName}' : 'Static Lease',
-      ).timeout(const Duration(seconds: 10), onTimeout: () {
+      ).timeout(const Duration(seconds: 5), onTimeout: () {
         throw Exception('زمان تبدیل به Static به پایان رسید. لطفاً دوباره تلاش کنید.');
       });
       
@@ -1333,13 +1333,34 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> with WidgetsBin
       final result = await serviceManager.service!.removeStaticLease(
         macAddress: widget.device.macAddress,
         ipAddress: widget.device.ipAddress,
-      ).timeout(const Duration(seconds: 10), onTimeout: () {
+      ).timeout(const Duration(seconds: 5), onTimeout: () {
         throw Exception('زمان حذف Static Lease به پایان رسید. لطفاً دوباره تلاش کنید.');
       });
       
       if (_isDisposed || !mounted) return;
       
       if (result['status'] == 'success' || result['status'] == 'info') {
+        // حذف از لیست دستگاه‌های تایید شده (اگر قبلاً تایید شده بود)
+        if (widget.device.macAddress != null) {
+          try {
+            // حذف از لیست تایید شده
+            final prefs = await SharedPreferences.getInstance();
+            final approvedMacsList = prefs.getStringList('approved_devices') ?? [];
+            final macUpper = widget.device.macAddress!.toUpperCase();
+            if (approvedMacsList.contains(macUpper)) {
+              approvedMacsList.remove(macUpper);
+              await prefs.setStringList('approved_devices', approvedMacsList);
+              print('✅ [REMOVE_STATIC] دستگاه از لیست تایید شده حذف شد: $macUpper');
+              
+              // به‌روزرسانی Provider state
+              final provider = Provider.of<ClientsProvider>(context, listen: false);
+              provider.refresh();
+            }
+          } catch (e) {
+            print('⚠️ [REMOVE_STATIC] خطا در حذف از لیست تایید شده: $e');
+          }
+        }
+        
         // به‌روزرسانی وضعیت
         if (mounted && !_isDisposed) {
           setState(() {
@@ -1466,6 +1487,8 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> with WidgetsBin
 
     try {
       final provider = Provider.of<ClientsProvider>(context, listen: false);
+      
+      // اجرای عملیات مسدود کردن
       final success = await provider.banClient(
         widget.device.ipAddress!,
         macAddress: widget.device.macAddress,
@@ -1476,48 +1499,59 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> with WidgetsBin
       if (_isDisposed || !mounted) return;
       
       if (success) {
-        // نمایش پیغام موفقیت
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Row(
-              children: [
-                Icon(Icons.check_circle, color: Colors.white),
-                SizedBox(width: 8),
-                Expanded(
-                  child: Text('دستگاه با موفقیت مسدود شد'),
-                ),
-              ],
-            ),
-            backgroundColor: Colors.green,
-            behavior: SnackBarBehavior.floating,
-            duration: Duration(seconds: 3),
-          ),
-        );
+        // به‌روزرسانی loading state
+        if (mounted && !_isDisposed) {
+          setState(() {
+            _isLoading = false;
+          });
+        }
         
-        // بستن صفحه جزئیات
+        // فوراً بستن صفحه و هدایت به صفحه اصلی (بدون تاخیر)
+        // این باعث می‌شود UI فوراً پاسخ دهد
         if (Navigator.canPop(context)) {
           Navigator.pop(context, true);
         }
         
-        // هدایت به صفحه اصلی
-        Future.delayed(const Duration(milliseconds: 300), () {
-          if (mounted) {
-            Navigator.of(context).pushNamedAndRemoveUntil(
-              '/home',
-              (route) => false,
-            );
-          }
+        // هدایت فوری به صفحه اصلی
+        Navigator.of(context).pushNamedAndRemoveUntil(
+          '/home',
+          (route) => false,
+        );
+        
+        // نمایش پیغام موفقیت در صفحه اصلی (با کمی تاخیر برای اطمینان از navigation)
+        Future.delayed(const Duration(milliseconds: 100), () {
+          final scaffoldMessenger = ScaffoldMessenger.of(context);
+          scaffoldMessenger.showSnackBar(
+            const SnackBar(
+              content: Row(
+                children: [
+                  Icon(Icons.check_circle, color: Colors.white),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text('دستگاه با موفقیت مسدود شد'),
+                  ),
+                ],
+              ),
+              backgroundColor: Colors.green,
+              behavior: SnackBarBehavior.floating,
+              duration: Duration(seconds: 3),
+            ),
+          );
         });
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('خطا: ${provider.errorMessage ?? "خطا در مسدود کردن"}'),
-            backgroundColor: Colors.red,
-          ),
-        );
-        setState(() {
-          _isLoading = false;
-        });
+        // در صورت خطا، فقط loading را متوقف کن (صفحه باز می‌ماند)
+        if (mounted && !_isDisposed) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('خطا: ${provider.errorMessage ?? "خطا در مسدود کردن"}'),
+              backgroundColor: Colors.red,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+          setState(() {
+            _isLoading = false;
+          });
+        }
       }
     } catch (e) {
       if (_isDisposed || !mounted) return;
@@ -1526,11 +1560,14 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> with WidgetsBin
         SnackBar(
           content: Text('خطا: $e'),
           backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
         ),
       );
-      setState(() {
-        _isLoading = false;
-      });
+      if (mounted && !_isDisposed) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
   }
 
@@ -1585,6 +1622,8 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> with WidgetsBin
 
     try {
       final provider = Provider.of<ClientsProvider>(context, listen: false);
+      
+      // اجرای عملیات رفع مسدودیت
       final success = await provider.unbanClient(
         widget.device.ipAddress!,
         macAddress: widget.device.macAddress,
@@ -1595,48 +1634,58 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> with WidgetsBin
       if (_isDisposed || !mounted) return;
       
       if (success) {
-        // نمایش پیغام موفقیت
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Row(
-              children: [
-                Icon(Icons.check_circle, color: Colors.white),
-                SizedBox(width: 8),
-                Expanded(
-                  child: Text('مسدودیت دستگاه با موفقیت برداشته شد'),
-                ),
-              ],
-            ),
-            backgroundColor: Colors.green,
-            behavior: SnackBarBehavior.floating,
-            duration: Duration(seconds: 3),
-          ),
-        );
+        // به‌روزرسانی loading state
+        if (mounted && !_isDisposed) {
+          setState(() {
+            _isLoading = false;
+          });
+        }
         
-        // بستن صفحه جزئیات
+        // فوراً بستن صفحه و هدایت به صفحه اصلی (بدون تاخیر)
         if (Navigator.canPop(context)) {
           Navigator.pop(context, true);
         }
         
-        // هدایت به صفحه اصلی
-        Future.delayed(const Duration(milliseconds: 300), () {
-          if (mounted) {
-            Navigator.of(context).pushNamedAndRemoveUntil(
-              '/home',
-              (route) => false,
-            );
-          }
+        // هدایت فوری به صفحه اصلی
+        Navigator.of(context).pushNamedAndRemoveUntil(
+          '/home',
+          (route) => false,
+        );
+        
+        // نمایش پیغام موفقیت در صفحه اصلی
+        Future.delayed(const Duration(milliseconds: 100), () {
+          final scaffoldMessenger = ScaffoldMessenger.of(context);
+          scaffoldMessenger.showSnackBar(
+            const SnackBar(
+              content: Row(
+                children: [
+                  Icon(Icons.check_circle, color: Colors.white),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text('مسدودیت دستگاه با موفقیت برداشته شد'),
+                  ),
+                ],
+              ),
+              backgroundColor: Colors.green,
+              behavior: SnackBarBehavior.floating,
+              duration: Duration(seconds: 3),
+            ),
+          );
         });
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('خطا: ${provider.errorMessage ?? "خطا در رفع مسدودیت"}'),
-            backgroundColor: Colors.red,
-          ),
-        );
-        setState(() {
-          _isLoading = false;
-        });
+        // در صورت خطا، فقط loading را متوقف کن
+        if (mounted && !_isDisposed) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('خطا: ${provider.errorMessage ?? "خطا در رفع مسدودیت"}'),
+              backgroundColor: Colors.red,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+          setState(() {
+            _isLoading = false;
+          });
+        }
       }
     } catch (e) {
       if (_isDisposed || !mounted) return;
@@ -1645,11 +1694,14 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> with WidgetsBin
         SnackBar(
           content: Text('خطا: $e'),
           backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
         ),
       );
-      setState(() {
-        _isLoading = false;
-      });
+      if (mounted && !_isDisposed) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
   }
 

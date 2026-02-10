@@ -108,36 +108,28 @@ class MikroTikServiceManager {
     return await _service!.getBannedClients();
   }
 
-  /// قفل کردن اتصال دستگاه‌های جدید
+  /// قفل کردن اتصال دستگاه‌های جدید - منطق حذف شده (فقط UI باقی مانده)
   Future<bool> lockNewConnections() async {
-    if (_service == null || !isConnected) {
-      throw Exception('اتصال برقرار نشده');
-    }
-    return await _service!.lockNewConnections();
+    // منطق حذف شده
+    return false;
   }
 
-  /// رفع قفل اتصال دستگاه‌های جدید
+  /// رفع قفل اتصال دستگاه‌های جدید - منطق حذف شده (فقط UI باقی مانده)
   Future<bool> unlockNewConnections() async {
-    if (_service == null || !isConnected) {
-      throw Exception('اتصال برقرار نشده');
-    }
-    return await _service!.unlockNewConnections();
+    // منطق حذف شده
+    return false;
   }
 
-  /// بررسی وضعیت قفل اتصال جدید
+  /// بررسی وضعیت قفل اتصال جدید - منطق حذف شده (فقط UI باقی مانده)
   Future<bool> isNewConnectionsLocked() async {
-    if (_service == null || !isConnected) {
-      return false;
-    }
-    return await _service!.isNewConnectionsLocked();
+    // منطق حذف شده - همیشه false
+    return false;
   }
 
-  /// دریافت لیست IP های مجاز برای قفل
+  /// دریافت لیست IP های مجاز برای قفل - منطق حذف شده
   Future<Set<String>> getAllowedIpsForLock() async {
-    if (_service == null || !isConnected) {
-      return <String>{};
-    }
-    return await _service!.getAllowedIpsForLock();
+    // منطق حذف شده
+    return <String>{};
   }
 
   /// محدود کردن دسترسی WiFi برای دستگاه non-static

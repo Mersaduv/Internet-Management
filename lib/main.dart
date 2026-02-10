@@ -349,116 +349,49 @@ class _HomePageState extends State<HomePage> {
                             onPressed: provider.isLoading
                                 ? null
                                 : () async {
-                                    if (provider.isNewConnectionsLocked) {
-                                      // رفع قفل
-                                      final confirmed = await showDialog<bool>(
-                                        context: context,
-                                        builder: (context) => AlertDialog(
-                                          title: const Text('رفع قفل اتصال جدید'),
-                                          content: const Text(
-                                            'آیا مطمئن هستید که می‌خواهید قفل اتصال جدید را بردارید؟\n'
-                                            'بعد از رفع قفل، دستگاه‌های جدید می‌توانند به شبکه متصل شوند.',
+                                    // 切换锁定状态
+                                    final currentState = provider.isNewConnectionsLocked;
+                                    final success = currentState
+                                        ? await provider.unlockNewConnections()
+                                        : await provider.lockNewConnections();
+                                    
+                                    if (mounted) {
+                                      if (success) {
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          SnackBar(
+                                            content: Row(
+                                              children: [
+                                                Icon(
+                                                  currentState ? Icons.lock_open : Icons.lock,
+                                                  color: Colors.white,
+                                                ),
+                                                const SizedBox(width: 8),
+                                                Expanded(
+                                                  child: Text(
+                                                    currentState
+                                                        ? 'قفل اتصال جدید غیرفعال شد'
+                                                        : 'قفل اتصال جدید فعال شد',
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                            backgroundColor: currentState ? Colors.green : Colors.orange,
+                                            behavior: SnackBarBehavior.floating,
+                                            duration: const Duration(seconds: 3),
                                           ),
-                                          actions: [
-                                            TextButton(
-                                              onPressed: () => Navigator.pop(context, false),
-                                              child: const Text('لغو'),
+                                        );
+                                        // 刷新客户端列表以应用新的锁定状态
+                                        provider.refresh();
+                                      } else {
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          SnackBar(
+                                            content: Text(
+                                              'خطا: ${provider.errorMessage ?? "خطا در تغییر وضعیت قفل"}',
                                             ),
-                                            ElevatedButton(
-                                              onPressed: () => Navigator.pop(context, true),
-                                              style: ElevatedButton.styleFrom(
-                                                backgroundColor: Colors.green,
-                                                foregroundColor: Colors.white,
-                                              ),
-                                              child: const Text('رفع قفل'),
-                                            ),
-                                          ],
-                                        ),
-                                      );
-
-                                      if (confirmed == true) {
-                                        final success = await provider.unlockNewConnections();
-                                        if (mounted) {
-                                          ScaffoldMessenger.of(context).showSnackBar(
-                                            SnackBar(
-                                              content: Row(
-                                                children: [
-                                                  Icon(
-                                                    success ? Icons.check_circle : Icons.error,
-                                                    color: Colors.white,
-                                                  ),
-                                                  const SizedBox(width: 8),
-                                                  Expanded(
-                                                    child: Text(
-                                                      success
-                                                          ? 'قفل اتصال جدید با موفقیت برداشته شد'
-                                                          : 'خطا در رفع قفل: ${provider.errorMessage ?? "خطا"}',
-                                                    ),
-                                                  ),
-                                                ],
-                                              ),
-                                              backgroundColor: success ? Colors.green : Colors.red,
-                                              behavior: SnackBarBehavior.floating,
-                                            ),
-                                          );
-                                        }
-                                      }
-                                    } else {
-                                      // فعال کردن قفل
-                                      final confirmed = await showDialog<bool>(
-                                        context: context,
-                                        builder: (context) => AlertDialog(
-                                          title: const Text('قفل اتصال جدید'),
-                                          content: const Text(
-                                            'آیا مطمئن هستید که می‌خواهید اتصال دستگاه‌های جدید را قفل کنید؟\n\n'
-                                            'بعد از فعال‌سازی:\n'
-                                            '• دستگاه‌های فعلی همچنان کار می‌کنند\n'
-                                            '• هیچ دستگاه جدیدی نمی‌تواند به وای‌فای یا LAN متصل شود\n'
-                                            '• دستگاه‌های جدید به صورت خودکار مسدود می‌شوند',
+                                            backgroundColor: Colors.red,
+                                            behavior: SnackBarBehavior.floating,
                                           ),
-                                          actions: [
-                                            TextButton(
-                                              onPressed: () => Navigator.pop(context, false),
-                                              child: const Text('لغو'),
-                                            ),
-                                            ElevatedButton(
-                                              onPressed: () => Navigator.pop(context, true),
-                                              style: ElevatedButton.styleFrom(
-                                                backgroundColor: Colors.orange,
-                                                foregroundColor: Colors.white,
-                                              ),
-                                              child: const Text('قفل کردن'),
-                                            ),
-                                          ],
-                                        ),
-                                      );
-
-                                      if (confirmed == true) {
-                                        final success = await provider.lockNewConnections();
-                                        if (mounted) {
-                                          ScaffoldMessenger.of(context).showSnackBar(
-                                            SnackBar(
-                                              content: Row(
-                                                children: [
-                                                  Icon(
-                                                    success ? Icons.check_circle : Icons.error,
-                                                    color: Colors.white,
-                                                  ),
-                                                  const SizedBox(width: 8),
-                                                  Expanded(
-                                                    child: Text(
-                                                      success
-                                                          ? 'قفل اتصال جدید با موفقیت فعال شد'
-                                                          : 'خطا در قفل کردن: ${provider.errorMessage ?? "خطا"}',
-                                                    ),
-                                                  ),
-                                                ],
-                                              ),
-                                              backgroundColor: success ? Colors.orange : Colors.red,
-                                              behavior: SnackBarBehavior.floating,
-                                            ),
-                                          );
-                                        }
+                                        );
                                       }
                                     }
                                   },
@@ -989,8 +922,8 @@ class _HomePageState extends State<HomePage> {
 
     return Material(
       color: Colors.white,
-      child: FutureBuilder<bool>(
-        future: provider.isDeviceAllowed(client.macAddress, client.ipAddress),
+      child:                           FutureBuilder<bool>(
+                            future: provider.isDeviceAllowed(client.macAddress, client.ipAddress, client: client),
         builder: (context, snapshot) {
           final isAllowed = snapshot.hasData && snapshot.data == true;
           
@@ -1142,16 +1075,19 @@ class _HomePageState extends State<HomePage> {
                                       ],
                                     ),
                                   ),
-                                // Pending Approval Badge
-                                if (provider.isNewConnectionsLocked && 
-                                    !_isStaticDevice(client) && 
-                                    !isCurrentDevice)
+                                // Pending Approval Badge - 显示新设备待批准状态
+                                if (!_isStaticDevice(client) && !isCurrentDevice)
                                   FutureBuilder<bool>(
-                                    key: ValueKey('allowed_${client.macAddress}_${client.ipAddress}'),
-                                    future: provider.isDeviceAllowed(client.macAddress, client.ipAddress),
+                                    key: ValueKey('pending_${client.macAddress}_${client.ipAddress}'),
+                                    future: provider.isDevicePendingApproval(client.macAddress, client.ipAddress, client: client),
                                     builder: (context, snapshot) {
-                                      if (snapshot.connectionState == ConnectionState.waiting || 
-                                          (snapshot.hasData && snapshot.data == true)) {
+                                      if (snapshot.connectionState == ConnectionState.waiting) {
+                                        return const SizedBox.shrink();
+                                      }
+                                      
+                                      final isPending = snapshot.hasData && snapshot.data == true;
+                                      
+                                      if (!isPending) {
                                         return const SizedBox.shrink();
                                       }
                                       
@@ -1178,7 +1114,7 @@ class _HomePageState extends State<HomePage> {
                                             ),
                                             const SizedBox(width: 3),
                                             Text(
-                                              'Pending',
+                                              'در انتظار تایید',
                                               style: TextStyle(
                                                 color: Colors.orange,
                                                 fontSize: 10,
@@ -1187,6 +1123,65 @@ class _HomePageState extends State<HomePage> {
                                             ),
                                           ],
                                         ),
+                                      );
+                                    },
+                                  ),
+                                // Lock New Connections Pending Badge (原有逻辑保留)
+                                if (provider.isNewConnectionsLocked && 
+                                    !_isStaticDevice(client) && 
+                                    !isCurrentDevice)
+                                  FutureBuilder<bool>(
+                                    key: ValueKey('allowed_${client.macAddress}_${client.ipAddress}'),
+                                    future: provider.isDeviceAllowed(client.macAddress, client.ipAddress),
+                                    builder: (context, snapshot) {
+                                      if (snapshot.connectionState == ConnectionState.waiting || 
+                                          (snapshot.hasData && snapshot.data == true)) {
+                                        return const SizedBox.shrink();
+                                      }
+                                      
+                                      // 检查是否已经显示新设备待批准badge
+                                      return FutureBuilder<bool>(
+                                        future: provider.isDevicePendingApproval(client.macAddress, client.ipAddress),
+                                        builder: (context, pendingSnapshot) {
+                                          // 如果已经显示新设备待批准badge，不显示这个
+                                          if (pendingSnapshot.hasData && pendingSnapshot.data == true) {
+                                            return const SizedBox.shrink();
+                                          }
+                                          
+                                          return Container(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 6,
+                                              vertical: 3,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: Colors.orange.withOpacity(0.15),
+                                              borderRadius: BorderRadius.circular(8),
+                                              border: Border.all(
+                                                color: Colors.orange,
+                                                width: 1,
+                                              ),
+                                            ),
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                Icon(
+                                                  Icons.pending,
+                                                  size: 12,
+                                                  color: Colors.orange,
+                                                ),
+                                                const SizedBox(width: 3),
+                                                Text(
+                                                  'Pending',
+                                                  style: TextStyle(
+                                                    color: Colors.orange,
+                                                    fontSize: 10,
+                                                    fontWeight: FontWeight.bold,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          );
+                                        },
                                       );
                                     },
                                   ),
@@ -1240,18 +1235,13 @@ class _HomePageState extends State<HomePage> {
                           ),
                           // Approve/Reject 按钮 - 显示在设备名称下方（不受Opacity影响）
                           FutureBuilder<bool>(
-                            future: provider.isDeviceAllowed(client.macAddress, client.ipAddress),
-                            builder: (context, snapshot) {
-                              final isAllowed = snapshot.hasData && snapshot.data == true;
-                              final isLoading = snapshot.connectionState == ConnectionState.waiting;
+                            future: provider.isDevicePendingApproval(client.macAddress, client.ipAddress, client: client),
+                            builder: (context, pendingSnapshot) {
+                              final isPendingApproval = pendingSnapshot.hasData && pendingSnapshot.data == true;
+                              final isLoadingPending = pendingSnapshot.connectionState == ConnectionState.waiting;
                               
-                              // 如果设备未被允许且不是 static 设备，显示 approve/reject 按钮
-                              final shouldShowButtons = provider.isNewConnectionsLocked && 
-                                                        !_isStaticDevice(client) && 
-                                                        !isCurrentDevice && 
-                                                        !isAllowed;
-                              
-                              if (shouldShowButtons) {
+                              // 如果设备待批准，显示 approve/reject 按钮
+                              if (isPendingApproval) {
                                 return Padding(
                                   padding: const EdgeInsets.only(top: 8),
                                   child: Row(
@@ -1259,20 +1249,20 @@ class _HomePageState extends State<HomePage> {
                                       // Approve 按钮
                                       Expanded(
                                         child: ElevatedButton.icon(
-                                          onPressed: isLoading ? null : () async {
+                                          onPressed: isLoadingPending ? null : () async {
                                             if (client.macAddress == null) return;
                                             
                                             final confirmed = await showDialog<bool>(
                                               context: context,
                                               builder: (context) => AlertDialog(
-                                                title: const Text('Approve Device'),
+                                                title: const Text('تایید دستگاه'),
                                                 content: Text(
-                                                  'Allow device ${client.hostName ?? client.ipAddress ?? "Unknown"} to fully connect to WiFi?',
+                                                  'آیا می‌خواهید دستگاه "${client.hostName ?? client.ipAddress ?? "Unknown"}" را تایید کنید؟\n\nاین دستگاه می‌تواند به شبکه متصل شود و از اینترنت استفاده کند.',
                                                 ),
                                                 actions: [
                                                   TextButton(
                                                     onPressed: () => Navigator.pop(context, false),
-                                                    child: const Text('Cancel'),
+                                                    child: const Text('لغو'),
                                                   ),
                                                   ElevatedButton(
                                                     onPressed: () => Navigator.pop(context, true),
@@ -1280,7 +1270,7 @@ class _HomePageState extends State<HomePage> {
                                                       backgroundColor: Colors.green,
                                                       foregroundColor: Colors.white,
                                                     ),
-                                                    child: const Text('Approve'),
+                                                    child: const Text('تایید'),
                                                   ),
                                                 ],
                                               ),
@@ -1288,7 +1278,7 @@ class _HomePageState extends State<HomePage> {
 
                                             if (confirmed == true && mounted) {
                                               try {
-                                                final success = await provider.allowNonStaticDevice(
+                                                final success = await provider.approveDevice(
                                                   client.macAddress!,
                                                   ipAddress: client.ipAddress,
                                                 );
@@ -1302,7 +1292,7 @@ class _HomePageState extends State<HomePage> {
                                                             Icon(Icons.check_circle, color: Colors.white),
                                                             SizedBox(width: 8),
                                                             Expanded(
-                                                              child: Text('Device has been approved and can now fully connect to WiFi'),
+                                                              child: Text('دستگاه با موفقیت تایید شد'),
                                                             ),
                                                           ],
                                                         ),
@@ -1315,7 +1305,7 @@ class _HomePageState extends State<HomePage> {
                                                   } else {
                                                     ScaffoldMessenger.of(context).showSnackBar(
                                                       SnackBar(
-                                                        content: Text('خطا: ${provider.errorMessage ?? "خطا در اجازه دادن به دستگاه"}'),
+                                                        content: Text('خطا: ${provider.errorMessage ?? "خطا در تایید دستگاه"}'),
                                                         backgroundColor: Colors.red,
                                                         behavior: SnackBarBehavior.floating,
                                                       ),
@@ -1336,22 +1326,11 @@ class _HomePageState extends State<HomePage> {
                                             }
                                           },
                                           icon: const Icon(Icons.check_circle, size: 20),
-                                          label: const Text(
-                                            'Approve',
-                                            style: TextStyle(
-                                              fontSize: 14,
-                                              fontWeight: FontWeight.bold,
-                                            ),
-                                          ),
+                                          label: const Text('تایید'),
                                           style: ElevatedButton.styleFrom(
-                                            backgroundColor: Colors.green.shade700,
+                                            backgroundColor: Colors.green,
                                             foregroundColor: Colors.white,
-                                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                                            minimumSize: const Size(0, 44),
-                                            elevation: 3,
-                                            shape: RoundedRectangleBorder(
-                                              borderRadius: BorderRadius.circular(8),
-                                            ),
+                                            padding: const EdgeInsets.symmetric(vertical: 12),
                                           ),
                                         ),
                                       ),
@@ -1359,20 +1338,20 @@ class _HomePageState extends State<HomePage> {
                                       // Reject 按钮
                                       Expanded(
                                         child: ElevatedButton.icon(
-                                          onPressed: isLoading ? null : () async {
+                                          onPressed: isLoadingPending ? null : () async {
                                             if (client.macAddress == null) return;
                                             
                                             final confirmed = await showDialog<bool>(
                                               context: context,
                                               builder: (context) => AlertDialog(
-                                                title: const Text('Reject Device'),
+                                                title: const Text('رد دستگاه'),
                                                 content: Text(
-                                                  'Are you sure you want to reject device ${client.hostName ?? client.ipAddress ?? "Unknown"}? The device will be banned.',
+                                                  'آیا می‌خواهید دستگاه "${client.hostName ?? client.ipAddress ?? "Unknown"}" را رد کنید؟\n\nاین دستگاه مسدود خواهد شد و از شبکه حذف می‌شود.',
                                                 ),
                                                 actions: [
                                                   TextButton(
                                                     onPressed: () => Navigator.pop(context, false),
-                                                    child: const Text('Cancel'),
+                                                    child: const Text('لغو'),
                                                   ),
                                                   ElevatedButton(
                                                     onPressed: () => Navigator.pop(context, true),
@@ -1380,7 +1359,7 @@ class _HomePageState extends State<HomePage> {
                                                       backgroundColor: Colors.red,
                                                       foregroundColor: Colors.white,
                                                     ),
-                                                    child: const Text('Reject'),
+                                                    child: const Text('رد'),
                                                   ),
                                                 ],
                                               ),
@@ -1388,11 +1367,9 @@ class _HomePageState extends State<HomePage> {
 
                                             if (confirmed == true && mounted) {
                                               try {
-                                                final success = await provider.banClient(
-                                                  client.ipAddress!,
-                                                  macAddress: client.macAddress,
-                                                  hostname: client.hostName,
-                                                  ssid: client.ssid,
+                                                final success = await provider.rejectDevice(
+                                                  client.macAddress!,
+                                                  ipAddress: client.ipAddress,
                                                 );
                                                 
                                                 if (mounted) {
@@ -1401,10 +1378,10 @@ class _HomePageState extends State<HomePage> {
                                                       const SnackBar(
                                                         content: Row(
                                                           children: [
-                                                            Icon(Icons.block, color: Colors.white),
+                                                            Icon(Icons.cancel, color: Colors.white),
                                                             SizedBox(width: 8),
                                                             Expanded(
-                                                              child: Text('Device has been rejected and banned'),
+                                                              child: Text('دستگاه رد شد و مسدود شد'),
                                                             ),
                                                           ],
                                                         ),
@@ -1417,7 +1394,7 @@ class _HomePageState extends State<HomePage> {
                                                   } else {
                                                     ScaffoldMessenger.of(context).showSnackBar(
                                                       SnackBar(
-                                                        content: Text('خطا: ${provider.errorMessage ?? "خطا در مسدود کردن دستگاه"}'),
+                                                        content: Text('خطا: ${provider.errorMessage ?? "خطا در رد دستگاه"}'),
                                                         backgroundColor: Colors.red,
                                                         behavior: SnackBarBehavior.floating,
                                                       ),
@@ -1438,22 +1415,11 @@ class _HomePageState extends State<HomePage> {
                                             }
                                           },
                                           icon: const Icon(Icons.cancel, size: 20),
-                                          label: const Text(
-                                            'Reject',
-                                            style: TextStyle(
-                                              fontSize: 14,
-                                              fontWeight: FontWeight.bold,
-                                            ),
-                                          ),
+                                          label: const Text('رد'),
                                           style: ElevatedButton.styleFrom(
-                                            backgroundColor: Colors.red.shade700,
+                                            backgroundColor: Colors.red,
                                             foregroundColor: Colors.white,
-                                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                                            minimumSize: const Size(0, 44),
-                                            elevation: 3,
-                                            shape: RoundedRectangleBorder(
-                                              borderRadius: BorderRadius.circular(8),
-                                            ),
+                                            padding: const EdgeInsets.symmetric(vertical: 12),
                                           ),
                                         ),
                                       ),
@@ -1461,6 +1427,9 @@ class _HomePageState extends State<HomePage> {
                                   ),
                                 );
                               }
+                              
+                              // 不再显示重复的批准/拒绝按钮
+                              // 只使用上面的 isDevicePendingApproval() 逻辑
                               return const SizedBox.shrink();
                             },
                           ),
@@ -1470,8 +1439,8 @@ class _HomePageState extends State<HomePage> {
                     // نوع دستگاه (只在设备已批准时显示)
                     Opacity(
                       opacity: shouldDisableClick ? 0.6 : 1.0,
-                      child: FutureBuilder<bool>(
-                        future: provider.isDeviceAllowed(client.macAddress, client.ipAddress),
+                      child:                           FutureBuilder<bool>(
+                            future: provider.isDeviceAllowed(client.macAddress, client.ipAddress, client: client),
                         builder: (context, snapshot) {
                           final isAllowed = snapshot.hasData && snapshot.data == true;
                           
