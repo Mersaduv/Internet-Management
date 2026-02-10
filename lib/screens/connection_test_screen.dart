@@ -133,12 +133,49 @@ class _ConnectionTestScreenState extends State<ConnectionTestScreen> {
     }
   }
 
+  static const Color _primaryColor = Color(0xFF428B7C);
+
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('تست اتصال MikroTik'),
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
+      appBar: PreferredSize(
+        preferredSize: const Size.fromHeight(kToolbarHeight),
+        child: Container(
+          decoration: BoxDecoration(
+            color: theme.brightness == Brightness.dark
+                ? colorScheme.surface
+                : _primaryColor,
+            boxShadow: [
+              BoxShadow(
+                color: theme.brightness == Brightness.dark
+                    ? Colors.black.withOpacity(0.3)
+                    : Colors.black.withOpacity(0.05),
+                blurRadius: 10,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: AppBar(
+            title: Text(
+              'تست اتصال MikroTik',
+              style: TextStyle(
+                color: theme.brightness == Brightness.dark
+                    ? colorScheme.onSurface
+                    : Colors.white,
+              ),
+            ),
+            backgroundColor: Colors.transparent,
+            foregroundColor: theme.brightness == Brightness.dark
+                ? colorScheme.onSurface
+                : Colors.white,
+            elevation: 0,
+            shadowColor: Colors.transparent,
+            surfaceTintColor: Colors.transparent,
+          ),
+        ),
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16.0),

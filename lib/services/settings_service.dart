@@ -1,4 +1,5 @@
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter/material.dart';
 
 /// سرویس برای مدیریت تنظیمات اتصال MikroTik
 class SettingsService {
@@ -11,18 +12,24 @@ class SettingsService {
   static const String _keyUseSsl = 'mikrotik_use_ssl';
   static const String _keyServiceUrl = 'internet_service_url';
   static const String _keyLoginTimestamp = 'login_timestamp';
+  static const String _keyLanguage = 'app_language';
+  static const String _keyThemeMode = 'app_theme_mode';
 
   // مقادیر پیش‌فرض
   static const String _defaultHost = '192.168.88.1';
   static const int _defaultPort = 8728;
   static const bool _defaultUseSsl = false;
   static const String _defaultServiceUrl = 'http://user.ariyabod.af/users/computer/DS_MyInternet.php';
+  static const String _defaultLanguage = 'fa'; // 默认语言：波斯语
+  static const String _defaultThemeMode = 'system'; // 默认主题：跟随系统
 
   // Cache برای تنظیمات (برای جلوگیری از خطا در صورت مشکل shared_preferences)
   String? _cachedHost;
   int? _cachedPort;
   bool? _cachedUseSsl;
   String? _cachedServiceUrl;
+  String? _cachedLanguage;
+  String? _cachedThemeMode;
 
   /// دریافت Host
   Future<String> getHost() async {
@@ -191,12 +198,107 @@ class SettingsService {
     }
   }
 
+  /// دریافت زبان برنامه
+  Future<String> getLanguage() async {
+    if (_cachedLanguage != null) {
+      return _cachedLanguage!;
+    }
+    
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      _cachedLanguage = prefs.getString(_keyLanguage) ?? _defaultLanguage;
+      return _cachedLanguage!;
+    } catch (e) {
+      // در صورت خطا، از مقدار پیش‌فرض استفاده کن
+      _cachedLanguage = _defaultLanguage;
+      return _defaultLanguage;
+    }
+  }
+
+  /// ذخیره زبان برنامه
+  Future<void> setLanguage(String languageCode) async {
+    _cachedLanguage = languageCode;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_keyLanguage, languageCode);
+    } catch (e) {
+      // اگر shared_preferences کار نکرد، فقط در حافظه نگه دار
+    }
+  }
+
+  /// دریافت主题模式
+  Future<String> getThemeMode() async {
+    if (_cachedThemeMode != null) {
+      return _cachedThemeMode!;
+    }
+    
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      _cachedThemeMode = prefs.getString(_keyThemeMode) ?? _defaultThemeMode;
+      return _cachedThemeMode!;
+    } catch (e) {
+      // در صورت خطا، از مقدار پیش‌فرض استفاده کن
+      _cachedThemeMode = _defaultThemeMode;
+      return _defaultThemeMode;
+    }
+  }
+
+  /// 将字符串转换为 ThemeMode
+  ThemeMode stringToThemeMode(String mode) {
+    switch (mode) {
+      case 'dark':
+        return ThemeMode.dark;
+      case 'light':
+        return ThemeMode.light;
+      case 'system':
+        return ThemeMode.system;
+      default:
+        return ThemeMode.system; // 默认跟随系统
+    }
+  }
+
+  /// 将 ThemeMode 转换为字符串
+  String themeModeToString(ThemeMode mode) {
+    switch (mode) {
+      case ThemeMode.dark:
+        return 'dark';
+      case ThemeMode.light:
+        return 'light';
+      case ThemeMode.system:
+        return 'system';
+    }
+  }
+
+  /// 保存主题模式
+  Future<void> setThemeMode(String themeMode) async {
+    _cachedThemeMode = themeMode;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_keyThemeMode, themeMode);
+    } catch (e) {
+      // 如果 shared_preferences 不工作，只在内存中保存
+    }
+  }
+
+  /// 保存 ThemeMode
+  Future<void> setThemeModeEnum(ThemeMode themeMode) async {
+    await setThemeMode(themeModeToString(themeMode));
+  }
+
+  /// 获取 ThemeMode
+  Future<ThemeMode> getThemeModeEnum() async {
+    final mode = await getThemeMode();
+    return stringToThemeMode(mode);
+  }
+
   /// بازنشانی به تنظیمات پیش‌فرض
   Future<void> resetToDefaults() async {
     _cachedHost = null;
     _cachedPort = null;
     _cachedUseSsl = null;
     _cachedServiceUrl = null;
+    _cachedLanguage = null;
+    _cachedThemeMode = null;
     
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -204,6 +306,8 @@ class SettingsService {
       await prefs.remove(_keyPort);
       await prefs.remove(_keyUseSsl);
       await prefs.remove(_keyServiceUrl);
+      await prefs.remove(_keyLanguage);
+      await prefs.remove(_keyThemeMode);
     } catch (e) {
       // اگر shared_preferences کار نکرد، فقط cache را پاک کن
     }

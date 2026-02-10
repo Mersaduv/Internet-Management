@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/client_info.dart';
 import '../providers/clients_provider.dart';
 import '../services/mikrotik_service_manager.dart';
+import '../utils/app_localizations.dart';
 
 /// صفحه جزئیات دستگاه
 class DeviceDetailScreen extends StatefulWidget {
@@ -359,10 +360,15 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> with WidgetsBin
                 ),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: Text(
-                    newStatus
-                        ? 'فیلتر $platformName فعال شد'
-                        : 'فیلتر $platformName غیرفعال شد',
+                  child: Builder(
+                    builder: (context) {
+                      final l10n = AppLocalizations.of(context);
+                      return Text(
+                        newStatus
+                            ? l10n?.filterEnabledWithPlatform(platformName) ?? 'Filter $platformName enabled'
+                            : l10n?.filterDisabledWithPlatform(platformName) ?? 'Filter $platformName disabled',
+                      );
+                    },
                   ),
                 ),
               ],
@@ -404,8 +410,13 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> with WidgetsBin
                 const Icon(Icons.error, color: Colors.white),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: Text(
-                    'خطا: ${result['error'] ?? "خطا در تغییر وضعیت فیلتر"}',
+                  child: Builder(
+                    builder: (context) {
+                      final l10n = AppLocalizations.of(context);
+                      return Text(
+                        '${l10n?.error ?? 'Error'}: ${result['error'] ?? (l10n?.errorChangingFilter ?? 'Error changing filter status')}',
+                      );
+                    },
                   ),
                 ),
               ],
@@ -431,13 +442,16 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> with WidgetsBin
         _platformFilterStatus[platform] = currentStatus;
         _platformLoadingStatus[platform] = false;
       });
+      final l10n = AppLocalizations.of(context);
+      final errorMsg = e.toString().replaceFirst('Exception: ', '');
+      final localizedError = l10n?.localizeServiceError(errorMsg) ?? errorMsg;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Row(
             children: [
               const Icon(Icons.error, color: Colors.white),
               const SizedBox(width: 8),
-              Expanded(child: Text('خطا: $e')),
+              Expanded(child: Text('${l10n?.error ?? 'Error'}: $localizedError')),
             ],
           ),
           backgroundColor: Colors.red,
@@ -492,10 +506,14 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> with WidgetsBin
     final formKey = GlobalKey<FormState>();
     bool isSaving = false;
 
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    
     final result = await showDialog<Map<String, String>>(
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) => Dialog(
+          backgroundColor: colorScheme.surface,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(20),
           ),
@@ -513,13 +531,19 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> with WidgetsBin
                     children: [
                       const Icon(Icons.speed, color: _primaryColor, size: 32),
                       const SizedBox(width: 12),
-                      const Expanded(
-                        child: Text(
-                          'تنظیم سرعت',
-                          style: TextStyle(
-                            fontSize: 24,
-                            fontWeight: FontWeight.bold,
-                          ),
+                      Expanded(
+                        child: Builder(
+                          builder: (context) {
+                            final l10n = AppLocalizations.of(context);
+                            return Text(
+                              l10n?.setSpeedLimit ?? 'Set Speed Limit',
+                              style: TextStyle(
+                                fontSize: 24,
+                                fontWeight: FontWeight.bold,
+                                color: colorScheme.onSurface,
+                              ),
+                            );
+                          },
                         ),
                       ),
                     ],
@@ -536,13 +560,18 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> with WidgetsBin
                           children: [
                             const Icon(Icons.download, color: Colors.blue, size: 20),
                             const SizedBox(width: 8),
-                            const Text(
-                              'سرعت دانلود',
-                              style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.blue,
-                              ),
+                            Builder(
+                              builder: (context) {
+                                final l10n = AppLocalizations.of(context);
+                                return Text(
+                                  l10n?.downloadSpeed ?? 'Download Speed',
+                                  style: TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.blue,
+                                  ),
+                                );
+                              },
                             ),
                           ],
                         ),
@@ -555,12 +584,12 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> with WidgetsBin
                               child: TextFormField(
                                 controller: downloadValueController,
                                 decoration: InputDecoration(
-                                  labelText: 'مقدار',
+                                  labelText: AppLocalizations.of(context)?.value ?? 'Value',
                                   hintText: '10',
                                   border: OutlineInputBorder(
                                     borderRadius: BorderRadius.circular(12),
                                   ),
-                                  helperText: 'عدد را وارد کنید',
+                                  helperText: AppLocalizations.of(context)?.pleaseEnterNumber ?? 'Please enter a number',
                                   contentPadding: const EdgeInsets.symmetric(
                                     horizontal: 16,
                                     vertical: 18,
@@ -570,12 +599,13 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> with WidgetsBin
                                 keyboardType: TextInputType.number,
                                 style: const TextStyle(fontSize: 16),
                                 validator: (value) {
+                                  final l10n = AppLocalizations.of(context);
                                   if (value == null || value.trim().isEmpty) {
-                                    return 'لطفاً عدد را وارد کنید';
+                                    return l10n?.pleaseEnterNumber ?? 'Please enter a number';
                                   }
                                   final num = int.tryParse(value.trim());
                                   if (num == null || num <= 0) {
-                                    return 'عدد باید بزرگتر از صفر باشد';
+                                    return l10n?.numberMustBeGreaterThanZero ?? 'Number must be greater than zero';
                                   }
                                   return null;
                                 },
@@ -587,7 +617,7 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> with WidgetsBin
                               child: DropdownButtonFormField<String>(
                                 value: selectedDownloadUnit,
                                 decoration: InputDecoration(
-                                  labelText: 'واحد',
+                                  labelText: AppLocalizations.of(context)?.unit ?? 'Unit',
                                   border: OutlineInputBorder(
                                     borderRadius: BorderRadius.circular(12),
                                   ),
@@ -625,13 +655,18 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> with WidgetsBin
                           children: [
                             const Icon(Icons.upload, color: Colors.green, size: 20),
                             const SizedBox(width: 8),
-                            const Text(
-                              'سرعت آپلود',
-                              style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.green,
-                              ),
+                            Builder(
+                              builder: (context) {
+                                final l10n = AppLocalizations.of(context);
+                                return Text(
+                                  l10n?.uploadSpeed ?? 'Upload Speed',
+                                  style: TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.green,
+                                  ),
+                                );
+                              },
                             ),
                           ],
                         ),
@@ -644,12 +679,12 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> with WidgetsBin
                               child: TextFormField(
                                 controller: uploadValueController,
                                 decoration: InputDecoration(
-                                  labelText: 'مقدار',
+                                  labelText: AppLocalizations.of(context)?.value ?? 'Value',
                                   hintText: '10',
                                   border: OutlineInputBorder(
                                     borderRadius: BorderRadius.circular(12),
                                   ),
-                                  helperText: 'عدد را وارد کنید',
+                                  helperText: AppLocalizations.of(context)?.pleaseEnterNumber ?? 'Please enter a number',
                                   contentPadding: const EdgeInsets.symmetric(
                                     horizontal: 16,
                                     vertical: 18,
@@ -659,12 +694,13 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> with WidgetsBin
                                 keyboardType: TextInputType.number,
                                 style: const TextStyle(fontSize: 16),
                                 validator: (value) {
+                                  final l10n = AppLocalizations.of(context);
                                   if (value == null || value.trim().isEmpty) {
-                                    return 'لطفاً عدد را وارد کنید';
+                                    return l10n?.pleaseEnterNumber ?? 'Please enter a number';
                                   }
                                   final num = int.tryParse(value.trim());
                                   if (num == null || num <= 0) {
-                                    return 'عدد باید بزرگتر از صفر باشد';
+                                    return l10n?.numberMustBeGreaterThanZero ?? 'Number must be greater than zero';
                                   }
                                   return null;
                                 },
@@ -676,7 +712,7 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> with WidgetsBin
                               child: DropdownButtonFormField<String>(
                                 value: selectedUploadUnit,
                                 decoration: InputDecoration(
-                                  labelText: 'واحد',
+                                  labelText: AppLocalizations.of(context)?.unit ?? 'Unit',
                                   border: OutlineInputBorder(
                                     borderRadius: BorderRadius.circular(12),
                                   ),
@@ -725,21 +761,31 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> with WidgetsBin
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Text(
-                                      'راهنمای واحدها:',
-                                      style: TextStyle(
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.bold,
-                                        color: Colors.blue.shade700,
-                                      ),
+                                    Builder(
+                                      builder: (context) {
+                                        final l10n = AppLocalizations.of(context);
+                                        return Text(
+                                          l10n?.unitGuide ?? 'Unit Guide:',
+                                          style: TextStyle(
+                                            fontSize: 14,
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.blue.shade700,
+                                          ),
+                                        );
+                                      },
                                     ),
                                     const SizedBox(height: 6),
-                                    Text(
-                                      '• Mbps = مگابیت بر ثانیه\n• Kbps = کیلوبیت بر ثانیه',
-                                      style: TextStyle(
-                                        fontSize: 13,
-                                        color: Colors.blue.shade700,
-                                      ),
+                                    Builder(
+                                      builder: (context) {
+                                        final l10n = AppLocalizations.of(context);
+                                        return Text(
+                                          l10n?.unitGuideText ?? '• Mbps = Megabits per second\n• Kbps = Kilobits per second',
+                                          style: TextStyle(
+                                            fontSize: 13,
+                                            color: Colors.blue.shade700,
+                                          ),
+                                        );
+                                      },
                                     ),
                                   ],
                                 ),
@@ -761,9 +807,14 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> with WidgetsBin
                           padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 14),
                           minimumSize: const Size(100, 48),
                         ),
-                        child: const Text(
-                          'لغو',
-                          style: TextStyle(fontSize: 16),
+                        child: Builder(
+                          builder: (context) {
+                            final l10n = AppLocalizations.of(context);
+                            return Text(
+                              l10n?.cancel ?? 'Cancel',
+                              style: TextStyle(fontSize: 16),
+                            );
+                          },
                         ),
                       ),
                       const SizedBox(width: 12),
@@ -793,7 +844,12 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> with WidgetsBin
                               ),
                             )
                           : const Icon(Icons.save),
-                        label: Text(isSaving ? 'در حال ذخیره...' : 'ذخیره'),
+                        label: Builder(
+                          builder: (context) {
+                            final l10n = AppLocalizations.of(context);
+                            return Text(isSaving ? (l10n?.saving ?? 'Saving...') : (l10n?.save ?? 'Save'));
+                          },
+                        ),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: _primaryColor,
                           foregroundColor: Colors.white,
@@ -852,9 +908,10 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> with WidgetsBin
         const Duration(seconds: 45), // افزایش timeout به 45 ثانیه
         onTimeout: () {
           if (mounted) {
+            final l10n = AppLocalizations.of(context);
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('زمان تنظیم سرعت به پایان رسید'),
+              SnackBar(
+                content: Text(l10n?.speedSetTimeout ?? 'Speed limit setting timeout'),
                 backgroundColor: Colors.orange,
               ),
             );
@@ -874,7 +931,12 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> with WidgetsBin
                 const Icon(Icons.check_circle, color: Colors.white),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: Text('سرعت با موفقیت تنظیم شد: $maxLimit'),
+                  child: Builder(
+                    builder: (context) {
+                      final l10n = AppLocalizations.of(context);
+                      return Text(l10n?.speedSetSuccessfullyWithSpeed(maxLimit) ?? 'Speed limit set successfully: $maxLimit');
+                    },
+                  ),
                 ),
               ],
             ),
@@ -912,7 +974,14 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> with WidgetsBin
                 const Icon(Icons.error, color: Colors.white),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: Text('خطا: ${provider.errorMessage ?? "خطا در تنظیم سرعت"}'),
+                  child: Builder(
+                    builder: (context) {
+                      final l10n = AppLocalizations.of(context);
+                      final errorMsg = provider.errorMessage ?? (l10n?.errorSettingSpeed ?? 'Error setting speed limit');
+                      final localizedError = l10n?.localizeServiceError(errorMsg) ?? errorMsg;
+                      return Text('${l10n?.error ?? 'Error'}: $localizedError');
+                    },
+                  ),
                 ),
               ],
             ),
@@ -925,13 +994,16 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> with WidgetsBin
       // فقط اگر mounted باشیم، خطا را نمایش می‌دهیم
       if (!mounted) return;
       
+      final l10n = AppLocalizations.of(context);
+      final errorMsg = e.toString().replaceFirst('Exception: ', '');
+      final localizedError = l10n?.localizeServiceError(errorMsg) ?? errorMsg;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Row(
             children: [
               const Icon(Icons.error, color: Colors.white),
               const SizedBox(width: 8),
-              Expanded(child: Text('خطا: $e')),
+              Expanded(child: Text('${l10n?.error ?? 'Error'}: $localizedError')),
             ],
           ),
           backgroundColor: Colors.red,
@@ -1141,42 +1213,36 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> with WidgetsBin
 
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Static کردن دستگاه'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'آیا مطمئن هستید که می‌خواهید دستگاه ${widget.device.ipAddress} را Static کنید؟',
+      builder: (context) {
+        final l10n = AppLocalizations.of(context);
+        return AlertDialog(
+          title: Text(l10n?.makeStaticTitle ?? 'Make Device Static'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                l10n?.makeStaticConfirmWithIP(widget.device.ipAddress ?? '') ?? 'Are you sure you want to make device ${widget.device.ipAddress} static?',
+              ),
+              const SizedBox(height: 16),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: Text(l10n?.cancel ?? 'Cancel'),
             ),
-            const SizedBox(height: 16),
-            const Text(
-              'مزایا:',
-              style: TextStyle(fontWeight: FontWeight.bold),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context, true),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _primaryColor,
+                foregroundColor: Colors.white,
+              ),
+              child: Text(l10n?.makeStatic ?? 'Make Static'),
             ),
-            const SizedBox(height: 8),
-            const Text('• IP address همیشه یکسان می‌ماند'),
-            const Text('• Hostname ثابت می‌ماند'),
-            const Text('• شناسایی دستگاه آسان‌تر می‌شود'),
-            const Text('• برای Ban بهتر است'),
           ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('لغو'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: _primaryColor,
-              foregroundColor: Colors.white,
-            ),
-            child: const Text('Static کردن'),
-          ),
-        ],
-      ),
+        );
+      },
     );
 
     if (confirmed == true && !_isDisposed) {
@@ -1197,7 +1263,14 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> with WidgetsBin
         if (mounted && !_isDisposed) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('خطا در Static کردن دستگاه: $e'),
+              content: Builder(
+                builder: (context) {
+                  final l10n = AppLocalizations.of(context);
+                  final errorMsg = e.toString().replaceFirst('Exception: ', '');
+                  final localizedError = l10n?.localizeServiceError(errorMsg) ?? errorMsg;
+                  return Text('${l10n?.errorMakingStatic ?? 'Error making device static'}: $localizedError');
+                },
+              ),
               backgroundColor: Colors.red,
             ),
           );
@@ -1212,7 +1285,8 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> with WidgetsBin
     try {
       final serviceManager = MikroTikServiceManager();
       if (serviceManager.service == null || !serviceManager.isConnected) {
-        throw Exception('اتصال برقرار نشده');
+        final l10n = AppLocalizations.of(context);
+        throw Exception(l10n?.connectionNotEstablished ?? 'Connection not established');
       }
 
       final result = await serviceManager.service!.makeStaticLease(
@@ -1221,7 +1295,8 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> with WidgetsBin
         hostname: widget.device.hostName,
         comment: widget.device.hostName != null ? 'Static: ${widget.device.hostName}' : 'Static Lease',
       ).timeout(const Duration(seconds: 5), onTimeout: () {
-        throw Exception('زمان تبدیل به Static به پایان رسید. لطفاً دوباره تلاش کنید.');
+        final l10n = AppLocalizations.of(context);
+        throw Exception(l10n?.makeStaticTimeout ?? 'Make static timeout. Please try again.');
       });
       
       if (_isDisposed || !mounted) return;
@@ -1235,15 +1310,18 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> with WidgetsBin
           });
         }
         
-        final message = result['message'] as String? ?? 'دستگاه با موفقیت Static شد';
+        final l10n = AppLocalizations.of(context);
+        final rawMessage = result['message'] as String? ?? (l10n?.deviceMadeStatic ?? 'Device made static successfully');
+        final localizedMessage = l10n?.localizeServiceMessage(rawMessage) ?? rawMessage;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(message),
+            content: Text(localizedMessage),
             backgroundColor: Colors.green,
           ),
         );
       } else {
-        throw Exception(result['message'] ?? 'خطا در تبدیل به Static');
+        final l10n = AppLocalizations.of(context);
+        throw Exception(result['message'] ?? (l10n?.errorMakingStatic ?? 'Error making device static'));
       }
     } catch (e) {
       if (_isDisposed || !mounted) return;
@@ -1257,41 +1335,44 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> with WidgetsBin
 
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('برگشت به Dynamic'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'آیا مطمئن هستید که می‌خواهید دستگاه ${widget.device.ipAddress} را به Dynamic تبدیل کنید؟',
+      builder: (context) {
+        final l10n = AppLocalizations.of(context);
+        return AlertDialog(
+          title: Text(l10n?.returnToDynamicTitle ?? 'Return to Dynamic'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                l10n?.returnToDynamicConfirmWithIP(widget.device.ipAddress ?? '') ?? 'Are you sure you want to return device ${widget.device.ipAddress} to dynamic?',
+              ),
+              const SizedBox(height: 16),
+              Text(
+                l10n?.ok ?? 'OK',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 8),
+              Text(l10n?.returnToDynamicInfo1 ?? '• Static Lease will be removed'),
+              Text(l10n?.returnToDynamicInfo2 ?? '• After removal, if the device is still connected and requests DHCP, an address will be assigned from the dynamic pool'),
+              Text(l10n?.returnToDynamicInfo3 ?? '• IP address may change'),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: Text(l10n?.cancel ?? 'Cancel'),
             ),
-            const SizedBox(height: 16),
-            const Text(
-              'توجه:',
-              style: TextStyle(fontWeight: FontWeight.bold),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context, true),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.orange,
+                foregroundColor: Colors.white,
+              ),
+              child: Text(l10n?.returnToDynamic ?? 'Return to Dynamic'),
             ),
-            const SizedBox(height: 8),
-            const Text('• Static Lease حذف خواهد شد'),
-            const Text('• بعد از حذف، اگر دستگاه هنوز متصل باشد و درخواست DHCP بدهد، آدرس از استخر دینامیک اختصاص داده می‌شود'),
-            const Text('• IP address ممکن است تغییر کند'),
           ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('لغو'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.orange,
-              foregroundColor: Colors.white,
-            ),
-            child: const Text('برگشت به Dynamic'),
-          ),
-        ],
-      ),
+        );
+      },
     );
 
     if (confirmed == true && !_isDisposed) {
@@ -1312,7 +1393,12 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> with WidgetsBin
         if (mounted && !_isDisposed) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('خطا در برگشت به Dynamic: $e'),
+              content: Builder(
+                builder: (context) {
+                  final l10n = AppLocalizations.of(context);
+                  return Text('${l10n?.errorReturningToDynamic ?? 'Error returning device to dynamic'}: $e');
+                },
+              ),
               backgroundColor: Colors.red,
             ),
           );
@@ -1327,7 +1413,8 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> with WidgetsBin
     try {
       final serviceManager = MikroTikServiceManager();
       if (serviceManager.service == null || !serviceManager.isConnected) {
-        throw Exception('اتصال برقرار نشده');
+        final l10n = AppLocalizations.of(context);
+        throw Exception(l10n?.connectionNotEstablished ?? 'Connection not established');
       }
 
       final result = await serviceManager.service!.removeStaticLease(
@@ -1369,8 +1456,11 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> with WidgetsBin
           });
         }
         
-        final message = result['message'] as String? ?? 'Static Lease با موفقیت حذف شد';
-        final note = result['note'] as String?;
+        final l10n = AppLocalizations.of(context);
+        final rawMessage = result['message'] as String? ?? (l10n?.deviceReturnedToDynamic ?? 'Device returned to dynamic successfully');
+        final rawNote = result['note'] as String?;
+        final localizedMessage = l10n?.localizeServiceMessage(rawMessage) ?? rawMessage;
+        final localizedNote = rawNote != null ? (l10n?.localizeServiceMessage(rawNote) ?? rawNote) : null;
         
         // نمایش پیغام موفقیت با هشدار
         if (mounted && !_isDisposed) {
@@ -1380,11 +1470,11 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> with WidgetsBin
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(message),
-                  if (note != null) ...[
+                  Text(localizedMessage),
+                  if (localizedNote != null) ...[
                     const SizedBox(height: 4),
                     Text(
-                      note,
+                      localizedNote,
                       style: const TextStyle(fontSize: 12),
                     ),
                   ],
@@ -1401,16 +1491,28 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> with WidgetsBin
               showDialog(
                 context: context,
                 builder: (context) => AlertDialog(
-                  title: const Row(
+                  title: Row(
                     children: [
-                      Icon(Icons.info_outline, color: Color(0xFF428B7C)),
-                      SizedBox(width: 8),
-                      Text('توجه مهم'),
+                      const Icon(Icons.info_outline, color: Color(0xFF428B7C)),
+                      const SizedBox(width: 8),
+                      Builder(
+                        builder: (context) {
+                          final l10n = AppLocalizations.of(context);
+                          return Text(l10n?.ok ?? 'OK');
+                        },
+                      ),
                     ],
                   ),
-                  content: const Text(
-                    'برای فرایند شناسایی بهتر dynamic بودن ایپی شما وایفای دستگاه خود را خاموش روشن کنید',
-                    style: TextStyle(fontSize: 14),
+                  content: Builder(
+                    builder: (context) {
+                      final l10n = AppLocalizations.of(context);
+                      return Text(
+                        l10n?.locale.languageCode == 'en'
+                            ? 'For better dynamic IP identification, turn your device WiFi off and on'
+                            : 'برای شناسایی بهتر IP پویا، WiFi دستگاه خود را خاموش و روشن کنید',
+                        style: TextStyle(fontSize: 14),
+                      );
+                    },
                   ),
                   actions: [
                     ElevatedButton(
@@ -1419,7 +1521,12 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> with WidgetsBin
                         backgroundColor: const Color(0xFF428B7C),
                         foregroundColor: Colors.white,
                       ),
-                      child: const Text('متوجه شدم'),
+                      child: Builder(
+                        builder: (context) {
+                          final l10n = AppLocalizations.of(context);
+                          return Text(l10n?.ok ?? 'OK');
+                        },
+                      ),
                     ),
                   ],
                 ),
@@ -1428,7 +1535,8 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> with WidgetsBin
           });
         }
       } else {
-        throw Exception(result['message'] ?? 'خطا در حذف Static Lease');
+        final l10n = AppLocalizations.of(context);
+        throw Exception(result['message'] ?? (l10n?.errorReturningToDynamic ?? 'Error returning device to dynamic'));
       }
     } catch (e) {
       if (_isDisposed || !mounted) return;
@@ -1441,26 +1549,29 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> with WidgetsBin
 
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('مسدود کردن دستگاه'),
-        content: Text(
-          'آیا مطمئن هستید که می‌خواهید دستگاه ${widget.device.ipAddress} را مسدود کنید؟',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('لغو'),
+      builder: (context) {
+        final l10n = AppLocalizations.of(context);
+        return AlertDialog(
+          title: Text(l10n?.banDevice ?? 'Ban Device'),
+          content: Text(
+            l10n?.banDeviceConfirmWithIP(widget.device.ipAddress ?? '') ?? 'Are you sure you want to ban device ${widget.device.ipAddress}?',
           ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red,
-              foregroundColor: Colors.white,
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: Text(l10n?.cancel ?? 'Cancel'),
             ),
-            child: const Text('مسدود کردن'),
-          ),
-        ],
-      ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context, true),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red,
+                foregroundColor: Colors.white,
+              ),
+              child: Text(l10n?.banDevice ?? 'Ban Device'),
+            ),
+          ],
+        );
+      },
     );
 
     if (confirmed == true && !_isDisposed) {
@@ -1522,13 +1633,18 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> with WidgetsBin
         Future.delayed(const Duration(milliseconds: 100), () {
           final scaffoldMessenger = ScaffoldMessenger.of(context);
           scaffoldMessenger.showSnackBar(
-            const SnackBar(
+            SnackBar(
               content: Row(
                 children: [
-                  Icon(Icons.check_circle, color: Colors.white),
-                  SizedBox(width: 8),
+                  const Icon(Icons.check_circle, color: Colors.white),
+                  const SizedBox(width: 8),
                   Expanded(
-                    child: Text('دستگاه با موفقیت مسدود شد'),
+                    child: Builder(
+                      builder: (context) {
+                        final l10n = AppLocalizations.of(context);
+                        return Text(l10n?.deviceRejected ?? 'Device rejected and banned');
+                      },
+                    ),
                   ),
                 ],
               ),
@@ -1543,7 +1659,12 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> with WidgetsBin
         if (mounted && !_isDisposed) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('خطا: ${provider.errorMessage ?? "خطا در مسدود کردن"}'),
+              content: Builder(
+                builder: (context) {
+                  final l10n = AppLocalizations.of(context);
+                  return Text('${l10n?.error ?? 'Error'}: ${provider.errorMessage ?? (l10n?.banDevice ?? 'Error banning device')}');
+                },
+              ),
               backgroundColor: Colors.red,
               behavior: SnackBarBehavior.floating,
             ),
@@ -1556,9 +1677,12 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> with WidgetsBin
     } catch (e) {
       if (_isDisposed || !mounted) return;
       
+      final l10n = AppLocalizations.of(context);
+      final errorMsg = e.toString().replaceFirst('Exception: ', '');
+      final localizedError = l10n?.localizeServiceError(errorMsg) ?? errorMsg;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('خطا: $e'),
+          content: Text('${l10n?.error ?? 'Error'}: $localizedError'),
           backgroundColor: Colors.red,
           behavior: SnackBarBehavior.floating,
         ),
@@ -1576,26 +1700,29 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> with WidgetsBin
 
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('رفع مسدودیت دستگاه'),
-        content: Text(
-          'آیا مطمئن هستید که می‌خواهید مسدودیت دستگاه ${widget.device.ipAddress} را بردارید؟',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('لغو'),
+      builder: (context) {
+        final l10n = AppLocalizations.of(context);
+        return AlertDialog(
+          title: Text(l10n?.unbanDeviceTitle ?? 'Unban Device'),
+          content: Text(
+            l10n?.unbanDeviceConfirmTextWithIP(widget.device.ipAddress ?? '') ?? 'Are you sure you want to unban device ${widget.device.ipAddress}?',
           ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.green,
-              foregroundColor: Colors.white,
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: Text(l10n?.cancel ?? 'Cancel'),
             ),
-            child: const Text('رفع مسدودیت'),
-          ),
-        ],
-      ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context, true),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.green,
+                foregroundColor: Colors.white,
+              ),
+              child: Text(l10n?.unbanDevice ?? 'Unban Device'),
+            ),
+          ],
+        );
+      },
     );
 
     if (confirmed == true && !_isDisposed) {
@@ -1641,7 +1768,7 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> with WidgetsBin
           });
         }
         
-        // فوراً بستن صفحه و هدایت به صفحه اصلی (بدون تاخیر)
+        // فوراً بستن صفحه و هویایت به صفحه اصلی (بدون تاخیر)
         if (Navigator.canPop(context)) {
           Navigator.pop(context, true);
         }
@@ -1655,29 +1782,31 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> with WidgetsBin
         // نمایش پیغام موفقیت در صفحه اصلی
         Future.delayed(const Duration(milliseconds: 100), () {
           final scaffoldMessenger = ScaffoldMessenger.of(context);
+          final l10n = AppLocalizations.of(context);
           scaffoldMessenger.showSnackBar(
-            const SnackBar(
+            SnackBar(
               content: Row(
                 children: [
-                  Icon(Icons.check_circle, color: Colors.white),
-                  SizedBox(width: 8),
+                  const Icon(Icons.check_circle, color: Colors.white),
+                  const SizedBox(width: 8),
                   Expanded(
-                    child: Text('مسدودیت دستگاه با موفقیت برداشته شد'),
+                    child: Text(l10n?.deviceUnbannedSuccess ?? 'Device unbanned successfully'),
                   ),
                 ],
               ),
               backgroundColor: Colors.green,
               behavior: SnackBarBehavior.floating,
-              duration: Duration(seconds: 3),
+              duration: const Duration(seconds: 3),
             ),
           );
         });
       } else {
         // در صورت خطا، فقط loading را متوقف کن
         if (mounted && !_isDisposed) {
+          final l10n = AppLocalizations.of(context);
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('خطا: ${provider.errorMessage ?? "خطا در رفع مسدودیت"}'),
+              content: Text('${l10n?.error ?? 'Error'}: ${provider.errorMessage ?? (l10n?.errorUnbanning ?? 'Error unbanning device')}'),
               backgroundColor: Colors.red,
               behavior: SnackBarBehavior.floating,
             ),
@@ -1690,9 +1819,12 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> with WidgetsBin
     } catch (e) {
       if (_isDisposed || !mounted) return;
       
+      final l10n = AppLocalizations.of(context);
+      final errorMsg = e.toString().replaceFirst('Exception: ', '');
+      final localizedError = l10n?.localizeServiceError(errorMsg) ?? errorMsg;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('خطا: $e'),
+          content: Text('${l10n?.error ?? 'Error'}: $localizedError'),
           backgroundColor: Colors.red,
           behavior: SnackBarBehavior.floating,
         ),
@@ -1723,21 +1855,60 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> with WidgetsBin
           });
         }
       },
-      child: Scaffold(
-        appBar: AppBar(
-          title: const Text('جزئیات دستگاه'),
-          backgroundColor: _primaryColor,
-          foregroundColor: Colors.white,
-        ),
+      child: Builder(
+        builder: (context) {
+          final theme = Theme.of(context);
+          final colorScheme = theme.colorScheme;
+          
+          return Scaffold(
+            appBar: PreferredSize(
+              preferredSize: const Size.fromHeight(kToolbarHeight),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: theme.brightness == Brightness.dark
+                      ? colorScheme.surface
+                      : _primaryColor,
+                  boxShadow: [
+                    BoxShadow(
+                      color: theme.brightness == Brightness.dark
+                          ? Colors.black.withOpacity(0.3)
+                          : Colors.black.withOpacity(0.05),
+                      blurRadius: 10,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: AppBar(
+                  title: Text(
+                    AppLocalizations.of(context)?.deviceDetails ?? 'Device Details',
+                    style: TextStyle(
+                      color: theme.brightness == Brightness.dark
+                          ? colorScheme.onSurface
+                          : Colors.white,
+                    ),
+                  ),
+                  backgroundColor: Colors.transparent,
+                  foregroundColor: colorScheme.onSurface,
+                  elevation: 0,
+                  shadowColor: Colors.transparent,
+                  surfaceTintColor: Colors.transparent,
+                ),
+              ),
+            ),
         body: SingleChildScrollView(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   // هدر دستگاه
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(24),
-                    color: Colors.white,
+                  Builder(
+                    builder: (context) {
+                      final theme = Theme.of(context);
+                      final colorScheme = theme.colorScheme;
+                      
+                      return Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(24),
+                        color: colorScheme.surface,
                     child: Column(
                       children: [
                         Stack(
@@ -1746,13 +1917,17 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> with WidgetsBin
                               radius: 40,
                               backgroundColor: widget.isCurrentDevice
                                   ? _primaryColor.withOpacity(0.2)
-                                  : Colors.grey.shade200,
+                                  : (theme.brightness == Brightness.dark
+                                      ? colorScheme.onSurface.withOpacity(0.1)
+                                      : Colors.grey.shade200),
                               child: Icon(
                                 _getDeviceIcon(widget.device.type),
                                 size: 40,
                                 color: widget.isCurrentDevice
                                     ? _primaryColor
-                                    : Colors.grey.shade600,
+                                    : (theme.brightness == Brightness.dark
+                                        ? colorScheme.onSurface.withOpacity(0.6)
+                                        : Colors.grey.shade600),
                               ),
                             ),
                             if (widget.isCurrentDevice)
@@ -1779,10 +1954,11 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> with WidgetsBin
                           widget.device.hostName ??
                               widget.device.user ??
                               widget.device.name ??
-                              'نامشخص',
-                          style: const TextStyle(
+                              AppLocalizations.of(context)?.unknown ?? 'Unknown', 
+                          style: TextStyle(
                             fontSize: 24,
                             fontWeight: FontWeight.bold,
+                            color: colorScheme.onSurface,
                           ),
                         ),
                         if (widget.isCurrentDevice) ...[
@@ -1808,53 +1984,116 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> with WidgetsBin
                         ],
                       ],
                     ),
+                      );
+                    },
                   ),
 
                   const SizedBox(height: 8),
 
                   // اطلاعات دستگاه
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(16),
-                    color: Colors.white,
+                  Builder(
+                    builder: (context) {
+                      final theme = Theme.of(context);
+                      final colorScheme = theme.colorScheme;
+                      
+                      return Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(16),
+                        color: colorScheme.surface,
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
-                          'اطلاعات دستگاه',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: _primaryColor,
-                          ),
+                        Builder(
+                          builder: (context) {
+                            final l10n = AppLocalizations.of(context);
+                            return Text(
+                              l10n?.deviceInformation ?? 'Device Information',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                color: _primaryColor,
+                              ),
+                            );
+                          },
                         ),
                         const SizedBox(height: 16),
-                        _buildInfoRow('نوع', _getDeviceTypeLabel(widget.device.type)),
+                        Builder(
+                          builder: (context) {
+                            final l10n = AppLocalizations.of(context);
+                            return _buildInfoRow(
+                              l10n?.type ?? 'Type',
+                              _getDeviceTypeLabel(widget.device.type),
+                            );
+                          },
+                        ),
                         if (widget.device.ipAddress != null)
-                          _buildInfoRow('آدرس IP', widget.device.ipAddress!),
+                          Builder(
+                            builder: (context) {
+                              final l10n = AppLocalizations.of(context);
+                              return _buildInfoRow(
+                                l10n?.ipAddress ?? 'IP Address',
+                                widget.device.ipAddress!,
+                              );
+                            },
+                          ),
                         if (widget.device.macAddress != null)
-                          _buildInfoRow('آدرس MAC', widget.device.macAddress!),
+                          Builder(
+                            builder: (context) {
+                              final l10n = AppLocalizations.of(context);
+                              return _buildInfoRow(
+                                l10n?.macAddress ?? 'MAC Address',
+                                widget.device.macAddress!,
+                              );
+                            },
+                          ),
                         if (widget.device.hostName != null)
-                          _buildInfoRow('نام میزبان', widget.device.hostName!),
+                          Builder(
+                            builder: (context) {
+                              final l10n = AppLocalizations.of(context);
+                              return _buildInfoRow(
+                                l10n?.hostname ?? 'Hostname',
+                                widget.device.hostName!,
+                              );
+                            },
+                          ),
                         if (widget.device.uptime != null)
-                          _buildInfoRow('زمان اتصال', widget.device.uptime!),
+                          Builder(
+                            builder: (context) {
+                              final l10n = AppLocalizations.of(context);
+                              return _buildInfoRow(
+                                l10n?.connectionTime ?? 'Connection Time',
+                                widget.device.uptime!,
+                              );
+                            },
+                          ),
                         if (widget.device.ssid != null)
                           _buildInfoRow('SSID', widget.device.ssid!),
                         if (widget.device.signalStrength != null)
-                          _buildInfoRow(
-                            'قدرت سیگنال',
-                            widget.device.signalStrength!,
+                          Builder(
+                            builder: (context) {
+                              final l10n = AppLocalizations.of(context);
+                              return _buildInfoRow(
+                                l10n?.signalStrength ?? 'Signal Strength',
+                                widget.device.signalStrength!,
+                              );
+                            },
                           ),
                         // نمایش سرعت تنظیم شده (با نمایش بهتر)
                         if (_currentSpeedLimit != null && !widget.isBanned)
                           _buildSpeedLimitRow(_currentSpeedLimit!),
                         // نمایش وضعیت Static/Dynamic Lease
                         if (!widget.isBanned && _isStaticLease != null)
-                          _buildInfoRow(
-                            'وضعیت Lease',
-                            _isStaticLease == true 
-                              ? 'Static (ثابت)' 
-                              : 'Dynamic (پویا)',
+                          Builder(
+                            builder: (context) {
+                              final l10n = AppLocalizations.of(context);
+                              final leaseStatus = _isStaticLease == true 
+                                ? (l10n?.staticLease ?? 'Static (Static)')
+                                : (l10n?.dynamicLease ?? 'Dynamic (Dynamic)');
+                              return _buildInfoRow(
+                                l10n?.leaseStatus ?? 'Lease Status',
+                                leaseStatus,
+                              );
+                            },
                           ),
                         if (widget.isBanned)
                           Container(
@@ -1865,49 +2104,76 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> with WidgetsBin
                               borderRadius: BorderRadius.circular(8),
                               border: Border.all(color: Colors.red.withOpacity(0.3)),
                             ),
-                            child: Row(
-                              children: [
-                                const Icon(Icons.block, color: Colors.red, size: 20),
-                                const SizedBox(width: 8),
-                                const Text(
-                                  'این دستگاه مسدود شده است',
-                                  style: TextStyle(
-                                    color: Colors.red,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ],
+                            child: Builder(
+                              builder: (context) {
+                                final l10n = AppLocalizations.of(context);
+                                return Row(
+                                  children: [
+                                    const Icon(Icons.block, color: Colors.red, size: 20),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      l10n?.thisDeviceIsBanned ?? 'This device is banned',
+                                      style: TextStyle(
+                                        color: Colors.red,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ],
+                                );
+                              },
                             ),
                           ),
                       ],
                     ),
+                      );
+                    },
                   ),
 
                   const SizedBox(height: 8),
 
                   // دکمه‌های عملیات
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(16),
-                    color: Colors.white,
+                  Builder(
+                    builder: (context) {
+                      final theme = Theme.of(context);
+                      final colorScheme = theme.colorScheme;
+                      
+                      return Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(16),
+                        color: colorScheme.surface,
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        const Text(
-                          'عملیات',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: _primaryColor,
-                          ),
+                        Builder(
+                          builder: (context) {
+                            final l10n = AppLocalizations.of(context);
+                            return Text(
+                              l10n?.operations ?? 'Operations',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                color: _primaryColor,
+                              ),
+                            );
+                          },
                         ),
                         const SizedBox(height: 16),
                         ElevatedButton.icon(
                           onPressed: _setSpeedLimit,
                           icon: const Icon(Icons.speed), 
-                          label: const Text('تنظیم سرعت' , style: TextStyle(fontSize: 20),),  
+                          label: Builder(
+                            builder: (context) {
+                              final l10n = AppLocalizations.of(context);
+                              return Text(
+                                l10n?.setSpeedLimit ?? 'Set Speed Limit',
+                                style: const TextStyle(fontSize: 20),
+                              );
+                            },
+                          ),  
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: _primaryColor,
+                            backgroundColor: theme.brightness == Brightness.dark
+                                ? _darkenColor(_primaryColor, 0.2)
+                                : _primaryColor,
                             foregroundColor: Colors.white,
                             padding: const EdgeInsets.symmetric(vertical: 16),
                             shape: RoundedRectangleBorder(
@@ -1920,9 +2186,19 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> with WidgetsBin
                           ElevatedButton.icon(
                             onPressed: _unbanDevice,
                             icon: const Icon(Icons.lock_open),
-                            label: const Text('رفع مسدودیت', style: TextStyle(fontSize: 20),),  
+                            label: Builder(
+                              builder: (context) {
+                                final l10n = AppLocalizations.of(context);
+                                return Text(
+                                  l10n?.unbanDevice ?? 'Unban Device',
+                                  style: const TextStyle(fontSize: 20),
+                                );
+                              },
+                            ),  
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.green,
+                              backgroundColor: theme.brightness == Brightness.dark
+                                  ? _darkenColor(Colors.green, 0.3)
+                                  : Colors.green,
                               foregroundColor: Colors.white,
                               padding: const EdgeInsets.symmetric(vertical: 16),
                               shape: RoundedRectangleBorder(
@@ -1934,9 +2210,16 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> with WidgetsBin
                           ElevatedButton.icon(
                             onPressed: _banDevice,
                             icon: const Icon(Icons.block),
-                            label: const Text('مسدود کردن' , style: TextStyle(fontSize: 20),),  
+                            label: Builder(
+                              builder: (context) {
+                                final l10n = AppLocalizations.of(context);
+                                return Text(l10n?.banDevice ?? 'Ban Device', style: TextStyle(fontSize: 20));
+                              },
+                            ),  
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.red,
+                              backgroundColor: theme.brightness == Brightness.dark
+                                  ? _darkenColor(Colors.red, 0.3)
+                                  : Colors.red,
                               foregroundColor: Colors.white,
                               padding: const EdgeInsets.symmetric(vertical: 16),
                               shape: RoundedRectangleBorder(
@@ -1950,9 +2233,16 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> with WidgetsBin
                           ElevatedButton.icon(
                             onPressed: _isLoading ? null : _makeStaticLease,
                             icon: const Icon(Icons.lock),
-                            label: const Text('Static کردن', style: TextStyle(fontSize: 16),),  
+                            label: Builder(
+                              builder: (context) {
+                                final l10n = AppLocalizations.of(context);
+                                return Text(l10n?.makeStatic ?? 'Make Static', style: TextStyle(fontSize: 16));
+                              },
+                            ),  
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: _primaryColor,
+                              backgroundColor: theme.brightness == Brightness.dark
+                                  ? _darkenColor(_primaryColor, 0.2)
+                                  : _primaryColor,
                               foregroundColor: Colors.white,
                               padding: const EdgeInsets.symmetric(vertical: 16),
                               shape: RoundedRectangleBorder(
@@ -1965,9 +2255,19 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> with WidgetsBin
                           ElevatedButton.icon(
                             onPressed: _isLoading ? null : _removeStaticLease,
                             icon: const Icon(Icons.lock_open),
-                            label: const Text('برگشت به Dynamic', style: TextStyle(fontSize: 16),),  
+                            label: Builder(
+                              builder: (context) {
+                                final l10n = AppLocalizations.of(context);
+                                return Text(
+                                  l10n?.returnToDynamic ?? 'Return to Dynamic',
+                                  style: const TextStyle(fontSize: 16),
+                                );
+                              },
+                            ),  
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.orange,
+                              backgroundColor: theme.brightness == Brightness.dark
+                                  ? _darkenColor(Colors.orange, 0.3)
+                                  : Colors.orange,
                               foregroundColor: Colors.white,
                               padding: const EdgeInsets.symmetric(vertical: 16),
                               shape: RoundedRectangleBorder(
@@ -1982,30 +2282,41 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> with WidgetsBin
                           Container(
                             padding: const EdgeInsets.all(16),
                             decoration: BoxDecoration(
-                              color: Colors.white,
+                              color: theme.brightness == Brightness.dark
+                                  ? colorScheme.surfaceContainerHighest
+                                  : Colors.white,
                               borderRadius: BorderRadius.circular(12),
-                              border: Border.all(color: Colors.grey.shade300),
+                              border: Border.all(
+                                color: theme.brightness == Brightness.dark
+                                    ? colorScheme.outline.withOpacity(0.2)
+                                    : Colors.grey.shade300,
+                              ),
                             ),
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Row(
-                                  children: [
-                                    const Icon(
-                                      Icons.filter_alt,
-                                      color: _primaryColor,
-                                      size: 24,
-                                    ),
-                                    const SizedBox(width: 8),
-                                    const Text(
-                                      'فیلتر شبکه‌های اجتماعی',
-                                      style: TextStyle(
-                                        fontSize: 18,
-                                        fontWeight: FontWeight.bold,
-                                        color: _primaryColor,
-                                      ),
-                                    ),
-                                  ],
+                                Builder(
+                                  builder: (context) {
+                                    final l10n = AppLocalizations.of(context);
+                                    return Row(
+                                      children: [
+                                        const Icon(
+                                          Icons.filter_alt,
+                                          color: _primaryColor,
+                                          size: 24,
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Text(
+                                          l10n?.socialMediaFilter ?? 'Social Media Filter',
+                                          style: const TextStyle(
+                                            fontSize: 18,
+                                            fontWeight: FontWeight.bold,
+                                            color: _primaryColor,
+                                          ),
+                                        ),
+                                      ],
+                                    );
+                                  },
                                 ),
                                 const SizedBox(height: 16),
                                 ..._buildPlatformFilterToggles(),
@@ -2014,113 +2325,139 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> with WidgetsBin
                           ),
                       ],
                     ),
+                      );
+                    },
                   ),
 
                 ],
               ),
             ),
+          );
+        },
       ),
     );
   }
 
 
   List<Widget> _buildPlatformFilterToggles() {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
+    final l10n = AppLocalizations.of(context);
+    
     final platforms = [
-      {'key': 'telegram', 'name': 'تلگرام', 'icon': Icons.telegram, 'color': Colors.blue},
-      {'key': 'youtube', 'name': 'یوتیوب', 'icon': Icons.play_circle, 'color': Colors.red},
-      {'key': 'instagram', 'name': 'اینستاگرام', 'icon': Icons.camera_alt, 'color': Color(0xFFE4405F)},
-      {'key': 'facebook', 'name': 'فیسبوک', 'icon': Icons.facebook, 'color': Color(0xFF1877F2)},
+      {'key': 'telegram', 'name': l10n?.telegram ?? 'Telegram', 'icon': Icons.telegram, 'color': Colors.blue},
+      {'key': 'youtube', 'name': l10n?.youtube ?? 'YouTube', 'icon': Icons.play_circle, 'color': Colors.red},
+      {'key': 'instagram', 'name': l10n?.instagram ?? 'Instagram', 'icon': Icons.camera_alt, 'color': Color(0xFFE4405F)},
+      {'key': 'facebook', 'name': l10n?.facebook ?? 'Facebook', 'icon': Icons.facebook, 'color': Color(0xFF1877F2)},
     ];
 
     return platforms.map((platform) {
-      final key = platform['key'] as String;
-      final name = platform['name'] as String;
-      final icon = platform['icon'] as IconData;
-      final color = platform['color'] as Color;
-      final isFiltered = _platformFilterStatus[key] ?? false;
-      final isLoading = _platformLoadingStatus[key] ?? false;
+          final key = platform['key'] as String;
+          final name = platform['name'] as String;
+          final icon = platform['icon'] as IconData;
+          final color = platform['color'] as Color;
+          final isFiltered = _platformFilterStatus[key] ?? false;
+          final isLoading = _platformLoadingStatus[key] ?? false;
 
-      // محاسبه رنگ‌ها بر اساس loading state
-      // در حالت loading: رنگ‌ها را کم‌رنگ‌تر کن (opacity کمتر)
-      // در حالت عادی: رنگ‌ها را پررنگ کن
-      final iconColor = isLoading 
-          ? (isFiltered ? color.withOpacity(0.4) : Colors.grey.shade400)
-          : (isFiltered ? color : Colors.grey);
-      
-      final titleColor = isLoading
-          ? Colors.grey.shade500
-          : (isFiltered ? color : Colors.black87);
-      
-      final containerColor = isLoading
-          ? (isFiltered ? color.withOpacity(0.05) : Colors.grey.shade100)
-          : (isFiltered ? color.withOpacity(0.1) : Colors.grey.shade50);
-      
-      final borderColor = isLoading
-          ? (isFiltered ? color.withOpacity(0.3) : Colors.grey.shade300)
-          : (isFiltered ? color : Colors.grey.shade300);
+          // محاسبه رنگ‌ها بر اساس loading state و theme
+          // در حالت loading: رنگ‌ها را کم‌رنگ‌تر کن (opacity کمتر)
+          // در حالت عادی: رنگ‌ها را پررنگ کن
+          // در تم تاریک: رنگ‌ها را تاریک‌تر کن اما رنگ خودشون را حفظ کن
+          final baseColor = isDark && isFiltered 
+              ? _darkenColor(color, 0.3) // در تم تاریک، رنگ را 30% تاریک‌تر کن
+              : color;
+          
+          final iconColor = isLoading 
+              ? (isFiltered ? baseColor.withOpacity(0.4) : (isDark ? colorScheme.onSurface.withOpacity(0.4) : Colors.grey.shade400))
+              : (isFiltered ? baseColor : (isDark ? colorScheme.onSurface.withOpacity(0.6) : Colors.grey));
+          
+          final titleColor = isLoading
+              ? (isDark ? colorScheme.onSurface.withOpacity(0.5) : Colors.grey.shade500)
+              : (isFiltered ? baseColor : (isDark ? colorScheme.onSurface : Colors.black87));
+          
+          final containerColor = isLoading
+              ? (isFiltered ? baseColor.withOpacity(0.05) : (isDark ? colorScheme.surfaceContainerHighest : Colors.grey.shade100))
+              : (isFiltered ? baseColor.withOpacity(0.1) : (isDark ? colorScheme.surfaceContainerHighest : Colors.grey.shade50));
+          
+          final borderColor = isLoading
+              ? (isFiltered ? baseColor.withOpacity(0.3) : (isDark ? colorScheme.outline.withOpacity(0.2) : Colors.grey.shade300))
+              : (isFiltered ? baseColor : (isDark ? colorScheme.outline.withOpacity(0.2) : Colors.grey.shade300));
 
-      return Container(
-        margin: const EdgeInsets.only(bottom: 12),
-        decoration: BoxDecoration(
-          color: containerColor,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(
-            color: borderColor,
-            width: isFiltered ? 2 : 1,
-          ),
-        ),
-        child: ListTile(
-          leading: Icon(icon, color: iconColor),
-          title: Text(
-            name,
-            style: TextStyle(
-              fontWeight: FontWeight.w600,
-              color: titleColor,
+          return Container(
+            margin: const EdgeInsets.only(bottom: 12),
+            decoration: BoxDecoration(
+              color: containerColor,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: borderColor,
+                width: isFiltered ? 2 : 1,
+              ),
             ),
-          ),
-          trailing: Switch(
-            value: isFiltered,
-            onChanged: isLoading ? null : (value) {
-              _togglePlatformFilter(key, name);
-            },
-            activeColor: isLoading ? color.withOpacity(0.5) : color,
-          ),
-          onTap: isLoading ? null : () {
-            _togglePlatformFilter(key, name);
-          },
-        ),
-      );
-    }).toList();
+            child: ListTile(
+              leading: Icon(icon, color: iconColor),
+              title: Text(
+                name,
+                style: TextStyle(
+                  fontWeight: FontWeight.w600,
+                  color: titleColor,
+                ),
+              ),
+              trailing: Switch(
+                value: isFiltered,
+                onChanged: isLoading ? null : (value) {
+                  _togglePlatformFilter(key, name);
+                },
+                activeColor: isLoading 
+                    ? (isDark ? _darkenColor(color, 0.3).withOpacity(0.5) : color.withOpacity(0.5))
+                    : (isDark ? _darkenColor(color, 0.3) : color),
+              ),
+              onTap: isLoading ? null : () {
+                _togglePlatformFilter(key, name);
+              },
+            ),
+          );
+        }).toList();
   }
 
   Widget _buildInfoRow(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 120,
-            child: Text(
-              label,
-              style: TextStyle(
-                color: Colors.grey.shade600,
-                fontSize: 14,
+    return Builder(
+      builder: (context) {
+        final theme = Theme.of(context);
+        final colorScheme = theme.colorScheme;
+        
+        return Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(
+                width: 120,
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    color: theme.brightness == Brightness.dark
+                        ? colorScheme.onSurface.withOpacity(0.7)
+                        : Colors.grey.shade600,
+                    fontSize: 14,
+                  ),
+                ),
               ),
-            ),
-          ),
-          Expanded(
-            child: Text(
-              value,
-              style: const TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
+              Expanded(
+                child: Text(
+                  value,
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                    color: colorScheme.onSurface,
+                  ),
+                  textDirection: TextDirection.ltr,
+                ),
               ),
-              textDirection: TextDirection.ltr,
-            ),
+            ],
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 
@@ -2150,7 +2487,7 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> with WidgetsBin
           SizedBox(
             width: 120,
             child: Text(
-              'حداکثر',
+              AppLocalizations.of(context)?.maximum ?? 'Maximum',
               style: TextStyle(
                 color: Colors.grey.shade600,
                 fontSize: 14,
@@ -2167,7 +2504,7 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> with WidgetsBin
                     const Icon(Icons.upload, color: Colors.green, size: 16),
                     const SizedBox(width: 6),
                     Text(
-                      'آپلود: ',
+                      AppLocalizations.of(context)?.upload ?? 'Upload: ',
                       style: TextStyle(
                         fontSize: 14,
                         color: Colors.grey.shade700,
@@ -2191,7 +2528,7 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> with WidgetsBin
                     const Icon(Icons.download, color: Colors.blue, size: 16),
                     const SizedBox(width: 6),
                     Text(
-                      'دانلود: ',
+                      AppLocalizations.of(context)?.download ?? 'Download: ',
                       style: TextStyle(
                         fontSize: 14,
                         color: Colors.grey.shade700,
@@ -2242,8 +2579,16 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> with WidgetsBin
       case 'ppp':
         return 'PPP';
       default:
-        return 'نامشخص';
+        return AppLocalizations.of(context)?.unknown ?? 'Unknown';
     }
+  }
+
+  /// تیره کردن رنگ برای تم تاریک
+  Color _darkenColor(Color color, double amount) {
+    assert(amount >= 0 && amount <= 1);
+    final hsl = HSLColor.fromColor(color);
+    final lightness = (hsl.lightness * (1 - amount)).clamp(0.0, 1.0);
+    return hsl.withLightness(lightness).toColor();
   }
 
 }

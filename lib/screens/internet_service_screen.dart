@@ -135,42 +135,73 @@ class _InternetServiceScreenState extends State<InternetServiceScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    
     return Scaffold(
-      appBar: AppBar(
-        title: Text(
-          _pageTitle ?? 'سرویس انترنت',
-          overflow: TextOverflow.ellipsis,
-        ),
-        backgroundColor: _primaryColor,
-        foregroundColor: Colors.white,
-        elevation: 0,
-        actions: [
-          // دکمه بازگشت
-          IconButton(
-            icon: const Icon(Icons.arrow_back),
-            onPressed: _canGoBack ? _goBack : null,
-            tooltip: 'بازگشت',
+      appBar: PreferredSize(
+            preferredSize: const Size.fromHeight(kToolbarHeight),
+            child: Container(
+              decoration: BoxDecoration(
+                color: theme.brightness == Brightness.dark
+                    ? colorScheme.surface
+                    : _primaryColor,
+                boxShadow: [
+                  BoxShadow(
+                    color: theme.brightness == Brightness.dark
+                        ? Colors.black.withOpacity(0.3)
+                        : Colors.black.withOpacity(0.05),
+                    blurRadius: 10,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: AppBar(
+                title: Text(
+                  _pageTitle ?? 'سرویس انترنت',
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: theme.brightness == Brightness.dark
+                        ? colorScheme.onSurface
+                        : Colors.white,
+                  ),
+                ),
+                backgroundColor: Colors.transparent,
+                foregroundColor: theme.brightness == Brightness.dark
+                    ? colorScheme.onSurface
+                    : Colors.white,
+                elevation: 0,
+                shadowColor: Colors.transparent,
+                surfaceTintColor: Colors.transparent,
+                actions: [
+                  // دکمه بازگشت
+                  IconButton(
+                    icon: const Icon(Icons.arrow_back),
+                    onPressed: _canGoBack ? _goBack : null,
+                    tooltip: 'بازگشت',
+                  ),
+                  // دکمه جلو
+                  IconButton(
+                    icon: const Icon(Icons.arrow_forward),
+                    onPressed: _canGoForward ? _goForward : null,
+                    tooltip: 'جلو',
+                  ),
+                  // دکمه رفرش
+                  IconButton(
+                    icon: const Icon(Icons.refresh),
+                    onPressed: _reload,
+                    tooltip: 'بارگذاری مجدد',
+                  ),
+                  // دکمه تنظیمات URL
+                  IconButton(
+                    icon: const Icon(Icons.link),
+                    onPressed: _showUrlInputDialog,
+                    tooltip: 'تغییر آدرس',
+                  ),
+                ],
+              ),
+            ),
           ),
-          // دکمه جلو
-          IconButton(
-            icon: const Icon(Icons.arrow_forward),
-            onPressed: _canGoForward ? _goForward : null,
-            tooltip: 'جلو',
-          ),
-          // دکمه رفرش
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: _reload,
-            tooltip: 'بارگذاری مجدد',
-          ),
-          // دکمه تنظیمات URL
-          IconButton(
-            icon: const Icon(Icons.link),
-            onPressed: _showUrlInputDialog,
-            tooltip: 'تغییر آدرس',
-          ),
-        ],
-      ),
       body: Stack(
         children: [
           // WebView

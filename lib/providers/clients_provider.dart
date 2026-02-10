@@ -335,7 +335,22 @@ class ClientsProvider extends ChangeNotifier {
         }
       }
 
-      clientsList.sort((a, b) {
+      // 过滤掉所有被封禁的设备（无论"新连接锁定"是否激活）
+      // 确保被封禁的设备不会显示在连接列表中
+      final filteredClientsList = <ClientInfo>[];
+      for (var client in clientsList) {
+        bool isBanned = false;
+        if (client.macAddress != null || client.ipAddress != null) {
+          isBanned = await isDeviceBanned(client.macAddress, client.ipAddress);
+        }
+        if (!isBanned) {
+          filteredClientsList.add(client);
+        } else {
+          print('🚫 [FILTER_BANNED] دستگاه مسدود شده از لیست حذف شد: MAC=${client.macAddress}, IP=${client.ipAddress}');
+        }
+      }
+
+      filteredClientsList.sort((a, b) {
         if (_deviceIp != null) {
           final aIsDevice = a.ipAddress == _deviceIp;
           final bIsDevice = b.ipAddress == _deviceIp;
@@ -345,7 +360,7 @@ class ClientsProvider extends ChangeNotifier {
         return 0;
       });
 
-      _clients = clientsList;
+      _clients = filteredClientsList;
       _isDataComplete = dataComplete;
       _isLoading = false;
       _errorMessage = null;
@@ -411,6 +426,23 @@ class ClientsProvider extends ChangeNotifier {
       );
 
       if (success == true) {
+        // 立即从连接列表中移除设备（不等待后台刷新）
+        if (macAddress != null) {
+          final macUpper = macAddress.toUpperCase();
+          _clients.removeWhere((client) => 
+            client.macAddress?.toUpperCase() == macUpper ||
+            client.ipAddress == ipAddress
+          );
+        } else {
+          _clients.removeWhere((client) => client.ipAddress == ipAddress);
+        }
+        
+        // 立即刷新封禁列表
+        await loadBannedClients();
+        
+        // 立即通知UI更新
+        notifyListeners();
+        
         // بررسی و مسدود کردن خودکار دستگاه‌های دیگر (در پس‌زمینه)
         // این عملیات را non-blocking می‌کنیم تا UI فوراً پاسخ دهد
         Future.microtask(() async {
@@ -1106,7 +1138,7 @@ class ClientsProvider extends ChangeNotifier {
         return result ?? {'success': false, 'error': 'خطای نامشخص'};
       }
     } catch (e) {
-      _errorMessage = 'خطا در تغییر وضعیت فیلتر: $e';
+      _errorMessage =   'خطا در تغییر وضعیت فیلتر: $e';
       notifyListeners();
       return {'success': false, 'error': _errorMessage};
     }

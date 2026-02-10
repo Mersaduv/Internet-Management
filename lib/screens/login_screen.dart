@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import '../models/mikrotik_connection.dart';
 import '../services/mikrotik_service_manager.dart';
 import '../services/settings_service.dart';
+import '../utils/app_localizations.dart';
 
 /// صفحه ورود مدرن و حرفه‌ای
 class LoginScreen extends StatefulWidget {
@@ -95,22 +96,28 @@ class _LoginScreenState extends State<LoginScreen> {
           Navigator.of(context).pushReplacementNamed('/home');
         }
       } else {
+        final l10n = AppLocalizations.of(context);
         setState(() {
-          _errorMessage = 'نام کاربری یا رمز عبور اشتباه است';
+          _errorMessage = l10n?.pleaseEnterUsername ?? 'Invalid username or password';
         });
       }
     } catch (e) {
       setState(() {
         _isConnecting = false;
-        _errorMessage = 'خطا در اتصال: ${e.toString().replaceAll('Exception: ', '')}';
+        final l10n = AppLocalizations.of(context);
+        _errorMessage = '${l10n?.error ?? 'Error'} connecting: ${e.toString().replaceAll('Exception: ', '')}';
       });
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
+    
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: colorScheme.surface,
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
@@ -126,7 +133,9 @@ class _LoginScreenState extends State<LoginScreen> {
                   // لوگو (بزرگ‌تر و کمی پایین‌تر تا به فیلدها نزدیک شود)
                   Center(
                     child: Image.asset(
-                      'assets/images/logos/logo.png',
+                      isDark
+                          ? 'assets/images/logos/logo_dark.png'
+                          : 'assets/images/logos/logo.png',
                       height: 230,
                       width: 230,
                       errorBuilder: (context, error, stackTrace) {
@@ -135,13 +144,17 @@ class _LoginScreenState extends State<LoginScreen> {
                           width: 230,
                           height: 230,
                           decoration: BoxDecoration(
-                            color: _primaryColor.withOpacity(0.1),
+                            color: isDark
+                                ? _darkenColor(_primaryColor, 0.2).withOpacity(0.1)
+                                : _primaryColor.withOpacity(0.1),
                             shape: BoxShape.circle,
                           ),
-                          child: const Icon(
+                          child: Icon(
                             Icons.router,
                             size: 90,
-                            color: _primaryColor,
+                            color: isDark
+                                ? _darkenColor(_primaryColor, 0.2)
+                                : _primaryColor,
                           ),
                         );
                       },
@@ -151,82 +164,123 @@ class _LoginScreenState extends State<LoginScreen> {
 
                   // عنوان
                   const SizedBox(height: 8),
-                  Text(
-                    'لطفاً اطلاعات روتر خود را وارد کنید',
-                    style: TextStyle(
-                      fontSize: 16,
-                      color: Colors.grey.shade600,
-                    ),
-                    textAlign: TextAlign.center,
+                  Builder(
+                    builder: (context) {
+                      final l10n = AppLocalizations.of(context);
+                      return Text(
+                        l10n?.pleaseEnterRouterInfo ?? 'Please enter your router information',
+                        style: TextStyle(
+                          fontSize: 16,
+                          color: isDark
+                              ? colorScheme.onSurface.withOpacity(0.7)
+                              : Colors.grey.shade600,
+                        ),
+                        textAlign: TextAlign.center,
+                      );
+                    },
                   ),
                   const SizedBox(height: 32),
 
                   // فیلد نام کاربری
-                  TextFormField(
-                    controller: _usernameController,
-                    focusNode: _usernameFocusNode,
-                    decoration: InputDecoration(
-                      labelText: 'نام کاربری',
-                      hintText: 'username',
-                      prefixIcon: const Icon(
+                  Builder(
+                    builder: (context) {
+                      final l10n = AppLocalizations.of(context);
+                      return TextFormField(
+                        controller: _usernameController,
+                        focusNode: _usernameFocusNode,
+                        decoration: InputDecoration(
+                          labelText: l10n?.username ?? 'Username',
+                          hintText: 'username',
+                      prefixIcon: Icon(
                         Icons.person_outline,
-                        color: _primaryColor,
+                        color: isDark
+                            ? _darkenColor(_primaryColor, 0.2)
+                            : _primaryColor,
                       ),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide(color: Colors.grey.shade300),
+                        borderSide: BorderSide(
+                          color: isDark
+                              ? colorScheme.outline.withOpacity(0.2)
+                              : Colors.grey.shade300,
+                        ),
                       ),
                       enabledBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide(color: Colors.grey.shade300),
+                        borderSide: BorderSide(
+                          color: isDark
+                              ? colorScheme.outline.withOpacity(0.2)
+                              : Colors.grey.shade300,
+                        ),
                       ),
                       focusedBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
-                        borderSide: const BorderSide(
-                          color: _primaryColor,
+                        borderSide: BorderSide(
+                          color: isDark
+                              ? _darkenColor(_primaryColor, 0.2)
+                              : _primaryColor,
                           width: 2,
                         ),
                       ),
                       filled: true,
-                      fillColor: Colors.grey.shade50,
+                      fillColor: isDark
+                          ? colorScheme.surfaceContainerHighest
+                          : Colors.grey.shade50,
                       contentPadding: const EdgeInsets.symmetric(
                         horizontal: 20,
                         vertical: 18,
                       ),
-                      labelStyle: TextStyle(color: Colors.grey.shade700),
-                      hintStyle: TextStyle(color: Colors.grey.shade400),
+                      labelStyle: TextStyle(
+                        color: isDark
+                            ? colorScheme.onSurface.withOpacity(0.7)
+                            : Colors.grey.shade700,
+                      ),
+                      hintStyle: TextStyle(
+                        color: isDark
+                            ? colorScheme.onSurface.withOpacity(0.5)
+                            : Colors.grey.shade400,
+                      ),
                     ),
                     textDirection: TextDirection.ltr,
                     textInputAction: TextInputAction.next,
                     onFieldSubmitted: (_) {
                       FocusScope.of(context).requestFocus(_passwordFocusNode);
                     },
-                    validator: (value) {
-                      if (value == null || value.trim().isEmpty) {
-                        return 'لطفاً نام کاربری را وارد کنید';
-                      }
-                      return null;
+                        validator: (value) {
+                          if (value == null || value.trim().isEmpty) {
+                            return l10n?.pleaseEnterUsername ?? 'Please enter username';
+                          }
+                          return null;
+                        },
+                      );
                     },
                   ),
                   const SizedBox(height: 20),
 
                   // فیلد رمز عبور
-                  TextFormField(
-                    controller: _passwordController,
-                    focusNode: _passwordFocusNode,
-                    decoration: InputDecoration(
-                      labelText: 'رمز عبور',
-                      hintText: 'رمز عبور خود را وارد کنید',
-                      prefixIcon: const Icon(
+                  Builder(
+                    builder: (context) {
+                      final l10n = AppLocalizations.of(context);
+                      return TextFormField(
+                        controller: _passwordController,
+                        focusNode: _passwordFocusNode,
+                        decoration: InputDecoration(
+                          labelText: l10n?.password ?? 'Password',
+                          hintText: l10n?.enterPassword ?? 'Enter your password',
+                      prefixIcon: Icon(
                         Icons.lock_outline,
-                        color: _primaryColor,
+                        color: isDark
+                            ? _darkenColor(_primaryColor, 0.2)
+                            : _primaryColor,
                       ),
                       suffixIcon: IconButton(
                         icon: Icon(
                           _obscurePassword
                               ? Icons.visibility_outlined
                               : Icons.visibility_off_outlined,
-                          color: Colors.grey.shade600,
+                          color: isDark
+                              ? colorScheme.onSurface.withOpacity(0.6)
+                              : Colors.grey.shade600,
                         ),
                         onPressed: () {
                           setState(() {
@@ -236,37 +290,60 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide(color: Colors.grey.shade300),
+                        borderSide: BorderSide(
+                          color: isDark
+                              ? colorScheme.outline.withOpacity(0.2)
+                              : Colors.grey.shade300,
+                        ),
                       ),
                       enabledBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide(color: Colors.grey.shade300),
+                        borderSide: BorderSide(
+                          color: isDark
+                              ? colorScheme.outline.withOpacity(0.2)
+                              : Colors.grey.shade300,
+                        ),
                       ),
                       focusedBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
-                        borderSide: const BorderSide(
-                          color: _primaryColor,
+                        borderSide: BorderSide(
+                          color: isDark
+                              ? _darkenColor(_primaryColor, 0.2)
+                              : _primaryColor,
                           width: 2,
                         ),
                       ),
                       filled: true,
-                      fillColor: Colors.grey.shade50,
+                      fillColor: isDark
+                          ? colorScheme.surfaceContainerHighest
+                          : Colors.grey.shade50,
                       contentPadding: const EdgeInsets.symmetric(
                         horizontal: 20,
                         vertical: 18,
                       ),
-                      labelStyle: TextStyle(color: Colors.grey.shade700),
-                      hintStyle: TextStyle(color: Colors.grey.shade400),
+                      labelStyle: TextStyle(
+                        color: isDark
+                            ? colorScheme.onSurface.withOpacity(0.7)
+                            : Colors.grey.shade700,
+                      ),
+                      hintStyle: TextStyle(
+                        color: isDark
+                            ? colorScheme.onSurface.withOpacity(0.5)
+                            : Colors.grey.shade400,
+                      ),
                     ),
                     obscureText: _obscurePassword,
                     textDirection: TextDirection.ltr,
                     textInputAction: TextInputAction.done,
                     onFieldSubmitted: (_) => _handleLogin(),
-                    validator: (value) {
-                      if (value == null || value.isEmpty) {
-                        return 'لطفاً رمز عبور را وارد کنید';
-                      }
-                      return null;
+                        validator: (value) {
+                          final l10n = AppLocalizations.of(context);
+                          if (value == null || value.isEmpty) {
+                            return l10n?.pleaseEnterPassword ?? 'Please enter password';
+                          }
+                          return null;
+                        },
+                      );
                     },
                   ),
                   const SizedBox(height: 32),
@@ -287,7 +364,9 @@ class _LoginScreenState extends State<LoginScreen> {
                     child: ElevatedButton(
                       onPressed: _isConnecting ? null : _handleLogin,
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: _primaryColor,
+                        backgroundColor: isDark
+                            ? _darkenColor(_primaryColor, 0.2)
+                            : _primaryColor,
                         foregroundColor: Colors.white,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
@@ -305,18 +384,23 @@ class _LoginScreenState extends State<LoginScreen> {
                                 ),
                               ),
                             )
-                          : const Row(
+                          : Row(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                Icon(Icons.login, size: 22),
-                                SizedBox(width: 12),
-                                Text(
-                                  'ورود',
-                                  style: TextStyle(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.bold,
-                                    letterSpacing: 0.5,
-                                  ),
+                                const Icon(Icons.login, size: 22),
+                                const SizedBox(width: 12),
+                                Builder(
+                                  builder: (context) {
+                                    final l10n = AppLocalizations.of(context);
+                                    return Text(
+                                      l10n?.login ?? 'Login',
+                                      style: TextStyle(
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.bold,
+                                        letterSpacing: 0.5,
+                                      ),
+                                    );
+                                  },
                                 ),
                               ],
                             ),
@@ -329,10 +413,14 @@ class _LoginScreenState extends State<LoginScreen> {
                     Container(
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
-                        color: Colors.red.shade50,
+                        color: isDark
+                            ? Colors.red.shade900.withOpacity(0.3)
+                            : Colors.red.shade50,
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(
-                          color: Colors.red.shade200,
+                          color: isDark
+                              ? Colors.red.shade700
+                              : Colors.red.shade200,
                           width: 1.5,
                         ),
                       ),
@@ -340,7 +428,9 @@ class _LoginScreenState extends State<LoginScreen> {
                         children: [
                           Icon(
                             Icons.error_outline_rounded,
-                            color: Colors.red.shade700,
+                            color: isDark
+                                ? Colors.red.shade400
+                                : Colors.red.shade700,
                             size: 24,
                           ),
                           const SizedBox(width: 12),
@@ -348,7 +438,9 @@ class _LoginScreenState extends State<LoginScreen> {
                             child: Text(
                               _errorMessage!,
                               style: TextStyle(
-                                color: Colors.red.shade700,
+                                color: isDark
+                                    ? Colors.red.shade400
+                                    : Colors.red.shade700,
                                 fontSize: 14,
                                 fontWeight: FontWeight.w500,
                               ),
@@ -367,5 +459,13 @@ class _LoginScreenState extends State<LoginScreen> {
         ),
       ),
     );
+  }
+
+  /// تیره کردن رنگ برای تم تاریک
+  Color _darkenColor(Color color, double amount) {
+    assert(amount >= 0 && amount <= 1);
+    final hsl = HSLColor.fromColor(color);
+    final lightness = (hsl.lightness * (1 - amount)).clamp(0.0, 1.0);
+    return hsl.withLightness(lightness).toColor();
   }
 }

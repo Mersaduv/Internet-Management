@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/settings_service.dart';
+import '../utils/app_localizations.dart';
 
 /// صفحه تنظیمات اتصال MikroTik
 class SettingsScreen extends StatefulWidget {
@@ -43,8 +44,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _isLoading = false;
       });
     } catch (e) {
+      final l10n = AppLocalizations.of(context);
       setState(() {
-        _errorMessage = 'خطا در بارگذاری تنظیمات: $e';
+        _errorMessage = '${l10n?.errorLoadingSettings ?? 'Error loading settings'}: $e';
         _isLoading = false;
       });
     }
@@ -66,9 +68,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
       await _settingsService.setPort(int.parse(_portController.text.trim()));
       await _settingsService.setUseSsl(_useSsl);
 
+      final l10n = AppLocalizations.of(context);
       setState(() {
         _isSaving = false;
-        _successMessage = 'تنظیمات با موفقیت ذخیره شد';
+        _successMessage = l10n?.settingsSaved ?? 'Settings saved successfully';
       });
 
       // پاک کردن پیام موفقیت بعد از 3 ثانیه
@@ -80,27 +83,29 @@ class _SettingsScreenState extends State<SettingsScreen> {
         }
       });
     } catch (e) {
+      final l10n = AppLocalizations.of(context);
       setState(() {
         _isSaving = false;
-        _errorMessage = 'خطا در ذخیره تنظیمات: $e';
+        _errorMessage = '${l10n?.settingsSaveError ?? 'Error saving settings'}: $e';
       });
     }
   }
 
   Future<void> _resetToDefaults() async {
+    final l10n = AppLocalizations.of(context);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('بازنشانی تنظیمات'),
-        content: const Text('آیا مطمئن هستید که می‌خواهید تنظیمات را به حالت پیش‌فرض بازگردانید؟'),
+        title: Text(l10n?.resetToDefaults ?? 'Reset to Defaults'),
+        content: Text(l10n?.resetSettingsConfirm ?? 'Are you sure you want to reset settings to default values?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('لغو'),
+            child: Text(l10n?.cancel ?? 'Cancel'),
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('بازنشانی'),
+            child: Text(l10n?.reset ?? 'Reset'),
           ),
         ],
       ),
@@ -111,7 +116,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       await _loadSettings();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('تنظیمات به حالت پیش‌فرض بازگردانده شد')),
+          SnackBar(content: Text(l10n?.settingsReset ?? 'Settings reset to default')),
         );
       }
     }
@@ -126,11 +131,51 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final l10n = AppLocalizations.of(context);
+    
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('تنظیمات اتصال'),
-        backgroundColor: _primaryColor,
-        foregroundColor: Colors.white,
+      appBar: PreferredSize(
+        preferredSize: const Size.fromHeight(kToolbarHeight),
+        child: Container(
+          decoration: BoxDecoration(
+            color: theme.brightness == Brightness.dark
+                ? colorScheme.surface
+                : _primaryColor,
+            boxShadow: [
+              BoxShadow(
+                color: theme.brightness == Brightness.dark
+                    ? Colors.black.withOpacity(0.3)
+                    : Colors.black.withOpacity(0.05),
+                blurRadius: 10,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Builder(
+            builder: (context) {
+              final l10n = AppLocalizations.of(context);
+              return AppBar(
+                title: Text(
+                  l10n?.connectionSettings ?? 'Connection Settings',
+                  style: TextStyle(
+                    color: theme.brightness == Brightness.dark
+                        ? colorScheme.onSurface
+                        : Colors.white,
+                  ),
+                ),
+            backgroundColor: Colors.transparent,
+            foregroundColor: theme.brightness == Brightness.dark
+                ? colorScheme.onSurface
+                : Colors.white,
+            elevation: 0,
+            shadowColor: Colors.transparent,
+            surfaceTintColor: Colors.transparent,
+              );
+            },
+          ),
+        ),
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
@@ -144,6 +189,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     // کارت تنظیمات
                     Card(
                       elevation: 2,
+                      color: colorScheme.surface,
                       child: Padding(
                         padding: const EdgeInsets.all(16.0),
                         child: Column(
@@ -153,8 +199,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               children: [
                                 Icon(Icons.router, color: _primaryColor),
                                 const SizedBox(width: 8),
-                                const Text(
-                                  'تنظیمات MikroTik RouterOS',
+                                Text(
+                                  l10n?.mikrotikRouterOS ?? 'MikroTik RouterOS Settings',
                                   style: TextStyle(
                                     fontSize: 18,
                                     fontWeight: FontWeight.bold,
@@ -168,7 +214,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             TextFormField(
                               controller: _hostController,
                               decoration: InputDecoration(
-                                labelText: 'آدرس IP یا Hostname',
+                                labelText: l10n?.ipAddressOrHostname ?? 'IP Address or Hostname',
                                 hintText: '192.168.88.1',
                                 prefixIcon: const Icon(Icons.router),
                                 border: OutlineInputBorder(
@@ -178,7 +224,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               textDirection: TextDirection.ltr,
                               validator: (value) {
                                 if (value == null || value.trim().isEmpty) {
-                                  return 'لطفاً آدرس IP را وارد کنید';
+                                  return l10n?.pleaseEnterIP ?? 'Please enter IP address';
                                 }
                                 return null;
                               },
@@ -193,7 +239,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                   child: TextFormField(
                                     controller: _portController,
                                     decoration: InputDecoration(
-                                      labelText: 'پورت',
+                                      labelText: l10n?.port ?? 'Port',
                                       hintText: '8728',
                                       prefixIcon: const Icon(Icons.numbers),
                                       border: OutlineInputBorder(
@@ -204,11 +250,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                     textDirection: TextDirection.ltr,
                                     validator: (value) {
                                       if (value == null || value.trim().isEmpty) {
-                                        return 'لطفاً پورت را وارد کنید';
+                                        return l10n?.pleaseEnterPort ?? 'Please enter port';
                                       }
                                       final port = int.tryParse(value.trim());
                                       if (port == null || port < 1 || port > 65535) {
-                                        return 'پورت باید عددی بین 1 تا 65535 باشد';
+                                        return l10n?.portRangeError ?? 'Port must be a number between 1 and 65535';
                                       }
                                       return null;
                                     },
@@ -248,18 +294,33 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         padding: const EdgeInsets.all(12),
                         margin: const EdgeInsets.only(bottom: 16),
                         decoration: BoxDecoration(
-                          color: Colors.green.shade50,
+                          color: theme.brightness == Brightness.dark
+                              ? Colors.green.shade900.withOpacity(0.3)
+                              : Colors.green.shade50,
                           borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: Colors.green.shade200),
+                          border: Border.all(
+                            color: theme.brightness == Brightness.dark
+                                ? Colors.green.shade700
+                                : Colors.green.shade200,
+                          ),
                         ),
                         child: Row(
                           children: [
-                            Icon(Icons.check_circle, color: Colors.green.shade700),
+                            Icon(
+                              Icons.check_circle,
+                              color: theme.brightness == Brightness.dark
+                                  ? Colors.green.shade300
+                                  : Colors.green.shade700,
+                            ),
                             const SizedBox(width: 8),
                             Expanded(
                               child: Text(
                                 _successMessage!,
-                                style: TextStyle(color: Colors.green.shade700),
+                                style: TextStyle(
+                                  color: theme.brightness == Brightness.dark
+                                      ? Colors.green.shade300
+                                      : Colors.green.shade700,
+                                ),
                               ),
                             ),
                           ],
@@ -272,18 +333,33 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         padding: const EdgeInsets.all(12),
                         margin: const EdgeInsets.only(bottom: 16),
                         decoration: BoxDecoration(
-                          color: Colors.red.shade50,
+                          color: theme.brightness == Brightness.dark
+                              ? Colors.red.shade900.withOpacity(0.3)
+                              : Colors.red.shade50,
                           borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: Colors.red.shade200),
+                          border: Border.all(
+                            color: theme.brightness == Brightness.dark
+                                ? Colors.red.shade700
+                                : Colors.red.shade200,
+                          ),
                         ),
                         child: Row(
                           children: [
-                            Icon(Icons.error_outline, color: Colors.red.shade700),
+                            Icon(
+                              Icons.error_outline,
+                              color: theme.brightness == Brightness.dark
+                                  ? Colors.red.shade300
+                                  : Colors.red.shade700,
+                            ),
                             const SizedBox(width: 8),
                             Expanded(
                               child: Text(
                                 _errorMessage!,
-                                style: TextStyle(color: Colors.red.shade700),
+                                style: TextStyle(
+                                  color: theme.brightness == Brightness.dark
+                                      ? Colors.red.shade300
+                                      : Colors.red.shade700,
+                                ),
                               ),
                             ),
                           ],
@@ -300,7 +376,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               child: CircularProgressIndicator(strokeWidth: 2),
                             )
                           : const Icon(Icons.save),
-                      label: Text(_isSaving ? 'در حال ذخیره...' : 'ذخیره تنظیمات'),
+                      label: Text(_isSaving ? (l10n?.saving ?? 'Saving...') : (l10n?.saveSettings ?? 'Save Settings')),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: _primaryColor,
                         foregroundColor: Colors.white,
@@ -317,7 +393,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     OutlinedButton.icon(
                       onPressed: _resetToDefaults,
                       icon: const Icon(Icons.restore),
-                      label: const Text('بازنشانی به پیش‌فرض'),
+                      label: Text(l10n?.resetToDefaults ?? 'Reset to Defaults'),
                       style: OutlinedButton.styleFrom(
                         foregroundColor: _primaryColor,
                         padding: const EdgeInsets.symmetric(vertical: 16),
