@@ -220,8 +220,8 @@ class AppLocalizations {
 
   // 登录页面
   String get pleaseEnterRouterInfo => locale.languageCode == 'en'
-      ? 'Please enter your router information'
-      : 'لطفاً اطلاعات روتر خود را وارد کنید';
+      ? 'Please enter your information'
+      : 'لطفاً اطلاعات خود را وارد کنید';
   String get username => locale.languageCode == 'en' ? 'Username' : 'نام کاربری';
   String get password => locale.languageCode == 'en' ? 'Password' : 'رمز عبور';
   String get pleaseEnterUsername => locale.languageCode == 'en'
@@ -234,6 +234,12 @@ class AppLocalizations {
   String get enterPassword => locale.languageCode == 'en'
       ? 'Enter your password'
       : 'رمز عبور خود را وارد کنید';
+  String get invalidUsernameOrPassword => locale.languageCode == 'en'
+      ? 'Invalid username or password'
+      : 'نام کاربری یا رمز عبور نامعتبر است';
+  String get loginFailed => locale.languageCode == 'en'
+      ? 'Login failed. Please check your credentials.'
+      : 'ورود ناموفق بود. لطفاً اطلاعات ورود خود را بررسی کنید.';
 
   // 设备详情页面
   String get deviceDetails => locale.languageCode == 'en' ? 'Device Details' : 'جزئیات دستگاه';
@@ -275,6 +281,9 @@ class AppLocalizations {
   String get banDeviceConfirm => locale.languageCode == 'en'
       ? 'Are you sure you want to ban device {ip}?'
       : 'آیا مطمئن هستید که می‌خواهید دستگاه {ip} را مسدود کنید؟';
+  String get deviceNotConnected => locale.languageCode == 'en'
+      ? 'The device is not currently connected. Please check the device connection first.'
+      : 'دستگاه مورد نظر در حال حاضر متصل نیست. لطفاً ابتدا اتصال دستگاه را بررسی کنید.';
   String get makeStatic => locale.languageCode == 'en' ? 'Make Static' : 'Static کردن';
   String get makeStaticConfirm => locale.languageCode == 'en'
       ? 'Are you sure you want to make device {ip} static?'
@@ -384,6 +393,12 @@ class AppLocalizations {
   String get errorUnbanning => locale.languageCode == 'en'
       ? 'Error unbanning device'
       : 'خطا در رفع مسدودیت';
+  String get deviceBannedSuccess => locale.languageCode == 'en'
+      ? 'Device banned successfully'
+      : 'دستگاه با موفقیت مسدود شد';
+  String get errorBanningDevice => locale.languageCode == 'en'
+      ? 'Error banning device'
+      : 'خطا در مسدود کردن دستگاه';
   String get retryText => locale.languageCode == 'en' ? 'Retry' : 'تلاش مجدد';
   String get noConnectedDevicesText => locale.languageCode == 'en'
       ? 'No connected devices found'

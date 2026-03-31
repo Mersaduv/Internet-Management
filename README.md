@@ -1,6 +1,11 @@
 # internet_management
 
-A new Flutter project.
+A Flutter application for managing internet connections and MikroTik routers.
+
+## Developer
+
+**Name:** Mersad Karimi  
+**Email:** mersadkarimi001@gmail.com
 
 ## Getting Started
 

@@ -100,6 +100,22 @@ class MikroTikServiceManager {
     return await _service!.getDeviceIp();
   }
 
+  /// دریافت Default Gateway از route table RouterOS
+  Future<String?> getDefaultGateway() async {
+    if (_service == null || !isConnected) {
+      return null;
+    }
+    return await _service!.getDefaultGateway();
+  }
+
+  /// دریافت Default Gateway یا IP روتر (fallback)
+  Future<String?> getDefaultGatewayOrRouterIp() async {
+    if (_service == null || !isConnected) {
+      return null;
+    }
+    return await _service!.getDefaultGatewayOrRouterIp();
+  }
+
   /// دریافت لیست دستگاه‌های مسدود شده
   Future<List<Map<String, dynamic>>> getBannedClients() async {
     if (_service == null || !isConnected) {

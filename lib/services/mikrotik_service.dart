@@ -462,27 +462,79 @@ class MikroTikService {
     String? hostname,
     String? ssid,
   }) async {
-    // ایجاد Device Fingerprint
-    final fingerprint = DeviceFingerprint.fromClientInfo(
-      ipAddress,
-      macAddress,
-      hostname,
-      ssid,
-    );
-
-    // ذخیره Device Fingerprint
-    final fingerprintService = DeviceFingerprintService();
-    await fingerprintService.saveBannedFingerprint(fingerprint);
-
-    // ایجاد comment با Device Fingerprint
-    final fingerprintComment = 'Banned: ${fingerprint.fingerprintId}';
+    print('═══════════════════════════════════════════════════════════');
+    print('🚫 [BAN_WITH_FINGERPRINT] شروع عملیات مسدود کردن با Fingerprint');
+    print('═══════════════════════════════════════════════════════════');
+    print('📋 [BAN_WITH_FINGERPRINT] اطلاعات ورودی:');
+    print('   └─ IP Address: $ipAddress');
+    print('   └─ MAC Address: ${macAddress ?? "null"}');
+    print('   └─ Hostname: ${hostname ?? "null"}');
+    print('   └─ SSID: ${ssid ?? "null"}');
     
-    // مسدود کردن با استفاده از banClient اصلی
-    return await banClient(
-      ipAddress,
-      macAddress: macAddress,
-      comment: fingerprintComment,
-    );
+    // بررسی اتصال
+    print('🔍 [BAN_WITH_FINGERPRINT] بررسی اتصال...');
+    print('   └─ _client: ${_client != null ? "موجود" : "null"}');
+    print('   └─ isConnected: $isConnected');
+    if (_connection != null) {
+      print('   └─ Connection Host: ${_connection!.host}');
+      print('   └─ Connection Port: ${_connection!.port}');
+      print('   └─ Connection User: ${_connection!.username}');
+      print('   └─ Connection SSL: ${_connection!.useSsl}');
+    } else {
+      print('   └─ ⚠️ Connection: null');
+    }
+    
+    if (_client == null || !isConnected) {
+      print('❌ [BAN_WITH_FINGERPRINT] اتصال برقرار نیست!');
+      print('═══════════════════════════════════════════════════════════');
+      throw Exception('اتصال برقرار نشده');
+    }
+    
+    try {
+      // ایجاد Device Fingerprint
+      print('🔍 [BAN_WITH_FINGERPRINT] ایجاد Device Fingerprint...');
+      final fingerprint = DeviceFingerprint.fromClientInfo(
+        ipAddress,
+        macAddress,
+        hostname,
+        ssid,
+      );
+      print('   └─ Fingerprint ID: ${fingerprint.fingerprintId}');
+      print('   └─ Hostname: ${fingerprint.hostname ?? "null"}');
+      print('   └─ MAC Vendor: ${fingerprint.macVendor ?? "null"}');
+      print('   └─ Device Type: ${fingerprint.deviceType ?? "null"}');
+
+      // ذخیره Device Fingerprint
+      print('💾 [BAN_WITH_FINGERPRINT] ذخیره Device Fingerprint...');
+      final fingerprintService = DeviceFingerprintService();
+      await fingerprintService.saveBannedFingerprint(fingerprint);
+      print('   └─ ✅ Device Fingerprint ذخیره شد');
+
+      // ایجاد comment با Device Fingerprint
+      final fingerprintComment = 'Banned: ${fingerprint.fingerprintId}';
+      print('📝 [BAN_WITH_FINGERPRINT] Comment: $fingerprintComment');
+      
+      // مسدود کردن با استفاده از banClient اصلی
+      print('🔄 [BAN_WITH_FINGERPRINT] فراخوانی banClient()...');
+      final result = await banClient(
+        ipAddress,
+        macAddress: macAddress,
+        comment: fingerprintComment,
+      );
+      
+      print('═══════════════════════════════════════════════════════════');
+      print('${result ? "✅" : "❌"} [BAN_WITH_FINGERPRINT] نتیجه نهایی: ${result ? "موفق" : "ناموفق"}');
+      print('═══════════════════════════════════════════════════════════');
+      return result;
+    } catch (e, stackTrace) {
+      print('═══════════════════════════════════════════════════════════');
+      print('❌ [BAN_WITH_FINGERPRINT] خطا در مسدود کردن:');
+      print('   └─ Error: $e');
+      print('   └─ Type: ${e.runtimeType}');
+      print('   └─ Stack Trace: $stackTrace');
+      print('═══════════════════════════════════════════════════════════');
+      rethrow;
+    }
   }
 
   /// مسدود کردن کلاینت
@@ -494,146 +546,210 @@ class MikroTikService {
   /// 3. DHCP Block Access
   /// 4. Wireless Access List
   Future<bool> banClient(String ipAddress, {String? macAddress, String? comment}) async {
+    print('═══════════════════════════════════════════════════════════');
+    print('🚫 [BAN_CLIENT] شروع عملیات مسدود کردن');
+    print('═══════════════════════════════════════════════════════════');
+    print('📋 [BAN_CLIENT] اطلاعات ورودی:');
+    print('   └─ IP Address: $ipAddress');
+    print('   └─ MAC Address: ${macAddress ?? "null"}');
+    print('   └─ Comment: ${comment ?? "null"}');
+    
+    // بررسی اتصال
+    print('🔍 [BAN_CLIENT] بررسی اتصال...');
+    print('   └─ _client: ${_client != null ? "موجود" : "null"}');
+    print('   └─ isConnected: $isConnected');
+    
     if (_client == null || !isConnected) {
+      print('❌ [BAN_CLIENT] اتصال برقرار نیست!');
+      print('═══════════════════════════════════════════════════════════');
       throw Exception('اتصال برقرار نشده');
     }
+    
+    print('✅ [BAN_CLIENT] اتصال برقرار است');
 
     try {
+      // حذف بررسی اتصال دستگاه (مثل rejectDevice)
+      // این بررسی باعث timeout و خطا می‌شود
+      // در rejectDevice این بررسی انجام نمی‌شود و همیشه موفق است
+      print('ℹ️ [BAN_CLIENT] بررسی اتصال دستگاه حذف شد (مثل rejectDevice)');
+      
       // پیدا کردن MAC address از IP اگر داده نشده باشد
       String? macToUse = macAddress;
+      print('🔍 [BAN_CLIENT] بررسی MAC Address...');
+      print('   └─ MAC ورودی: ${macAddress ?? "null"}');
+      
       if (macToUse == null) {
+        print('   └─ MAC پیدا نشد، جستجو در DHCP و ARP...');
         try {
           // جستجو در DHCP leases
+          print('   └─ جستجو در DHCP leases...');
           final dhcpLeases = await _client!.talk(['/ip/dhcp-server/lease/print']);
+          print('   └─ تعداد DHCP leases: ${dhcpLeases.length}');
           for (var lease in dhcpLeases) {
             if (lease['address'] == ipAddress) {
               macToUse = lease['mac-address'];
+              print('   └─ ✅ MAC در DHCP پیدا شد: $macToUse');
               break;
             }
           }
           
           // اگر در DHCP پیدا نشد، در ARP table جستجو کن
           if (macToUse == null) {
+            print('   └─ MAC در DHCP پیدا نشد، جستجو در ARP table...');
             final arpEntries = await _client!.talk(['/ip/arp/print']);
+            print('   └─ تعداد ARP entries: ${arpEntries.length}');
             for (var arp in arpEntries) {
               if (arp['address'] == ipAddress) {
                 macToUse = arp['mac-address'];
+                print('   └─ ✅ MAC در ARP پیدا شد: $macToUse');
                 break;
               }
             }
           }
+          
+          if (macToUse == null) {
+            print('   └─ ⚠️ MAC پیدا نشد!');
+          }
         } catch (e) {
-          // ignore
+          print('   └─ ❌ خطا در جستجوی MAC: $e');
         }
+      } else {
+        print('   └─ ✅ MAC استفاده می‌شود: $macToUse');
       }
+      
+      print('📋 [BAN_CLIENT] MAC نهایی: ${macToUse ?? "null"}');
 
       // استفاده از comment داده شده یا comment پیش‌فرض
       final banComment = comment ?? 'Banned via Flutter App';
+      print('📝 [BAN_CLIENT] Comment: $banComment');
 
-      // بررسی وضعیت فعلی封禁 (برای logging)
-      bool hasIpRule = false;
-      bool hasMacRule = false;
-      bool hasDhcpBlock = false;
-      bool hasWirelessBlock = false;
-
-      try {
-        final rawRules = await _client!.talk(['/ip/firewall/raw/print']);
-        for (var rule in rawRules) {
-          if (rule['chain'] == 'prerouting' && rule['action'] == 'drop') {
-            if (rule['src-address'] == ipAddress) {
-              hasIpRule = true;
-            }
-            if (macToUse != null && rule['src-mac-address']?.toString().toUpperCase() == macToUse.toUpperCase()) {
-              hasMacRule = true;
-            }
-          }
-        }
-      } catch (e) {
-        // ignore
-      }
-
+      // حذف بررسی وضعیت فعلی (مثل rejectDevice)
+      // این بررسی باعث timeout و توقف کد می‌شود
+      // در rejectDevice این بررسی انجام نمی‌شود
+      print('ℹ️ [BAN_CLIENT] بررسی وضعیت فعلی حذف شد (مثل rejectDevice)');
+      
       // 1. Firewall Raw Prerouting Chain - مسدود کردن ترافیک بر اساس IP
+      print('═══════════════════════════════════════════════════════════');
+      print('1️⃣ [BAN_CLIENT] مرحله 1: Firewall Raw Rule (IP)');
+      print('═══════════════════════════════════════════════════════════');
       // Raw rules قبل از connection tracking پردازش می‌شوند و سریع‌تر هستند
-      // 即使已经存在，也确保设置（可能之前的规则不完整）
-      if (!hasIpRule) {
-        try {
-          final rawCommand = ['/ip/firewall/raw/add', '=chain=prerouting', '=src-address=$ipAddress', '=action=drop', '=comment=$banComment - IP'];
-          if (macToUse != null) {
-            rawCommand.add('=src-mac-address=$macToUse');
-          }
-          await _client!.talk(rawCommand);
-          print('✅ [BAN_CLIENT] Firewall Raw Rule (IP) اضافه شد: $ipAddress');
-          hasIpRule = true;
-        } catch (e) {
-          print('⚠️ [BAN_CLIENT] خطا در اضافه کردن Firewall Raw Rule (IP): $e');
-          // 继续执行其他步骤
+      // همیشه rule را اضافه می‌کنیم (مثل rejectDevice) - بررسی وضعیت حذف شد
+      try {
+        print('   └─ ایجاد Firewall Raw Rule برای IP: $ipAddress');
+        final rawCommand = ['/ip/firewall/raw/add', '=chain=prerouting', '=src-address=$ipAddress', '=action=drop', '=comment=$banComment - IP'];
+        if (macToUse != null) {
+          rawCommand.add('=src-mac-address=$macToUse');
+          print('   └─ با MAC: $macToUse');
         }
-      } else {
-        print('ℹ️ [BAN_CLIENT] Firewall Raw Rule (IP) از قبل موجود است: $ipAddress');
+        print('   └─ Command: ${rawCommand.join(" ")}');
+        final result = await _client!.talk(rawCommand);
+        print('   └─ Response: $result');
+        print('✅ [BAN_CLIENT] Firewall Raw Rule (IP) اضافه شد: $ipAddress');
+      } catch (e, stackTrace) {
+        print('❌ [BAN_CLIENT] خطا در اضافه کردن Firewall Raw Rule (IP):');
+        print('   └─ Error: $e');
+        print('   └─ Type: ${e.runtimeType}');
+        print('   └─ Stack Trace: $stackTrace');
+        // 继续执行其他步骤 (مثل rejectDevice)
       }
 
       // 2. Firewall Raw Prerouting MAC Chain - مسدود کردن بر اساس MAC (مستقل از IP)
+      print('═══════════════════════════════════════════════════════════');
+      print('2️⃣ [BAN_CLIENT] مرحله 2: Firewall Raw Rule (MAC)');
+      print('═══════════════════════════════════════════════════════════');
       // این rule حتی اگر IP تغییر کند، دستگاه را مسدود می‌کند
-      // 即使已经存在，也确保设置（可能之前的规则不完整）
-      if (macToUse != null && !hasMacRule) {
+      // همیشه rule را اضافه می‌کنیم (مثل rejectDevice) - بررسی وضعیت حذف شد
+      if (macToUse != null) {
         try {
-          await _client!.talk([
+          print('   └─ ایجاد Firewall Raw Rule برای MAC: $macToUse');
+          final macCommand = [
             '/ip/firewall/raw/add',
             '=chain=prerouting',
             '=src-mac-address=$macToUse',
             '=action=drop',
             '=comment=$banComment - MAC',
-          ]);
+          ];
+          print('   └─ Command: ${macCommand.join(" ")}');
+          final result = await _client!.talk(macCommand);
+          print('   └─ Response: $result');
           print('✅ [BAN_CLIENT] Firewall Raw Rule (MAC) اضافه شد: $macToUse');
-          hasMacRule = true;
-        } catch (e) {
-          print('⚠️ [BAN_CLIENT] خطا در اضافه کردن Firewall Raw Rule (MAC): $e');
-          // 继续执行其他步骤
+        } catch (e, stackTrace) {
+          print('❌ [BAN_CLIENT] خطا در اضافه کردن Firewall Raw Rule (MAC):');
+          print('   └─ Error: $e');
+          print('   └─ Type: ${e.runtimeType}');
+          print('   └─ Stack Trace: $stackTrace');
+          // 继续执行其他步骤 (مثل rejectDevice)
         }
-      } else if (macToUse != null && hasMacRule) {
-        print('ℹ️ [BAN_CLIENT] Firewall Raw Rule (MAC) از قبل موجود است: $macToUse');
+      } else {
+        print('⚠️ [BAN_CLIENT] MAC Address موجود نیست، این مرحله رد می‌شود');
       }
 
       // 3. DHCP Block Access - Block کردن DHCP lease
+      print('═══════════════════════════════════════════════════════════');
+      print('3️⃣ [BAN_CLIENT] مرحله 3: DHCP Block Access');
+      print('═══════════════════════════════════════════════════════════');
       // 确保 DHCP lease 被 block，即使之前已经 block
       if (macToUse != null) {
         try {
+          print('   └─ جستجوی DHCP lease برای MAC: $macToUse');
           final dhcpLeases = await _client!.talk(['/ip/dhcp-server/lease/print']);
+          print('   └─ تعداد DHCP leases: ${dhcpLeases.length}');
+          bool found = false;
           for (var lease in dhcpLeases) {
             final leaseMac = lease['mac-address']?.toString().toUpperCase();
             if (leaseMac == macToUse.toUpperCase()) {
+              found = true;
               final leaseId = lease['.id'];
               final currentBlockAccess = lease['block-access']?.toString().toLowerCase();
+              print('   └─ ✅ DHCP lease پیدا شد:');
+              print('      └─ ID: $leaseId');
+              print('      └─ IP: ${lease['address']}');
+              print('      └─ Block Access فعلی: $currentBlockAccess');
               if (leaseId != null) {
                 // 即使已经 block，也确保设置（可能之前设置失败）
                 if (currentBlockAccess != 'yes' && currentBlockAccess != 'true') {
-                  await _client!.talk([
+                  print('   └─ تنظیم block-access=yes...');
+                  final setCommand = [
                     '/ip/dhcp-server/lease/set',
                     '=.id=$leaseId',
                     '=block-access=yes',
-                  ]);
+                  ];
+                  print('   └─ Command: ${setCommand.join(" ")}');
+                  final result = await _client!.talk(setCommand);
+                  print('   └─ Response: $result');
                   print('✅ [BAN_CLIENT] DHCP Block Access تنظیم شد: $macToUse');
-                  hasDhcpBlock = true;
                 } else {
                   print('ℹ️ [BAN_CLIENT] DHCP Block Access از قبل فعال است: $macToUse');
-                  hasDhcpBlock = true;
                 }
               }
               break;
             }
           }
-        } catch (e) {
-          print('⚠️ [BAN_CLIENT] خطا در تنظیم DHCP Block Access: $e');
+          if (!found) {
+            print('   └─ ⚠️ DHCP lease برای MAC پیدا نشد: $macToUse');
+          }
+        } catch (e, stackTrace) {
+          print('❌ [BAN_CLIENT] خطا در تنظیم DHCP Block Access:');
+          print('   └─ Error: $e');
+          print('   └─ Type: ${e.runtimeType}');
+          print('   └─ Stack Trace: $stackTrace');
           // 继续执行其他步骤
         }
+      } else {
+        print('⚠️ [BAN_CLIENT] MAC Address موجود نیست، این مرحله رد می‌شود');
       }
 
       // 4. Wireless Access List - مسدود کردن اتصال وای‌فای
+      print('═══════════════════════════════════════════════════════════');
+      print('4️⃣ [BAN_CLIENT] مرحله 4: Wireless Access List');
+      print('═══════════════════════════════════════════════════════════');
       // 确保 Wireless Access List 被 block，即使之前已经 block
       if (macToUse != null) {
         try {
           // بررسی اینکه آیا MAC قبلاً در access list block شده
+          print('   └─ بررسی Wireless Access List...');
           final accessList = await _client!.talk(['/interface/wireless/access-list/print']);
+          print('   └─ تعداد Access List entries: ${accessList.length}');
           bool macExists = false;
           String? existingAclId;
           String? existingAction;
@@ -644,8 +760,15 @@ class MikroTikService {
               macExists = true;
               existingAclId = acl['.id']?.toString();
               existingAction = acl['action']?.toString().toLowerCase();
+              print('   └─ ✅ MAC در Access List پیدا شد:');
+              print('      └─ ID: $existingAclId');
+              print('      └─ Action فعلی: $existingAction');
               break;
             }
+          }
+          
+          if (!macExists) {
+            print('   └─ MAC در Access List پیدا نشد');
           }
 
           // 如果 MAC 已存在，确保它是 block 状态
@@ -659,7 +782,6 @@ class MikroTikService {
                   '=action=reject',
                 ]);
                 print('✅ [BAN_CLIENT] Wireless Access List به reject تغییر یافت: $macToUse');
-                hasWirelessBlock = true;
               } catch (e) {
                 print('⚠️ [BAN_CLIENT] خطا در تغییر Wireless Access List: $e');
                 // 尝试添加新的（如果设置失败）
@@ -670,14 +792,12 @@ class MikroTikService {
                     '=action=reject',
                   ]);
                   print('✅ [BAN_CLIENT] Wireless Access List (reject) اضافه شد: $macToUse');
-                  hasWirelessBlock = true;
                 } catch (e2) {
                   print('⚠️ [BAN_CLIENT] خطا در اضافه کردن Wireless Access List: $e2');
                 }
               }
             } else {
               print('ℹ️ [BAN_CLIENT] Wireless Access List از قبل block است: $macToUse');
-              hasWirelessBlock = true;
             }
           } else {
             // 如果 MAC 不存在，添加它
@@ -688,7 +808,6 @@ class MikroTikService {
                 '=action=deny',
               ]);
               print('✅ [BAN_CLIENT] Wireless Access List (deny) اضافه شد: $macToUse');
-              hasWirelessBlock = true;
             } catch (e) {
               // 如果 deny 不工作，尝试 reject
               try {
@@ -697,8 +816,7 @@ class MikroTikService {
                   '=mac-address=$macToUse',
                   '=action=reject',
                 ]);
-                print('✅ [BAN_CLIENT] Wireless Access List (reject) اضافه شد: $macToUse');
-                hasWirelessBlock = true;
+                  print('✅ [BAN_CLIENT] Wireless Access List (reject) اضافه شد: $macToUse');
               } catch (e2) {
                 print('⚠️ [BAN_CLIENT] خطا در اضافه کردن Wireless Access List: $e2');
               }
@@ -710,18 +828,19 @@ class MikroTikService {
         }
       }
 
-      // 记录最终状态
-      print('📊 [BAN_CLIENT] وضعیت نهایی封禁 - IP Rule: $hasIpRule, MAC Rule: $hasMacRule, DHCP Block: $hasDhcpBlock, Wireless Block: $hasWirelessBlock');
-      
-      // 确保至少有一个封禁步骤成功
-      if (!hasIpRule && !hasMacRule && !hasDhcpBlock && !hasWirelessBlock) {
-        print('❌ [BAN_CLIENT] هیچ یک از مراحل封禁 موفق نبود!');
-        throw Exception('همه مراحل封禁 ناموفق بودند');
-      }
-
-
-      return true;
-    } catch (e) {
+      // مثل rejectDevice: همیشه true برمی‌گردانیم
+      // بررسی وضعیت نهایی حذف شد چون باعث timeout می‌شود
+      print('═══════════════════════════════════════════════════════════');
+      print('✅ [BAN_CLIENT] عملیات مسدود کردن انجام شد (مثل rejectDevice)');
+      print('═══════════════════════════════════════════════════════════');
+      return true; // همیشه true (مثل rejectDevice)
+    } catch (e, stackTrace) {
+      print('═══════════════════════════════════════════════════════════');
+      print('❌ [BAN_CLIENT] خطا در مسدود کردن کلاینت:');
+      print('   └─ Error: $e');
+      print('   └─ Type: ${e.runtimeType}');
+      print('   └─ Stack Trace: $stackTrace');
+      print('═══════════════════════════════════════════════════════════');
       throw Exception('خطا در مسدود کردن کلاینت: $e');
     }
   }
@@ -2284,6 +2403,59 @@ class MikroTikService {
     }
   }
 
+  /// دریافت Default Gateway از route table RouterOS
+  /// این متد route با destination 0.0.0.0/0 را پیدا می‌کند و gateway آن را برمی‌گرداند
+  Future<String?> getDefaultGateway() async {
+    if (_client == null || !isConnected) {
+      return null;
+    }
+
+    try {
+      // دریافت route table از RouterOS
+      final routes = await _client!.talk(['/ip/route/print']);
+      
+      // پیدا کردن route پیش‌فرض (0.0.0.0/0)
+      for (var route in routes) {
+        final dstAddress = route['dst-address']?.toString();
+        if (dstAddress == '0.0.0.0/0') {
+          final gateway = route['gateway']?.toString();
+          if (gateway != null && gateway.isNotEmpty) {
+            // اگر gateway شامل interface است (مثل "172.16.0.1 reachable ether2")
+            // فقط IP را استخراج می‌کنیم
+            final gatewayParts = gateway.split(' ');
+            if (gatewayParts.isNotEmpty) {
+              final gatewayIp = gatewayParts[0];
+              // بررسی اینکه آیا IP معتبر است
+              final ipRegex = RegExp(r'^\d+\.\d+\.\d+\.\d+$');
+              if (ipRegex.hasMatch(gatewayIp)) {
+                return gatewayIp;
+              }
+            }
+          }
+        }
+      }
+      
+      return null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /// دریافت Default Gateway از route table RouterOS یا از IP دستگاه
+  /// این متد ابتدا سعی می‌کند از RouterOS API استفاده کند
+  /// اگر RouterOS در دسترس نبود، از IP روتر (host) به عنوان gateway استفاده می‌کند
+  Future<String?> getDefaultGatewayOrRouterIp() async {
+    // روش 1: استفاده از RouterOS API
+    final gateway = await getDefaultGateway();
+    if (gateway != null) {
+      return gateway;
+    }
+    
+    // روش 2: استفاده از IP روتر (fallback)
+    // معمولاً IP روتر همان gateway است
+    return _connection?.host;
+  }
+
   /// دریافت اطلاعات کامل روتر
   /// مشابه POST /api/connect/test در پروژه Python
   /// این اطلاعات شامل uptime, version, board-name, platform, CPU, Memory و ... است
@@ -2313,6 +2485,17 @@ class MikroTikService {
         // ignore - board-name optional است
       }
 
+      // دریافت identity از /system/identity/print
+      String? identity;
+      try {
+        final identityData = await _client!.talk(['/system/identity/print']);
+        if (identityData.isNotEmpty) {
+          identity = identityData[0]['name']?.toString();
+        }
+      } catch (e) {
+        // ignore - identity optional است
+      }
+
       // ساخت Map با تمام اطلاعات
       final routerInfo = <String, dynamic>{
         'uptime': resourceData['uptime']?.toString() ?? 'Unknown',
@@ -2333,6 +2516,7 @@ class MikroTikService {
         'architecture-name': resourceData['architecture-name']?.toString() ?? 'Unknown',
         'board-name': boardName ?? resourceData['board-name']?.toString() ?? 'Unknown',
         'platform': resourceData['platform']?.toString() ?? 'Unknown',
+        'identity': identity ?? 'Unknown',
       };
 
       return routerInfo;

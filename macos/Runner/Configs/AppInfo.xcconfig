@@ -11,4 +11,5 @@ PRODUCT_NAME = internet_management
 PRODUCT_BUNDLE_IDENTIFIER = com.example.internetManagement
 
 // The copyright displayed in application information
-PRODUCT_COPYRIGHT = Copyright © 2025 com.example. All rights reserved.
+// Developer: Mersad Karimi <mersadkarimi001@gmail.com>
+PRODUCT_COPYRIGHT = Copyright © 2026 Mersad Karimi. All rights reserved.

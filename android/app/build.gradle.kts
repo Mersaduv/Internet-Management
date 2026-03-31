@@ -1,3 +1,5 @@
+// Developer: Mersad Karimi <mersadkarimi001@gmail.com>
+
 plugins {
     id("com.android.application")
     id("kotlin-android")
@@ -36,6 +38,23 @@ android {
             // TODO: Add your own signing config for the release build.
             // Signing with the debug keys for now, so `flutter run --release` works.
             signingConfig = signingConfigs.getByName("debug")
+        }
+    }
+
+    // تنظیم نام خودکار فایل APK/AAB
+    // Developer: Mersad Karimi <mersadkarimi001@gmail.com>
+    // فرمت خروجی: Ariyabod-v1.0.0(1)-release.apk
+    // این کد به صورت خودکار نام فایل APK را بر اساس نام برنامه، نسخه و نوع build تنظیم می‌کند
+    applicationVariants.all {
+        val variant = this
+        val appName = "Ariyabod"
+        val versionName = variant.versionName
+        val versionCode = variant.versionCode
+        val buildType = variant.buildType.name
+        
+        variant.outputs.all {
+            val outputFileName = "${appName}-v${versionName}(${versionCode})-${buildType}.apk"
+            (this as com.android.build.gradle.internal.api.BaseVariantOutputImpl).outputFileName = outputFileName
         }
     }
 }

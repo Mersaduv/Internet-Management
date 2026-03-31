@@ -1,4 +1,5 @@
 # Project-level configuration.
+# Developer: Mersad Karimi <mersadkarimi001@gmail.com>
 cmake_minimum_required(VERSION 3.13)
 project(runner LANGUAGES CXX)
 

@@ -800,63 +800,72 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> with WidgetsBin
                   // دکمه‌ها
                   Row(
                     mainAxisAlignment: MainAxisAlignment.end,
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      TextButton(
-                        onPressed: isSaving ? null : () => Navigator.pop(context),
-                        style: TextButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 14),
-                          minimumSize: const Size(100, 48),
-                        ),
-                        child: Builder(
-                          builder: (context) {
-                            final l10n = AppLocalizations.of(context);
-                            return Text(
-                              l10n?.cancel ?? 'Cancel',
-                              style: TextStyle(fontSize: 16),
-                            );
-                          },
+                      Flexible(
+                        child: TextButton(
+                          onPressed: isSaving ? null : () => Navigator.pop(context),
+                          style: TextButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 14),
+                            minimumSize: const Size(100, 48),
+                          ),
+                          child: Builder(
+                            builder: (context) {
+                              final l10n = AppLocalizations.of(context);
+                              return Text(
+                                l10n?.cancel ?? 'Cancel',
+                                style: TextStyle(fontSize: 16),
+                                overflow: TextOverflow.ellipsis,
+                              );
+                            },
+                          ),
                         ),
                       ),
                       const SizedBox(width: 12),
-                      ElevatedButton.icon(
-                        onPressed: isSaving ? null : () async {
-                          if (formKey.currentState!.validate()) {
-                            setDialogState(() {
-                              isSaving = true;
-                            });
-                            
-                            final downloadValue = downloadValueController.text.trim();
-                            final uploadValue = uploadValueController.text.trim();
-                            
-                            Navigator.pop(context, {
-                              'download': '$downloadValue$selectedDownloadUnit',
-                              'upload': '$uploadValue$selectedUploadUnit',
-                            });
-                          }
-                        },
-                        icon: isSaving 
-                          ? const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                              ),
-                            )
-                          : const Icon(Icons.save),
-                        label: Builder(
-                          builder: (context) {
-                            final l10n = AppLocalizations.of(context);
-                            return Text(isSaving ? (l10n?.saving ?? 'Saving...') : (l10n?.save ?? 'Save'));
+                      Flexible(
+                        child: ElevatedButton.icon(
+                          onPressed: isSaving ? null : () async {
+                            if (formKey.currentState!.validate()) {
+                              setDialogState(() {
+                                isSaving = true;
+                              });
+                              
+                              final downloadValue = downloadValueController.text.trim();
+                              final uploadValue = uploadValueController.text.trim();
+                              
+                              Navigator.pop(context, {
+                                'download': '$downloadValue$selectedDownloadUnit',
+                                'upload': '$uploadValue$selectedUploadUnit',
+                              });
+                            }
                           },
-                        ),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: _primaryColor,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 14),
-                          minimumSize: const Size(120, 48),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
+                          icon: isSaving 
+                            ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                ),
+                              )
+                            : const Icon(Icons.save),
+                          label: Builder(
+                            builder: (context) {
+                              final l10n = AppLocalizations.of(context);
+                              return Text(
+                                isSaving ? (l10n?.saving ?? 'Saving...') : (l10n?.save ?? 'Save'),
+                                overflow: TextOverflow.ellipsis,
+                              );
+                            },
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: _primaryColor,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 14),
+                            minimumSize: const Size(120, 48),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
                           ),
                         ),
                       ),
@@ -1544,28 +1553,61 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> with WidgetsBin
     }
   }
 
+  /// مسدود کردن دستگاه
+  /// الگو برداری از _unbanDevice و rejectDevice
   Future<void> _banDevice() async {
-    if (_isDisposed || widget.device.ipAddress == null) return;
+    if (_isDisposed || widget.device.ipAddress == null || widget.isBanned) return;
 
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) {
         final l10n = AppLocalizations.of(context);
+        final theme = Theme.of(context);
+        final colorScheme = theme.colorScheme;
+        
         return AlertDialog(
-          title: Text(l10n?.banDevice ?? 'Ban Device'),
+          backgroundColor: colorScheme.surface,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          title: Row(
+            children: [
+              Icon(Icons.block, color: Colors.red, size: 28),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  l10n?.banDevice ?? 'Ban Device',
+                  style: TextStyle(
+                    color: colorScheme.onSurface,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
+          ),
           content: Text(
-            l10n?.banDeviceConfirmWithIP(widget.device.ipAddress ?? '') ?? 'Are you sure you want to ban device ${widget.device.ipAddress}?',
+            l10n?.banDeviceConfirmWithIP(widget.device.ipAddress ?? '') ?? 
+            'Are you sure you want to ban device ${widget.device.ipAddress}?\n\nThis device will be blocked and removed from the network.',
+            style: TextStyle(
+              color: colorScheme.onSurface,
+            ),
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context, false),
-              child: Text(l10n?.cancel ?? 'Cancel'),
+              child: Text(
+                l10n?.cancel ?? 'Cancel',
+                style: TextStyle(color: colorScheme.onSurface),
+              ),
             ),
             ElevatedButton(
               onPressed: () => Navigator.pop(context, true),
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.red,
                 foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
               ),
               child: Text(l10n?.banDevice ?? 'Ban Device'),
             ),
@@ -1577,18 +1619,12 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> with WidgetsBin
     if (confirmed == true && !_isDisposed) {
       if (!mounted) return;
       
-      setState(() {
-        _isLoading = true;
-      });
-
+      // بدون loading state - فوراً عملیات را انجام می‌دهیم (الگو از rejectDevice)
       try {
         await _banDeviceInternal();
       } catch (e) {
-        if (!_isDisposed && mounted) {
-          setState(() {
-            _isLoading = false;
-          });
-        }
+        // ignore - UI قبلاً به‌روزرسانی شده است
+        print('⚠️ [BAN_DEVICE] خطا در _banDevice: $e');
       }
     }
   }
@@ -1599,39 +1635,37 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> with WidgetsBin
     try {
       final provider = Provider.of<ClientsProvider>(context, listen: false);
       
-      // اجرای عملیات مسدود کردن
-      final success = await provider.banClient(
+      // الگو برداری از rejectDevice: فوراً UI را به‌روزرسانی می‌کنیم و عملیات را در پس‌زمینه انجام می‌دهیم
+      // استفاده از banClientInstant که فوراً UI را به‌روزرسانی می‌کند
+      provider.banClientInstant(
         widget.device.ipAddress!,
         macAddress: widget.device.macAddress,
-        hostname: widget.device.hostName,
-        ssid: widget.device.ssid,
       );
       
-      if (_isDisposed || !mounted) return;
+      // فوراً صفحه را می‌بندیم و به صفحه اصلی می‌رویم (بدون انتظار)
+      if (Navigator.canPop(context)) {
+        Navigator.pop(context, true);
+      }
       
-      if (success) {
-        // به‌روزرسانی loading state
-        if (mounted && !_isDisposed) {
-          setState(() {
-            _isLoading = false;
-          });
+      // هدایت فوری به صفحه اصلی
+      Navigator.of(context).pushNamedAndRemoveUntil(
+        '/home',
+        (route) => false,
+      );
+      
+      // به‌روزرسانی داده‌های صفحه اصلی بعد از navigation (فقط یک بار)
+      Future.delayed(const Duration(milliseconds: 300), () {
+        if (mounted) {
+          final homeProvider = Provider.of<ClientsProvider>(context, listen: false);
+          homeProvider.refresh();
         }
-        
-        // فوراً بستن صفحه و هدایت به صفحه اصلی (بدون تاخیر)
-        // این باعث می‌شود UI فوراً پاسخ دهد
-        if (Navigator.canPop(context)) {
-          Navigator.pop(context, true);
-        }
-        
-        // هدایت فوری به صفحه اصلی
-        Navigator.of(context).pushNamedAndRemoveUntil(
-          '/home',
-          (route) => false,
-        );
-        
-        // نمایش پیغام موفقیت در صفحه اصلی (با کمی تاخیر برای اطمینان از navigation)
-        Future.delayed(const Duration(milliseconds: 100), () {
+      });
+      
+      // نمایش پیغام موفقیت فوری
+      Future.delayed(const Duration(milliseconds: 50), () {
+        if (mounted) {
           final scaffoldMessenger = ScaffoldMessenger.of(context);
+          final l10n = AppLocalizations.of(context);
           scaffoldMessenger.showSnackBar(
             SnackBar(
               content: Row(
@@ -1639,59 +1673,23 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> with WidgetsBin
                   const Icon(Icons.check_circle, color: Colors.white),
                   const SizedBox(width: 8),
                   Expanded(
-                    child: Builder(
-                      builder: (context) {
-                        final l10n = AppLocalizations.of(context);
-                        return Text(l10n?.deviceRejected ?? 'Device rejected and banned');
-                      },
+                    child: Text(
+                      l10n?.deviceBannedSuccess ?? 'Device banned successfully',
                     ),
                   ),
                 ],
               ),
-              backgroundColor: Colors.green,
-              behavior: SnackBarBehavior.floating,
-              duration: Duration(seconds: 3),
-            ),
-          );
-        });
-      } else {
-        // در صورت خطا، فقط loading را متوقف کن (صفحه باز می‌ماند)
-        if (mounted && !_isDisposed) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Builder(
-                builder: (context) {
-                  final l10n = AppLocalizations.of(context);
-                  return Text('${l10n?.error ?? 'Error'}: ${provider.errorMessage ?? (l10n?.banDevice ?? 'Error banning device')}');
-                },
-              ),
               backgroundColor: Colors.red,
               behavior: SnackBarBehavior.floating,
+              duration: const Duration(seconds: 3),
             ),
           );
-          setState(() {
-            _isLoading = false;
-          });
         }
-      }
-    } catch (e) {
-      if (_isDisposed || !mounted) return;
+      });
       
-      final l10n = AppLocalizations.of(context);
-      final errorMsg = e.toString().replaceFirst('Exception: ', '');
-      final localizedError = l10n?.localizeServiceError(errorMsg) ?? errorMsg;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('${l10n?.error ?? 'Error'}: $localizedError'),
-          backgroundColor: Colors.red,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-      if (mounted && !_isDisposed) {
-        setState(() {
-          _isLoading = false;
-        });
-      }
+    } catch (e) {
+      // در صورت خطا، فقط log می‌کنیم - UI قبلاً به‌روزرسانی شده است
+      print('⚠️ [BAN_DEVICE] خطا در _banDeviceInternal: $e');
     }
   }
 
@@ -1779,6 +1777,15 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> with WidgetsBin
           (route) => false,
         );
         
+        // به‌روزرسانی داده‌های صفحه اصلی بعد از navigation
+        Future.delayed(const Duration(milliseconds: 300), () {
+          if (mounted) {
+            final homeProvider = Provider.of<ClientsProvider>(context, listen: false);
+            // فقط یک بار refresh بعد از عملیات
+            homeProvider.refresh();
+          }
+        });
+        
         // نمایش پیغام موفقیت در صفحه اصلی
         Future.delayed(const Duration(milliseconds: 100), () {
           final scaffoldMessenger = ScaffoldMessenger.of(context);
@@ -1844,15 +1851,7 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> with WidgetsBin
       onPopInvoked: (didPop) {
         if (didPop) {
           _cancelAllPendingOperations();
-          
-          Future.microtask(() {
-            try {
-              final provider = Provider.of<ClientsProvider>(context, listen: false);
-              provider.refresh();
-            } catch (e) {
-              // ignore refresh errors
-            }
-          });
+          // حذف refresh - فقط بعد از عملیات ban/unban refresh می‌کنیم
         }
       },
       child: Builder(
@@ -1888,7 +1887,9 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> with WidgetsBin
                     ),
                   ),
                   backgroundColor: Colors.transparent,
-                  foregroundColor: colorScheme.onSurface,
+                  foregroundColor: theme.brightness == Brightness.dark
+                      ? colorScheme.onSurface
+                      : Colors.white,
                   elevation: 0,
                   shadowColor: Colors.transparent,
                   surfaceTintColor: Colors.transparent,
@@ -2108,14 +2109,18 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> with WidgetsBin
                               builder: (context) {
                                 final l10n = AppLocalizations.of(context);
                                 return Row(
+                                  mainAxisSize: MainAxisSize.min,
                                   children: [
                                     const Icon(Icons.block, color: Colors.red, size: 20),
                                     const SizedBox(width: 8),
-                                    Text(
-                                      l10n?.thisDeviceIsBanned ?? 'This device is banned',
-                                      style: TextStyle(
-                                        color: Colors.red,
-                                        fontWeight: FontWeight.bold,
+                                    Flexible(
+                                      child: Text(
+                                        l10n?.thisDeviceIsBanned ?? 'This device is banned',
+                                        style: TextStyle(
+                                          color: Colors.red,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                        overflow: TextOverflow.ellipsis,
                                       ),
                                     ),
                                   ],
@@ -2182,6 +2187,33 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> with WidgetsBin
                           ),
                         ),
                         const SizedBox(height: 12),
+                        // دکمه مسدود کردن دستگاه (فقط برای دستگاه‌های غیر مسدود شده)
+                        if (!widget.isBanned)
+                          ElevatedButton.icon(
+                            onPressed: _isLoading ? null : _banDevice,
+                            icon: const Icon(Icons.block),
+                            label: Builder(
+                              builder: (context) {
+                                final l10n = AppLocalizations.of(context);
+                                return Text(
+                                  l10n?.banDevice ?? 'Ban Device',
+                                  style: const TextStyle(fontSize: 20),
+                                );
+                              },
+                            ),  
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: theme.brightness == Brightness.dark
+                                  ? _darkenColor(Colors.red, 0.3)
+                                  : Colors.red,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 16),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                          ),
+                        if (!widget.isBanned) const SizedBox(height: 12),
+                        // دکمه رفع مسدودیت (فقط برای دستگاه‌های مسدود شده)
                         if (widget.isBanned)
                           ElevatedButton.icon(
                             onPressed: _unbanDevice,
@@ -2205,29 +2237,8 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> with WidgetsBin
                                 borderRadius: BorderRadius.circular(12),
                               ),
                             ),
-                          )
-                        else
-                          ElevatedButton.icon(
-                            onPressed: _banDevice,
-                            icon: const Icon(Icons.block),
-                            label: Builder(
-                              builder: (context) {
-                                final l10n = AppLocalizations.of(context);
-                                return Text(l10n?.banDevice ?? 'Ban Device', style: TextStyle(fontSize: 20));
-                              },
-                            ),  
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: theme.brightness == Brightness.dark
-                                  ? _darkenColor(Colors.red, 0.3)
-                                  : Colors.red,
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(vertical: 16),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                            ),
                           ),
-                        const SizedBox(height: 12),
+                        if (widget.isBanned) const SizedBox(height: 12),
                         // دکمه Static کردن Lease (فقط برای Dynamic)
                         if (!widget.isBanned && _isStaticLease != true)
                           ElevatedButton.icon(
@@ -2299,6 +2310,7 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> with WidgetsBin
                                   builder: (context) {
                                     final l10n = AppLocalizations.of(context);
                                     return Row(
+                                      mainAxisSize: MainAxisSize.min,
                                       children: [
                                         const Icon(
                                           Icons.filter_alt,
@@ -2306,12 +2318,15 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> with WidgetsBin
                                           size: 24,
                                         ),
                                         const SizedBox(width: 8),
-                                        Text(
-                                          l10n?.socialMediaFilter ?? 'Social Media Filter',
-                                          style: const TextStyle(
-                                            fontSize: 18,
-                                            fontWeight: FontWeight.bold,
-                                            color: _primaryColor,
+                                        Flexible(
+                                          child: Text(
+                                            l10n?.socialMediaFilter ?? 'Social Media Filter',
+                                            style: const TextStyle(
+                                              fontSize: 18,
+                                              fontWeight: FontWeight.bold,
+                                              color: _primaryColor,
+                                            ),
+                                            overflow: TextOverflow.ellipsis,
                                           ),
                                         ),
                                       ],
@@ -2402,6 +2417,8 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> with WidgetsBin
                   fontWeight: FontWeight.w600,
                   color: titleColor,
                 ),
+                overflow: TextOverflow.ellipsis,
+                maxLines: 1,
               ),
               trailing: Switch(
                 value: isFiltered,

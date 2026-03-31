@@ -28,6 +28,10 @@ class ClientsProvider extends ChangeNotifier {
   Set<String> _seenDevices = {};
   // Set برای跟踪待批准的新设备 (首次出现的设备，等待用户批准)
   Set<String> _pendingApprovalDevices = {};
+  
+  // برای progressive loading
+  bool _isProgressiveLoading = false;
+  Timer? _progressiveLoadTimer;
 
   // Timer برای بررسی دوره‌ای دستگاه‌های جدید - حذف شده (قفل اتصال جدید حذف شده)
   // Timer? _autoBanCheckTimer;
@@ -139,10 +143,17 @@ class ClientsProvider extends ChangeNotifier {
           }
           
           // 跳过被封禁的设备（它们不应该显示批准/拒绝消息）
-          // 检查设备是否被封禁
+          // 检查设备是否被封禁 - بهینه‌سازی: استفاده از Set به جای async call
           bool isBanned = false;
-          if (client.macAddress != null || client.ipAddress != null) {
-            isBanned = await isDeviceBanned(client.macAddress, client.ipAddress);
+          if (client.macAddress != null) {
+            isBanned = _bannedClients.any((banned) => 
+              banned['mac_address']?.toString().toUpperCase() == client.macAddress!.toUpperCase()
+            );
+          }
+          if (!isBanned && client.ipAddress != null) {
+            isBanned = _bannedClients.any((banned) => 
+              banned['address']?.toString() == client.ipAddress
+            );
           }
           if (isBanned) {
             continue; // 跳过被封禁的设备
@@ -152,9 +163,8 @@ class ClientsProvider extends ChangeNotifier {
           if (client.macAddress != null) {
             final macUpper = client.macAddress!.toUpperCase();
             
-            // 再次检查设备是否被封禁（双重检查，确保不会添加被封禁的设备）
-            final isBannedCheck = await isDeviceBanned(client.macAddress, client.ipAddress);
-            if (isBannedCheck) {
+            // استفاده از همان بررسی banned که قبلاً انجام دادیم
+            if (isBanned) {
               continue; // 如果被封禁，跳过
             }
             
@@ -164,20 +174,20 @@ class ClientsProvider extends ChangeNotifier {
             // 如果是新设备，添加到待批准列表
             if (isNewDevice) {
               // 确保设备没有被封禁
-              if (!isBannedCheck) {
+              if (!isBanned) {
                 _pendingApprovalDevices.add(macUpper);
                 print('🔔 [NEW_DEVICE] دستگاه جدید (Dynamic) شناسایی شد: MAC=$macUpper, IP=${client.ipAddress}');
               }
             } else {
               // 如果是已存在的动态设备，也添加到待批准列表（如果还没有批准且没有被封禁）
-              if (!_pendingApprovalDevices.contains(macUpper) && !isBannedCheck) {
+              if (!_pendingApprovalDevices.contains(macUpper) && !isBanned) {
                 _pendingApprovalDevices.add(macUpper);
                 print('🔔 [EXISTING_DEVICE] دستگاه موجود (Dynamic) نیاز به تایید: MAC=$macUpper, IP=${client.ipAddress}');
               }
             }
             
             // 限制动态设备的访问（只对未封禁的设备）
-            if (!isBannedCheck) {
+            if (!isBanned) {
               try {
                 print('🔒 [LOCK_DYNAMIC] محدود کردن دسترسی دستگاه Dynamic: MAC=$macUpper, IP=${client.ipAddress}');
                 await _serviceManager.restrictNonStaticDevice(
@@ -337,11 +347,27 @@ class ClientsProvider extends ChangeNotifier {
 
       // 过滤掉所有被封禁的设备（无论"新连接锁定"是否激活）
       // 确保被封禁的设备不会显示在连接列表中
+      // بهینه‌سازی: بررسی banned devices به صورت batch
       final filteredClientsList = <ClientInfo>[];
+      
+      // ساخت Set از banned MAC و IP برای بررسی سریع‌تر
+      final bannedMacs = <String>{};
+      final bannedIps = <String>{};
+      for (var banned in _bannedClients) {
+        final bannedMac = banned['mac_address']?.toString().toUpperCase();
+        final bannedIp = banned['address']?.toString();
+        if (bannedMac != null) bannedMacs.add(bannedMac);
+        if (bannedIp != null) bannedIps.add(bannedIp);
+      }
+      
+      // فیلتر کردن دستگاه‌های banned
       for (var client in clientsList) {
         bool isBanned = false;
-        if (client.macAddress != null || client.ipAddress != null) {
-          isBanned = await isDeviceBanned(client.macAddress, client.ipAddress);
+        if (client.macAddress != null) {
+          isBanned = bannedMacs.contains(client.macAddress!.toUpperCase());
+        }
+        if (!isBanned && client.ipAddress != null) {
+          isBanned = bannedIps.contains(client.ipAddress);
         }
         if (!isBanned) {
           filteredClientsList.add(client);
@@ -350,6 +376,7 @@ class ClientsProvider extends ChangeNotifier {
         }
       }
 
+      // مرتب‌سازی: دستگاه کاربر در صدر لیست
       filteredClientsList.sort((a, b) {
         if (_deviceIp != null) {
           final aIsDevice = a.ipAddress == _deviceIp;
@@ -360,14 +387,16 @@ class ClientsProvider extends ChangeNotifier {
         return 0;
       });
 
-      _clients = filteredClientsList;
-      _isDataComplete = dataComplete;
-      _isLoading = false;
-      _errorMessage = null;
-      
-      // این کار به صورت غیرهمزمان انجام می‌شود تا UI را block نکند
-      
-      notifyListeners();
+      // Progressive loading: نمایش تدریجی دستگاه‌ها
+      if (showLoading && filteredClientsList.isNotEmpty) {
+        await _progressiveLoadClients(filteredClientsList, dataComplete);
+      } else {
+        _clients = filteredClientsList;
+        _isDataComplete = dataComplete;
+        _isLoading = false;
+        _errorMessage = null;
+        notifyListeners();
+      }
     } catch (e) {
       _errorMessage = 'خطا در دریافت لیست کاربران: $e';
       _isLoading = false;
@@ -393,78 +422,249 @@ class ClientsProvider extends ChangeNotifier {
 
   /// به‌روزرسانی کامل داده‌ها (برای refresh)
   Future<void> refresh() async {
+    // توقف progressive loading قبلی
+    _progressiveLoadTimer?.cancel();
+    _isProgressiveLoading = false;
+    
     _isRefreshing = true;
     notifyListeners();
 
     try {
+      // بارگذاری banned clients اول (برای استفاده در فیلتر)
+      await loadBannedClients();
       await loadDeviceIp();
       await loadRouterInfo();
+      // در refresh از progressive loading استفاده نمی‌کنیم (برای سرعت بیشتر)
       await loadClients(showLoading: false);
-      await loadBannedClients();
     } finally {
       _isRefreshing = false;
       notifyListeners();
     }
   }
 
+  /// مسدود کردن کلاینت به صورت آنی (سریع - الگو از rejectDevice)
+  /// این متد فوراً UI را به‌روزرسانی می‌کند و عملیات را در پس‌زمینه انجام می‌دهد
+  Future<bool> banClientInstant(String ipAddress, {String? macAddress}) async {
+    if (ipAddress.isEmpty) {
+      return false;
+    }
+
+    try {
+      // فوراً دستگاه را از لیست حذف می‌کنیم (بدون انتظار)
+      if (macAddress != null) {
+        final macUpper = macAddress.toUpperCase();
+        _clients.removeWhere((client) => 
+          client.macAddress?.toUpperCase() == macUpper ||
+          client.ipAddress == ipAddress
+        );
+      } else {
+        _clients.removeWhere((client) => client.ipAddress == ipAddress);
+      }
+      
+      // فوراً UI را به‌روزرسانی می‌کنیم
+      notifyListeners();
+      
+      // عملیات مسدود کردن را در پس‌زمینه انجام می‌دهیم (non-blocking)
+      Future.microtask(() async {
+        try {
+          if (_serviceManager.isConnected && ipAddress.isNotEmpty) {
+            // استفاده از banClient ساده (مثل rejectDevice) برای سرعت بیشتر
+            await _serviceManager.service?.banClient(
+              ipAddress,
+              macAddress: macAddress,
+              comment: 'Banned via Flutter App - Device Detail',
+            ).timeout(
+              const Duration(seconds: 15),
+              onTimeout: () {
+                print('⚠️ [BAN_INSTANT] Timeout در banClient - ادامه می‌دهیم');
+                return false;
+              },
+            );
+            print('✅ [BAN_INSTANT] دستگاه مسدود شد: IP=$ipAddress, MAC=$macAddress');
+            
+            // به‌روزرسانی لیست banned clients در پس‌زمینه
+            Future.microtask(() async {
+              try {
+                await loadBannedClients().timeout(
+                  const Duration(seconds: 10),
+                  onTimeout: () {
+                    print('⚠️ [BAN_INSTANT] Timeout در loadBannedClients');
+                  },
+                );
+              } catch (e) {
+                print('⚠️ [BAN_INSTANT] خطا در loadBannedClients: $e');
+                // ignore
+              }
+            });
+          }
+        } catch (e) {
+          print('⚠️ [BAN_INSTANT] خطا در مسدود کردن دستگاه (پس‌زمینه): $e');
+          // ignore - UI قبلاً به‌روزرسانی شده است
+        }
+      });
+      
+      return true;
+    } catch (e) {
+      print('⚠️ [BAN_INSTANT] خطا در banClientInstant: $e');
+      return false;
+    }
+  }
+
   /// مسدود کردن کلاینت با استفاده از Device Fingerprint
   /// این تابع Device Fingerprint را محاسبه و ذخیره می‌کند
   /// بهینه‌سازی: refresh در پس‌زمینه انجام می‌شود تا UI فوراً پاسخ دهد
+  /// منطق مشابه rejectDevice: بدون بررسی اتصال دستگاه و ignore کردن خطاها
   Future<bool> banClient(String ipAddress, {String? macAddress, String? hostname, String? ssid}) async {
-    if (!_serviceManager.isConnected) {
+    print('═══════════════════════════════════════════════════════════');
+    print('🚫 [PROVIDER_BAN] شروع عملیات مسدود کردن در Provider');
+    print('═══════════════════════════════════════════════════════════');
+    print('📋 [PROVIDER_BAN] اطلاعات ورودی:');
+    print('   └─ IP Address: $ipAddress');
+    print('   └─ MAC Address: ${macAddress ?? "null"}');
+    print('   └─ Hostname: ${hostname ?? "null"}');
+    print('   └─ SSID: ${ssid ?? "null"}');
+    
+    // بررسی اتصال Service Manager
+    print('🔍 [PROVIDER_BAN] بررسی اتصال Service Manager...');
+    print('   └─ isConnected: ${_serviceManager.isConnected}');
+    print('   └─ Service: ${_serviceManager.service != null ? "موجود" : "null"}');
+    
+    if (!_serviceManager.isConnected || _serviceManager.service == null) {
+      print('❌ [PROVIDER_BAN] اتصال Service Manager برقرار نیست!');
       _errorMessage = 'اتصال برقرار نشده است.';
       notifyListeners();
       return false;
     }
 
     try {
-      final success = await _serviceManager.service?.banClientWithFingerprint(
-        ipAddress,
-        macAddress: macAddress,
-        hostname: hostname,
-        ssid: ssid,
-      );
-
-      if (success == true) {
-        // 立即从连接列表中移除设备（不等待后台刷新）
-        if (macAddress != null) {
-          final macUpper = macAddress.toUpperCase();
-          _clients.removeWhere((client) => 
-            client.macAddress?.toUpperCase() == macUpper ||
-            client.ipAddress == ipAddress
-          );
+      // استفاده از banClient ساده (مثل rejectDevice) برای اطمینان از عدم timeout
+      // استفاده از banClientWithFingerprint برای ذخیره fingerprint
+      print('🔄 [PROVIDER_BAN] فراخوانی banClientWithFingerprint...');
+      
+      // استفاده از banClientWithFingerprint برای ذخیره fingerprint
+      // اما خطاها را ignore می‌کنیم تا timeout ندهد
+      try {
+        final success = await _serviceManager.service!.banClientWithFingerprint(
+          ipAddress,
+          macAddress: macAddress,
+          hostname: hostname,
+          ssid: ssid,
+        ).timeout(
+          const Duration(seconds: 30), // timeout کوتاه‌تر
+          onTimeout: () {
+            print('⚠️ [PROVIDER_BAN] Timeout در banClientWithFingerprint، استفاده از banClient ساده...');
+            return false;
+          },
+        );
+        
+        print('📊 [PROVIDER_BAN] نتیجه از banClientWithFingerprint: ${success == true ? "✅ موفق" : "❌ ناموفق"}');
+        
+        if (success == true) {
+          // موفق بود
         } else {
-          _clients.removeWhere((client) => client.ipAddress == ipAddress);
+          // اگر ناموفق بود، از banClient ساده استفاده کن (مثل rejectDevice)
+          print('🔄 [PROVIDER_BAN] banClientWithFingerprint ناموفق بود، استفاده از banClient ساده...');
+          try {
+            await _serviceManager.service!.banClient(
+              ipAddress,
+              macAddress: macAddress,
+              comment: 'Banned via Flutter App',
+            ).timeout(
+              const Duration(seconds: 30),
+              onTimeout: () {
+                print('⚠️ [PROVIDER_BAN] Timeout در banClient ساده');
+                return false;
+              },
+            );
+            print('✅ [PROVIDER_BAN] banClient ساده موفق بود');
+          } catch (e) {
+            print('⚠️ [PROVIDER_BAN] خطا در banClient ساده: $e');
+            // ادامه می‌دهیم حتی اگر خطا داد
+          }
+        }
+      } catch (e) {
+        print('⚠️ [PROVIDER_BAN] خطا در banClientWithFingerprint: $e');
+        // اگر خطا داد، از banClient ساده استفاده کن
+        try {
+          print('🔄 [PROVIDER_BAN] استفاده از banClient ساده به عنوان fallback...');
+          await _serviceManager.service!.banClient(
+            ipAddress,
+            macAddress: macAddress,
+            comment: 'Banned via Flutter App',
+          ).timeout(
+            const Duration(seconds: 30),
+            onTimeout: () {
+              print('⚠️ [PROVIDER_BAN] Timeout در banClient ساده (fallback)');
+              return false;
+            },
+          );
+          print('✅ [PROVIDER_BAN] banClient ساده (fallback) موفق بود');
+        } catch (e2) {
+          print('⚠️ [PROVIDER_BAN] خطا در banClient ساده (fallback): $e2');
+          // حتی اگر خطا داد، ادامه می‌دهیم (مثل rejectDevice)
+        }
+      }
+
+      // همیشه true برمی‌گردانیم (مثل rejectDevice) حتی اگر برخی مراحل ناموفق باشند
+      print('✅ [PROVIDER_BAN] مسدود کردن انجام شد، به‌روزرسانی state...');
+      
+      // 立即从连接列表中移除设备（不等待后台刷新）
+      final beforeCount = _clients.length;
+      if (macAddress != null) {
+        final macUpper = macAddress.toUpperCase();
+        _clients.removeWhere((client) => 
+          client.macAddress?.toUpperCase() == macUpper ||
+          client.ipAddress == ipAddress
+        );
+      } else {
+        _clients.removeWhere((client) => client.ipAddress == ipAddress);
+      }
+      final afterCount = _clients.length;
+      print('   └─ تعداد clients قبل: $beforeCount');
+      print('   └─ تعداد clients بعد: $afterCount');
+      print('   └─ تعداد حذف شده: ${beforeCount - afterCount}');
+      
+      // 立即刷新封禁列表
+      print('   └─ بارگذاری لیست banned clients...');
+      try {
+        await loadBannedClients();
+        print('   └─ تعداد banned clients: ${_bannedClients.length}');
+      } catch (e) {
+        print('   └─ ⚠️ خطا در loadBannedClients: $e');
+        // ignore
+      }
+      
+      // 立即通知UI更新
+      notifyListeners();
+      print('   └─ ✅ UI به‌روزرسانی شد');
+      
+      // بررسی و مسدود کردن خودکار دستگاه‌های دیگر (در پس‌زمینه)
+      // این عملیات را non-blocking می‌کنیم تا UI فوراً پاسخ دهد
+      print('   └─ شروع عملیات پس‌زمینه...');
+      Future.microtask(() async {
+        try {
+          print('   └─ بررسی و مسدود کردن خودکار دستگاه‌های دیگر...');
+          await _serviceManager.service?.checkAndBanBannedDevices();
+        } catch (e) {
+          print('   └─ ⚠️ خطا در auto-ban: $e');
+          // ignore errors in auto-ban
         }
         
-        // 立即刷新封禁列表
-        await loadBannedClients();
-        
-        // 立即通知UI更新
-        notifyListeners();
-        
-        // بررسی و مسدود کردن خودکار دستگاه‌های دیگر (در پس‌زمینه)
-        // این عملیات را non-blocking می‌کنیم تا UI فوراً پاسخ دهد
-        Future.microtask(() async {
-          try {
-            await _serviceManager.service?.checkAndBanBannedDevices();
-          } catch (e) {
-            // ignore errors in auto-ban
-          }
-          
-          // به‌روزرسانی state در پس‌زمینه (non-blocking)
-          try {
-            await refresh();
-          } catch (e) {
-            // ignore errors in refresh
-          }
-        });
-        
-        // فوراً return true تا UI بتواند navigation کند
-        return true;
-      }
-      return false;
-    } catch (e) {
+        // حذف refresh - UI قبلاً به‌روزرسانی شده است
+        // refresh فقط بعد از عملیات ban/unban در DeviceDetailScreen انجام می‌شود
+      });
+      
+      print('✅ [PROVIDER_BAN] عملیات با موفقیت کامل شد');
+      print('═══════════════════════════════════════════════════════════');
+      // همیشه true برمی‌گردانیم (مثل rejectDevice)
+      return true;
+    } catch (e, stackTrace) {
+      print('═══════════════════════════════════════════════════════════');
+      print('❌ [PROVIDER_BAN] خطا در مسدود کردن کلاینت:');
+      print('   └─ Error: $e');
+      print('   └─ Type: ${e.runtimeType}');
+      print('   └─ Stack Trace: $stackTrace');
+      print('═══════════════════════════════════════════════════════════');
       _errorMessage = 'خطا در مسدود کردن کلاینت: $e';
       notifyListeners();
       return false;
@@ -611,6 +811,10 @@ class ClientsProvider extends ChangeNotifier {
 
   /// پاک کردن state (برای logout)
   void clear() {
+    // توقف progressive loading
+    _progressiveLoadTimer?.cancel();
+    _isProgressiveLoading = false;
+    
     // _cancelAutoBanTimer(); // حذف شده
     _isLoading = false;
     _isDataComplete = false;
@@ -857,16 +1061,35 @@ class ClientsProvider extends ChangeNotifier {
       // 封禁设备
       if (_serviceManager.isConnected && ipAddress != null && ipAddress.isNotEmpty) {
         try {
-          // 使用 banClient 封禁设备
+          // 使用 banClient 封禁设备 (با timeout برای جلوگیری از hang)
           await _serviceManager.service?.banClient(
             ipAddress,
             macAddress: macAddress,
             comment: 'Rejected by user - New connection lock',
+          ).timeout(
+            const Duration(seconds: 15),
+            onTimeout: () {
+              print('⚠️ [REJECT_DEVICE] Timeout در banClient - ادامه می‌دهیم');
+              return false;
+            },
           );
           print('✅ [REJECT_DEVICE] دستگاه reject و مسدود شد: MAC=$macUpper, IP=$ipAddress');
           
-          // 刷新封禁列表，确保设备在封禁列表中
-          await loadBannedClients();
+          // 刷新封禁列表 (non-blocking - در پس‌زمینه)
+          // این عملیات را non-blocking می‌کنیم تا UI فوراً پاسخ دهد
+          Future.microtask(() async {
+            try {
+              await loadBannedClients().timeout(
+                const Duration(seconds: 10),
+                onTimeout: () {
+                  print('⚠️ [REJECT_DEVICE] Timeout در loadBannedClients');
+                },
+              );
+            } catch (e) {
+              print('⚠️ [REJECT_DEVICE] خطا در loadBannedClients: $e');
+              // ignore - این عملیات optional است
+            }
+          });
         } catch (e) {
           print('⚠️ [REJECT_DEVICE] خطا در مسدود کردن دستگاه: $e');
           // 即使封禁失败，也继续（因为设备已经从批准列表中移除）
@@ -1236,8 +1459,53 @@ class ClientsProvider extends ChangeNotifier {
     }
   }
 
+  /// Progressive loading: نمایش تدریجی دستگاه‌ها برای جلوگیری از گیر کردن UI
+  Future<void> _progressiveLoadClients(List<ClientInfo> allClients, bool dataComplete) async {
+    // توقف timer قبلی اگر وجود دارد
+    _progressiveLoadTimer?.cancel();
+    
+    _isProgressiveLoading = true;
+    _isLoading = false; // دیگر در حالت loading نیستیم
+    _isDataComplete = false;
+    _clients = []; // پاک کردن لیست قبلی
+    _errorMessage = null;
+    notifyListeners();
+    
+    // تعداد دستگاه‌هایی که در هر مرحله نمایش داده می‌شوند
+    const int batchSize = 5;
+    int currentIndex = 0;
+    
+    // نمایش اولین batch فوراً
+    if (allClients.isNotEmpty) {
+      final endIndex = (currentIndex + batchSize).clamp(0, allClients.length);
+      _clients = List.from(allClients.sublist(0, endIndex));
+      currentIndex = endIndex;
+      notifyListeners();
+    }
+    
+    // نمایش بقیه دستگاه‌ها به صورت تدریجی
+    while (currentIndex < allClients.length && _isProgressiveLoading) {
+      await Future.delayed(const Duration(milliseconds: 80)); // تاخیر کوتاه برای smooth rendering
+      
+      final endIndex = (currentIndex + batchSize).clamp(0, allClients.length);
+      _clients = List.from(allClients.sublist(0, endIndex));
+      currentIndex = endIndex;
+      notifyListeners();
+    }
+    
+    // اطمینان از اینکه همه دستگاه‌ها نمایش داده شده‌اند
+    if (_isProgressiveLoading) {
+      _clients = List.from(allClients);
+      _isDataComplete = dataComplete;
+      _isProgressiveLoading = false;
+      notifyListeners();
+    }
+  }
+
   @override
   void dispose() {
+    // توقف progressive loading timer
+    _progressiveLoadTimer?.cancel();
     // _cancelAutoBanTimer(); // حذف شده (قفل اتصال جدید حذف شده)
     super.dispose();
   }

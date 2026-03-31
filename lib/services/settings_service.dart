@@ -19,7 +19,7 @@ class SettingsService {
   static const String _defaultHost = '192.168.88.1';
   static const int _defaultPort = 8728;
   static const bool _defaultUseSsl = false;
-  static const String _defaultServiceUrl = 'http://user.ariyabod.af/users/computer/DS_MyInternet.php';
+  static const String _defaultServiceUrl = 'http://user.ariyabod.af/users';
   static const String _defaultLanguage = 'fa'; // 默认语言：波斯语
   static const String _defaultThemeMode = 'system'; // 默认主题：跟随系统
 

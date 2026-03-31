@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import '../models/mikrotik_connection.dart';
 import '../services/mikrotik_service_manager.dart';
 import '../services/settings_service.dart';
+import '../services/network_info_service.dart';
 import '../utils/app_localizations.dart';
 
 /// صفحه ورود مدرن و حرفه‌ای
@@ -32,6 +33,39 @@ class _LoginScreenState extends State<LoginScreen> {
   void initState() {
     super.initState();
     _checkLoginExpiration();
+    _autoSetRouterHostFromGateway();
+  }
+
+  /// تنظیم خودکار Router Host از Default Gateway
+  /// این متد Default Gateway را شناسایی می‌کند و در Router Host ذخیره می‌کند
+  Future<void> _autoSetRouterHostFromGateway() async {
+    try {
+      print('🔍 [LOGIN] در حال شناسایی Default Gateway برای تنظیم Router Host...');
+      
+      final networkInfo = NetworkInfoService();
+      final gateway = await networkInfo.getDefaultGatewayOrRouterIp();
+      
+      if (gateway != null) {
+        // دریافت Router Host فعلی
+        final currentHost = await _settingsService.getHost();
+        
+        // همیشه Default Gateway را در Router Host ست کن
+        // این باعث می‌شود که Router Host همیشه با Default Gateway هماهنگ باشد
+        await _settingsService.setHost(gateway);
+        
+        if (currentHost != gateway) {
+          print('✅ [LOGIN] Router Host به صورت خودکار از Default Gateway ست شد:');
+          print('   └─ Router Host قبلی: $currentHost');
+          print('   └─ Router Host جدید: $gateway (Default Gateway)');
+        } else {
+          print('ℹ️ [LOGIN] Router Host از قبل با Default Gateway هماهنگ است: $gateway');
+        }
+      } else {
+        print('⚠️ [LOGIN] Default Gateway شناسایی نشد - Router Host تغییر نکرد');
+      }
+    } catch (e) {
+      print('❌ [LOGIN] خطا در تنظیم خودکار Router Host: $e');
+    }
   }
 
   @override
@@ -98,7 +132,7 @@ class _LoginScreenState extends State<LoginScreen> {
       } else {
         final l10n = AppLocalizations.of(context);
         setState(() {
-          _errorMessage = l10n?.pleaseEnterUsername ?? 'Invalid username or password';
+          _errorMessage = l10n?.invalidUsernameOrPassword ?? 'Invalid username or password';
         });
       }
     } catch (e) {

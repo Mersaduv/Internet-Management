@@ -1,3 +1,10 @@
+/// Internet Management Application
+/// 
+/// Developer: Mersad Karimi
+/// Email: mersadkarimi001@gmail.com
+/// 
+/// A Flutter application for managing internet connections and MikroTik routers.
+
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:provider/provider.dart';
@@ -8,6 +15,7 @@ import 'screens/internet_service_screen.dart';
 import 'screens/app_settings_screen.dart';
 import 'services/mikrotik_service_manager.dart';
 import 'services/settings_service.dart';
+import 'services/network_info_service.dart';
 import 'models/client_info.dart';
 import 'providers/clients_provider.dart';
 import 'utils/app_localizations.dart';
@@ -47,6 +55,73 @@ class _MyAppState extends State<MyApp> {
       changeTheme(newThemeMode);
     };
     _loadSettings();
+    _logNetworkInfoOnStartup();
+  }
+
+  /// لاگ اطلاعات شبکه به محض باز شدن برنامه
+  Future<void> _logNetworkInfoOnStartup() async {
+    try {
+      print('═══════════════════════════════════════════════════════');
+      print('🚀 [APP_STARTUP] برنامه در حال راه‌اندازی...');
+      print('═══════════════════════════════════════════════════════');
+      
+      final networkInfo = NetworkInfoService();
+      
+      // دریافت IPv4 Address دستگاه
+      final deviceIp = await networkInfo.getDeviceIPv4Address();
+      if (deviceIp != null) {
+        print('✅ [APP_STARTUP] IPv4 Address دستگاه کاربر: $deviceIp');
+      } else {
+        print('⚠️ [APP_STARTUP] IPv4 Address دستگاه کاربر: یافت نشد');
+      }
+      
+      // دریافت Default Gateway
+      // این متد به ترتیب از RouterOS API، حدس از IP دستگاه، یا IP روتر از تنظیمات استفاده می‌کند
+      final gateway = await networkInfo.getDefaultGatewayOrRouterIp();
+      if (gateway != null) {
+        print('✅ [APP_STARTUP] Default Gateway اینترنت: $gateway');
+        
+        // بررسی اینکه gateway از کجا آمده
+        final serviceManager = MikroTikServiceManager();
+        final settings = await _settingsService.getAllSettings();
+        final routerHost = settings['host'] as String?;
+        final deviceIp = await networkInfo.getDeviceIPv4Address();
+        
+        String source = 'نامشخص';
+        if (serviceManager.isConnected) {
+          source = 'RouterOS API (route table)';
+        } else if (deviceIp != null) {
+          final parts = deviceIp.split('.');
+          if (parts.length == 4) {
+            final guessedGateway = '${parts[0]}.${parts[1]}.${parts[2]}.1';
+            if (gateway == guessedGateway) {
+              source = 'حدس از IP دستگاه (${deviceIp} → ${gateway})';
+            } else if (gateway == routerHost) {
+              source = 'IP روتر از تنظیمات (${routerHost})';
+            } else {
+              source = 'IP روتر از تنظیمات (${routerHost}) - در همان subnet';
+            }
+          }
+        } else if (gateway == routerHost) {
+          source = 'IP روتر از تنظیمات (${routerHost})';
+        }
+        
+        print('   └─ منبع: $source');
+      } else {
+        print('⚠️ [APP_STARTUP] Default Gateway اینترنت: یافت نشد');
+      }
+      
+      // دریافت تنظیمات اتصال
+      final settings = await _settingsService.getAllSettings();
+      print('📋 [APP_STARTUP] تنظیمات اتصال:');
+      print('   └─ Router Host: ${settings['host']}');
+      print('   └─ Router Port: ${settings['port']}');
+      print('   └─ Use SSL: ${settings['useSsl']}');
+      
+      print('═══════════════════════════════════════════════════════');
+    } catch (e) {
+      print('❌ [APP_STARTUP] خطا در دریافت اطلاعات شبکه: $e');
+    }
   }
 
   @override
@@ -245,6 +320,58 @@ class _MainScaffoldState extends State<MainScaffold> {
   void initState() {
     super.initState();
     _checkLoginExpiration();
+    _loadNetworkInfo();
+  }
+
+  /// بارگذاری اطلاعات شبکه (IPv4 Address و Default Gateway)
+  /// این متد هنگام باز شدن برنامه اطلاعات شبکه را دریافت می‌کند
+  Future<void> _loadNetworkInfo() async {
+    try {
+      print('═══════════════════════════════════════════════════════');
+      print('🌐 [NETWORK_INFO] در حال دریافت اطلاعات شبکه دستگاه...');
+      print('═══════════════════════════════════════════════════════');
+      
+      final networkInfo = NetworkInfoService();
+      
+      // دریافت IPv4 Address دستگاه
+      final deviceIp = await networkInfo.getDeviceIPv4Address();
+      if (deviceIp != null) {
+        print('✅ [NETWORK_INFO] IPv4 Address دستگاه کاربر: $deviceIp');
+      } else {
+        print('⚠️ [NETWORK_INFO] IPv4 Address دستگاه کاربر: یافت نشد');
+      }
+      
+      // دریافت Default Gateway
+      final gateway = await networkInfo.getDefaultGatewayOrRouterIp();
+      if (gateway != null) {
+        print('✅ [NETWORK_INFO] Default Gateway اینترنت: $gateway');
+      } else {
+        print('⚠️ [NETWORK_INFO] Default Gateway اینترنت: یافت نشد');
+      }
+      
+      // بررسی وضعیت اتصال RouterOS
+      if (_serviceManager.isConnected) {
+        print('✅ [NETWORK_INFO] اتصال به RouterOS: برقرار است');
+        final routerInfo = _serviceManager.routerInfo;
+        if (routerInfo != null) {
+          print('   └─ Router Version: ${routerInfo['version']}');
+          print('   └─ Router Platform: ${routerInfo['platform']}');
+          print('   └─ Router Uptime: ${routerInfo['uptime']}');
+        }
+      } else {
+        print('⚠️ [NETWORK_INFO] اتصال به RouterOS: برقرار نیست');
+      }
+      
+      // دریافت همه اطلاعات شبکه
+      final allInfo = await networkInfo.getNetworkInfo();
+      print('📊 [NETWORK_INFO] خلاصه اطلاعات شبکه:');
+      print('   └─ Device IPv4: ${allInfo['deviceIp'] ?? 'N/A'}');
+      print('   └─ Default Gateway: ${allInfo['defaultGateway'] ?? 'N/A'}');
+      
+      print('═══════════════════════════════════════════════════════');
+    } catch (e) {
+      print('❌ [NETWORK_INFO] خطا در دریافت اطلاعات شبکه: $e');
+    }
   }
 
   /// بررسی انقضای لاگین
@@ -462,10 +589,14 @@ class _HomePageState extends State<HomePage> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                provider.routerInfo?['board-name'] != null && 
-                                provider.routerInfo!['board-name'] != 'Unknown'
-                                    ? provider.routerInfo!['board-name']!
-                                    : '${connection.host}:${connection.port}',
+                                provider.routerInfo?['identity'] != null && 
+                                provider.routerInfo!['identity'] != 'Unknown' &&
+                                provider.routerInfo!['identity']!.toString().isNotEmpty
+                                    ? provider.routerInfo!['identity']!
+                                    : provider.routerInfo?['board-name'] != null && 
+                                      provider.routerInfo!['board-name'] != 'Unknown'
+                                        ? provider.routerInfo!['board-name']!
+                                        : '${connection.host}:${connection.port}',
                                 style: TextStyle(
                                   color: theme.brightness == Brightness.dark
                                       ? colorScheme.onSurface
@@ -474,9 +605,7 @@ class _HomePageState extends State<HomePage> {
                                   fontWeight: FontWeight.bold,
                                 ),
                               ),
-                              if (provider.routerInfo?['board-name'] != null && 
-                                  provider.routerInfo!['board-name'] != 'Unknown' &&
-                                  provider.routerInfo?['platform'] != null &&
+                              if (provider.routerInfo?['platform'] != null &&
                                   provider.routerInfo!['platform'] != 'Unknown') ...[
                                 const SizedBox(height: 2),
                                 Text(
@@ -668,47 +797,50 @@ class _HomePageState extends State<HomePage> {
                         width: double.infinity,
                         color: colorScheme.surface,
                         child: Row(
-                      children: [
-                        Expanded(
-                          child: Builder(
-                            builder: (context) {
-                              final l10n = AppLocalizations.of(context);
-                              return _buildTabButton(
-                                title: l10n?.connectedDevices ?? 'Connected Devices',
-                                count: provider.clients.length,
-                                icon: Icons.devices,
-                                isActive: _selectedTab == 0,
-                                onTap: () {
-                                  setState(() {
-                                    _selectedTab = 0;
-                                  });
+                          mainAxisSize: MainAxisSize.max,
+                          children: [
+                            Expanded(
+                              flex: 1,
+                              child: Builder(
+                                builder: (context) {
+                                  final l10n = AppLocalizations.of(context);
+                                  return _buildTabButton(
+                                    title: l10n?.connectedDevices ?? 'Connected Devices',
+                                    count: provider.clients.length,
+                                    icon: Icons.devices,
+                                    isActive: _selectedTab == 0,
+                                    onTap: () {
+                                      setState(() {
+                                        _selectedTab = 0;
+                                      });
+                                    },
+                                  );
                                 },
-                              );
-                            },
-                          ),
-                        ),
-                        Expanded(
-                          child: Builder(
-                            builder: (context) {
-                              final l10n = AppLocalizations.of(context);
-                              return _buildTabButton(
-                                title: l10n?.bannedDevices ?? 'Banned Devices',
-                                count: provider.bannedClients.length,
-                                icon: Icons.block,
-                                isActive: _selectedTab == 1,
-                                onTap: () {
-                                  setState(() {
-                                    _selectedTab = 1;
-                                  });
-                                  provider.loadBannedClients();
+                              ),
+                            ),
+                            Expanded(
+                              flex: 1,
+                              child: Builder(
+                                builder: (context) {
+                                  final l10n = AppLocalizations.of(context);
+                                  return _buildTabButton(
+                                    title: l10n?.bannedDevices ?? 'Banned Devices',
+                                    count: provider.bannedClients.length,
+                                    icon: Icons.block,
+                                    isActive: _selectedTab == 1,
+                                    onTap: () {
+                                      setState(() {
+                                        _selectedTab = 1;
+                                      });
+                                      provider.loadBannedClients();
+                                    },
+                                  );
                                 },
-                              );
-                            },
-                          ),
+                              ),
+                            ),
+                          ],
                         ),
-                      ],
-                    ),
-                  );
+                      );
                     },
                   ),
                   // محتوای Tab
@@ -741,10 +873,23 @@ class _HomePageState extends State<HomePage> {
         final colorScheme = theme.colorScheme;
         final primaryColor = const Color(0xFF428B7C);
         
+        // تشخیص اندازه صفحه برای ریسپانسیو کردن
+        final screenWidth = MediaQuery.of(context).size.width;
+        final isSmallScreen = screenWidth < 360; // برای S8 و صفحه‌های کوچک‌تر
+        
+        // تنظیم فونت و آیکون بر اساس اندازه صفحه
+        // فقط کمی کوچک‌تر می‌کنیم برای صفحه‌های کوچک (S8)
+        final fontSize = isSmallScreen ? 13.0 : 15.0;
+        final iconSize = isSmallScreen ? 18.0 : 20.0;
+        final padding = isSmallScreen 
+            ? const EdgeInsets.symmetric(vertical: 12, horizontal: 4)
+            : const EdgeInsets.symmetric(vertical: 16);
+        final spacing = isSmallScreen ? 6.0 : 8.0;
+        
         return InkWell(
           onTap: onTap,
           child: Container(
-            padding: const EdgeInsets.symmetric(vertical: 16),
+            padding: padding,
             decoration: BoxDecoration(
               color: isActive 
                   ? (theme.brightness == Brightness.dark
@@ -760,27 +905,34 @@ class _HomePageState extends State<HomePage> {
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min,
               children: [
                 Icon(
                   icon,
-                  size: 20,
+                  size: iconSize,
                   color: isActive 
                       ? primaryColor
                       : (theme.brightness == Brightness.dark
                           ? colorScheme.onSurface.withOpacity(0.6)
                           : Colors.grey.shade600),
                 ),
-                const SizedBox(width: 8),
-                Text(
-                  '$title ($count)',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
-                    color: isActive 
-                        ? primaryColor
-                        : (theme.brightness == Brightness.dark
-                            ? colorScheme.onSurface.withOpacity(0.6)
-                            : Colors.grey.shade600),
+                SizedBox(width: spacing),
+                Flexible(
+                  child: Text(
+                    '$title ($count)',
+                    style: TextStyle(
+                      fontSize: fontSize,
+                      fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
+                      color: isActive 
+                          ? primaryColor
+                          : (theme.brightness == Brightness.dark
+                              ? colorScheme.onSurface.withOpacity(0.6)
+                              : Colors.grey.shade600),
+                    ),
+                    overflow: TextOverflow.visible,
+                    maxLines: 2,
+                    textAlign: TextAlign.center,
+                    softWrap: true,
                   ),
                 ),
               ],
@@ -792,7 +944,8 @@ class _HomePageState extends State<HomePage> {
   }
 
   Widget _buildConnectedDevicesTab(ClientsProvider provider) {
-    if (provider.isLoading || !provider.isDataComplete) {
+    // نمایش skeleton فقط در حالت initial loading
+    if (provider.isLoading && provider.clients.isEmpty) {
       return Column(
         children: [
           Expanded(
@@ -806,6 +959,9 @@ class _HomePageState extends State<HomePage> {
         ],
       );
     }
+    
+    // اگر در حال progressive loading هستیم و لیست خالی نیست، لیست فعلی را نمایش بده
+    // (progressive loading در پس‌زمینه ادامه می‌دهد)
 
     if (provider.errorMessage != null) {
       return Builder(
@@ -904,7 +1060,31 @@ class _HomePageState extends State<HomePage> {
       color: const Color(0xFF428B7C),
       child: ListView.builder(
         itemCount: provider.clients.length,
+        // اضافه کردن یک item برای نشان دادن progressive loading
         itemBuilder: (context, index) {
+          // اگر آخرین آیتم است و هنوز در حال loading هستیم، یک indicator نمایش بده
+          if (index == provider.clients.length - 1 && 
+              !provider.isDataComplete && 
+              !provider.isLoading) {
+            return Column(
+              children: [
+                _buildClientCard(context, provider.clients[index], provider.deviceIp, provider),
+                const Padding(
+                  padding: EdgeInsets.all(16.0),
+                  child: Center(
+                    child: SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Color(0xFF428B7C),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            );
+          }
           final client = provider.clients[index];
           return _buildClientCard(context, client, provider.deviceIp, provider);
         },
@@ -1201,7 +1381,7 @@ class _HomePageState extends State<HomePage> {
                             style: TextStyle(color: colorScheme.onSurface),
                           ),
                           content: Text(
-                            l10n?.unbanDeviceConfirmTextWithIP(ipAddress!) ?? 'Are you sure you want to unban device $ipAddress?',
+                            l10n?.unbanDeviceConfirmTextWithIP(ipAddress) ?? 'Are you sure you want to unban device $ipAddress?',
                             style: TextStyle(color: colorScheme.onSurface),
                           ),
                           actions: [
