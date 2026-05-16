@@ -3,7 +3,8 @@ import '../models/mikrotik_connection.dart';
 
 /// مدیر سرویس MikroTik - Singleton برای نگه‌داری اتصال در کل برنامه
 class MikroTikServiceManager {
-  static final MikroTikServiceManager _instance = MikroTikServiceManager._internal();
+  static final MikroTikServiceManager _instance =
+      MikroTikServiceManager._internal();
   factory MikroTikServiceManager() => _instance;
   MikroTikServiceManager._internal();
 
@@ -124,53 +125,49 @@ class MikroTikServiceManager {
     return await _service!.getBannedClients();
   }
 
-  /// قفل کردن اتصال دستگاه‌های جدید - منطق حذف شده (فقط UI باقی مانده)
+  Future<bool> makeClientStatic({String? ipAddress, String? macAddress}) async {
+    if (_service == null || !isConnected) {
+      throw Exception('Connection is not established');
+    }
+    return _service!.makeClientStatic(
+      ipAddress: ipAddress,
+      macAddress: macAddress,
+    );
+  }
+
   Future<bool> lockNewConnections() async {
-    // منطق حذف شده
-    return false;
+    if (_service == null || !isConnected) {
+      throw Exception('Connection is not established');
+    }
+    return _service!.lockNewConnections();
   }
 
-  /// رفع قفل اتصال دستگاه‌های جدید - منطق حذف شده (فقط UI باقی مانده)
   Future<bool> unlockNewConnections() async {
-    // منطق حذف شده
-    return false;
+    if (_service == null || !isConnected) {
+      throw Exception('Connection is not established');
+    }
+    return _service!.unlockNewConnections();
   }
 
-  /// بررسی وضعیت قفل اتصال جدید - منطق حذف شده (فقط UI باقی مانده)
   Future<bool> isNewConnectionsLocked() async {
-    // منطق حذف شده - همیشه false
-    return false;
-  }
-
-  /// دریافت لیست IP های مجاز برای قفل - منطق حذف شده
-  Future<Set<String>> getAllowedIpsForLock() async {
-    // منطق حذف شده
-    return <String>{};
-  }
-
-  /// محدود کردن دسترسی WiFi برای دستگاه non-static
-  Future<void> restrictNonStaticDevice(String macAddress, {String? ipAddress}) async {
-    if (_service == null || !isConnected) {
-      return;
-    }
-    return await _service!.restrictNonStaticDevice(macAddress, ipAddress: ipAddress);
-  }
-
-  /// اجازه دادن به دستگاه non-static برای اتصال کامل به WiFi
-  Future<bool> allowNonStaticDevice(String macAddress, {String? ipAddress}) async {
     if (_service == null || !isConnected) {
       return false;
     }
-    return await _service!.allowNonStaticDevice(macAddress, ipAddress: ipAddress);
+    return _service!.isNewConnectionsLocked();
   }
 
-  /// حذف دستگاه از لیست مجاز
-  Future<bool> removeFromAllowedList(String macAddress, {String? ipAddress}) async {
+  Future<String> setDhcpLeaseDisplayName({
+    String? ipAddress,
+    String? macAddress,
+    required String displayName,
+  }) async {
     if (_service == null || !isConnected) {
-      return false;
+      throw Exception('Connection is not established');
     }
-    return await _service!.removeFromAllowedList(macAddress, ipAddress: ipAddress);
+    return _service!.setDhcpLeaseDisplayName(
+      ipAddress: ipAddress,
+      macAddress: macAddress,
+      displayName: displayName,
+    );
   }
-
 }
-

@@ -102,6 +102,56 @@ class ClientInfo {
     };
   }
 
+  ClientInfo copyWith({
+    String? type,
+    String? source,
+    String? user,
+    String? name,
+    String? ipAddress,
+    String? macAddress,
+    String? hostName,
+    String? uptime,
+    String? bytesIn,
+    String? bytesOut,
+    String? loginBy,
+    String? server,
+    String? id,
+    String? interface,
+    String? ssid,
+    String? signalStrength,
+    String? service,
+    String? callerId,
+    String? status,
+    String? expiresAfter,
+    bool? isStaticLease,
+    Map<String, dynamic>? rawData,
+  }) {
+    return ClientInfo(
+      type: type ?? this.type,
+      source: source ?? this.source,
+      user: user ?? this.user,
+      name: name ?? this.name,
+      ipAddress: ipAddress ?? this.ipAddress,
+      macAddress: macAddress ?? this.macAddress,
+      hostName: hostName ?? this.hostName,
+      uptime: uptime ?? this.uptime,
+      bytesIn: bytesIn ?? this.bytesIn,
+      bytesOut: bytesOut ?? this.bytesOut,
+      loginBy: loginBy ?? this.loginBy,
+      server: server ?? this.server,
+      id: id ?? this.id,
+      interface: interface ?? this.interface,
+      ssid: ssid ?? this.ssid,
+      signalStrength: signalStrength ?? this.signalStrength,
+      service: service ?? this.service,
+      callerId: callerId ?? this.callerId,
+      status: status ?? this.status,
+      expiresAfter: expiresAfter ?? this.expiresAfter,
+      isStaticLease: isStaticLease ?? this.isStaticLease,
+      rawData: rawData ?? this.rawData,
+    );
+  }
+
   /// پارس کردن وضعیت Static Lease از rawData
   /// dynamic=true → Dynamic (داینامیک) → isStaticLease = false
   /// dynamic=false → Static (استاتیک) → isStaticLease = true
@@ -115,13 +165,12 @@ class ClientInfo {
         return true; // Static
       }
     }
-    
+
     // بررسی در is_static_lease (اگر قبلاً ذخیره شده)
     if (map.containsKey('is_static_lease')) {
       return map['is_static_lease'] as bool?;
     }
-    
+
     return null; // Unknown
   }
 }
-

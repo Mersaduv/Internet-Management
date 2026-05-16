@@ -22,6 +22,7 @@
   `Flutter UI -> Provider -> Service Manager -> MikroTikService -> RouterOSClientV2 -> RouterOS API v6`
 - در نسخه فعلی، **اسکریپت MikroTik از نوع `/system/script`** در این مسیرها استفاده نشده است. عملیات‌ها با **دستور مستقیم RouterOS API v6** انجام می‌شوند.
 - کلاینت فعال RouterOS در runtime فایل `[lib/services/routeros_client_v2.dart](lib/services/routeros_client_v2.dart)` است و از پکیج `router_os_client` استفاده می‌کند. فایل `[lib/services/routeros_client.dart](lib/services/routeros_client.dart)` در این مسیر عملیاتی استفاده نشده است.
+- `RouterOSClientV2.talk()` در ساختار فعلی به‌صورت **صفی و ترتیبی** اجرا می‌شود تا فرمان‌های هم‌زمان روی یک socket RouterOS با هم overlap نکنند و `Timeout`های کاذب در `queue/simple/print` رخ ندهد.
 - عملیات **قفل اتصال جدید** در کد فعلی یک «قفل سراسری روی روتر» نیست؛ بلکه ترکیبی از:
   - فلگ محلی در `SharedPreferences`
   - شناسایی دستگاه‌های داینامیک
@@ -174,7 +175,8 @@
 6. Manager اتصال قبلی را قطع می‌کند و یک نمونه جدید از `MikroTikService` می‌سازد.
 7. `MikroTikService.connect()`، شیء `RouterOSClientV2` را ساخته و `login()` را صدا می‌زند.
 8. خود `RouterOSClientV2` از پکیج `router_os_client` برای لاگین استفاده می‌کند.
-9. اگر اتصال موفق بود:
+9. پس از لاگین موفق، صف داخلی فرمان‌ها در `RouterOSClientV2` ریست می‌شود تا همه `talk()`های بعدی به‌ترتیب روی همان session اجرا شوند.
+10. اگر اتصال موفق بود:
    - `MikroTikServiceManager.connect()` بلافاصله `getRouterInfo()` را هم صدا می‌زند.
    - timestamp لاگین در `SharedPreferences` ذخیره می‌شود.
    - کاربر به صفحه اصلی می‌رود.
@@ -210,6 +212,7 @@
 ### نکته مهم
 
 - انقضای لاگین در `SettingsService.isLoginExpired()` با بازه `14 روز` بررسی می‌شود.
+- از این نقطه به بعد، فرض طراحی این است که RouterOS API یک مسیر ترتیبی دارد و فرمان‌ها نباید هم‌زمان روی یک socket اجرا شوند؛ این موضوع مخصوصاً برای queue و loadهای جزئیات دستگاه اهمیت دارد.
 
 ### رفرنس‌های کد
 
@@ -228,8 +231,8 @@
 - سرویس:
   - `[lib/services/mikrotik_service_manager.dart](lib/services/mikrotik_service_manager.dart)` - `connect()` خط `27`
   - `[lib/services/mikrotik_service.dart](lib/services/mikrotik_service.dart)` - `connect()` خط `17`
-  - `[lib/services/routeros_client_v2.dart](lib/services/routeros_client_v2.dart)` - `login()` خط `25`
-  - `[lib/services/routeros_client_v2.dart](lib/services/routeros_client_v2.dart)` - `talk()` خط `51`
+  - `[lib/services/routeros_client_v2.dart](lib/services/routeros_client_v2.dart)` - `login()` خط `26`
+  - `[lib/services/routeros_client_v2.dart](lib/services/routeros_client_v2.dart)` - `talk()` خط `50`
   - `[lib/services/mikrotik_service.dart](lib/services/mikrotik_service.dart)` - `getRouterInfo()` خط `2462`
 
 ### عملیات معکوس
@@ -687,20 +690,19 @@
 
 ### هدف
 
-نمایش داده‌های عملیاتی و مدیریتی هر دستگاه و فراهم کردن نقطه شروع برای عملیات‌های جزئی‌تر مانند بن، رفع بن، وضعیت lease و تنظیم سرعت.
+نمایش داده‌های عملیاتی و مدیریتی هر دستگاه و فراهم کردن نقطه شروع برای عملیات‌های جزئی‌تر مانند بن، رفع بن، عملیات lease و تنظیم سرعت.
 
 ### ترتیب اجرای واقعی
 
 1. کاربر از لیست دستگاه‌ها روی یک کارت وارد `DeviceDetailScreen` می‌شود.
 2. در `initState()`:
-   - وضعیت اولیه `isStaticLease` از `widget.device` برداشته می‌شود
-   - بعضی cacheها preload می‌شوند
+   - بعضی stateهای محلی از `widget.device` آماده می‌شوند
+   - cache سرعت preload می‌شود
 3. سپس `_loadAllData` و متدهای تکمیلی اجرا می‌شوند.
 4. برای سرعت:
    - ابتدا cache محلی خوانده می‌شود
    - سپس `_loadSpeedLimit()` در پس‌زمینه از RouterOS مقدار واقعی را می‌گیرد
-5. برای وضعیت lease:
-   - اگر مقدار قطعی در مدل نباشد، `_loadLeaseStatus()` اجرا می‌شود
+5. در بازگشت اپ از background یا تغییر device ورودی، `_loadAllData()` یا `_loadSpeedLimit()` دوباره اجرا می‌شود تا داده stale نماند.
 6. بن و رفع بن و static lease و تنظیم سرعت همگی از همین صفحه قابل شروع هستند.
 
 ### RouterOS API v6 / Script
@@ -710,38 +712,35 @@
   - در صورت نیاز برای resolve MAC به IP:
     - `/ip/dhcp-server/lease/print`
     - `/ip/arp/print`
-- برای وضعیت static/dynamic lease:
-  - `/ip/dhcp-server/lease/print`
 - اسکریپت RouterOS:
   - استفاده نشده
 
 ### دلیل عملیات
 
 - صفحه جزئیات، مرکز عملیات per-device است
-- داده‌های زنده‌تر مثل speed و lease status در این صفحه مجدداً از RouterOS خوانده می‌شوند
+- داده زنده‌ای که در این نسخه از همین صفحه مستقیم refresh می‌شود، عمدتاً speed موثر دستگاه است
 
 ### قبل و بعد از عملیات
 
 - قبل از عملیات:
   - بخشی از داده از `ClientInfo` ورودی صفحه آمده است
 - بعد از عملیات:
-  - speed واقعی و lease status در UI دقیق‌تر می‌شود
+  - speed واقعی در UI دقیق‌تر می‌شود
   - کاربر می‌تواند عملیات مدیریتی بعدی را شروع کند
 
 ### نکته مهم
 
 - این صفحه از `getClientsDetailed()` استفاده نمی‌کند.
-- داده‌های جزئی با چند call مستقل مثل `getClientSpeed()` و `getLeaseStatus()` گرفته می‌شوند.
+- داده‌های جزئی به‌صورت callهای مستقل و محدود گرفته می‌شوند و بار زنده اصلی این صفحه روی `getClientSpeed()` است.
 
 ### رفرنس‌های کد
 
 - فرانت:
-  - `[lib/screens/device_detail_screen.dart](lib/screens/device_detail_screen.dart)` - `initState()` خط `52`
-  - `[lib/screens/device_detail_screen.dart](lib/screens/device_detail_screen.dart)` - `_loadSpeedLimit()` خط `1098`
-  - `[lib/screens/device_detail_screen.dart](lib/screens/device_detail_screen.dart)` - `_loadLeaseStatus()` خط `1175`
+  - `[lib/screens/device_detail_screen.dart](lib/screens/device_detail_screen.dart)` - `initState()` خط `45`
+  - `[lib/screens/device_detail_screen.dart](lib/screens/device_detail_screen.dart)` - `_showSpeedLimitSheet()` خط `134`
+  - `[lib/screens/device_detail_screen.dart](lib/screens/device_detail_screen.dart)` - `_loadSpeedLimit()` خط `1357`
 - سرویس:
-  - `[lib/services/mikrotik_service.dart](lib/services/mikrotik_service.dart)` - `getClientSpeed()` خط `1919`
-  - `[lib/services/mikrotik_service.dart](lib/services/mikrotik_service.dart)` - `getLeaseStatus()` خط `9933`
+  - `[lib/services/mikrotik_service.dart](lib/services/mikrotik_service.dart)` - `getClientSpeed()` خط `3174`
 
 ### عملیات معکوس
 
@@ -753,26 +752,30 @@
 
 ### هدف
 
-ایجاد یا به‌روزرسانی `simple queue` برای دستگاه تا `max-limit` آن کنترل شود.
+تشخیص سرعت موثر دستگاه و در صورت نیاز ساخت/ویرایش/حذف `simple queue` اختصاصی، به‌طوری که اگر دستگاه زیر `PCQ` یا queue عمومی باشد بتواند به‌صورت مستقل override شود و در عملیات معکوس هم پاکسازی درست انجام شود.
 
 ### ترتیب اجرای واقعی
 
-1. کاربر در صفحه جزئیات، گزینه تنظیم سرعت را انتخاب می‌کند.
-2. `_setSpeedLimitInternal(ip, maxLimit)` اجرا می‌شود.
-3. `provider.setClientSpeed(target, maxLimit)` صدا زده می‌شود.
-4. Provider متد `service.setClientSpeed()` را فراخوانی می‌کند.
-5. در سرویس:
-   - اگر `target` MAC باشد، IP از DHCP و سپس ARP پیدا می‌شود
-   - اگر `target` IP باشد، مستقیم همان استفاده می‌شود
-   - نام queue به صورت `DEV-<ip>` ساخته می‌شود
-   - ابتدا queue بر اساس `target=<ip>/32` جستجو می‌شود
-   - اگر نبود، بر اساس `name=DEV-<ip>` جستجو می‌شود
-   - اگر queue پیدا شد، `max-limit` آن update می‌شود
-   - اگر پیدا نشد، queue جدید ساخته می‌شود
-   - اگر duplicate رخ دهد، دوباره queue پیدا و update می‌شود
-6. پس از موفقیت:
-   - `refresh()` در پس‌زمینه اجرا می‌شود
-   - صفحه جزئیات بعداً دوباره `_loadSpeedLimit()` را اجرا می‌کند تا مقدار واقعی را از RouterOS تایید کند
+1. کاربر در صفحه جزئیات روی دکمه سرعت می‌زند و به‌جای dialog قدیمی، `showModalBottomSheet` از متد `_showSpeedLimitSheet()` باز می‌شود.
+2. فرم از روی `_currentSpeedLimit`، cache محلی، و metadata آخرین queue پر می‌شود و هدر آن queue موثر فعلی را با `queue_display_name`، `queue_types` و `queue_match_type` نشان می‌دهد.
+3. اگر کاربر ذخیره کند، `_setSpeedLimitInternal(ip, maxLimit)` اجرا می‌شود و از طریق Provider به `setClientSpeedWithOptions()` در سرویس می‌رسد.
+4. سرویس ابتدا target را به IP واقعی resolve می‌کند؛ اگر MAC داده شده باشد از DHCP و سپس ARP کمک می‌گیرد.
+5. سپس با `_getSimpleQueues()` فقط فیلدهای حداقلی queueها را از RouterOS می‌خواند تا بار CPU کمتر بماند.
+6. `_findQueueMatches()` تمام queueهای مرتبط با IP را دسته‌بندی می‌کند:
+   - `direct`: queue مستقیم host-only
+   - `group`: queue صریح چند-IP که برای سرعت‌دهی explicit ساخته شده
+   - `pcq`: queue عمومی که type آن `pcq-*` است
+   - `network`: queue عمومی broad بدون PCQ
+   - `conditional`: queueهای وابسته به `packet-marks`
+7. اگر IP قبلاً داخل queueهای explicit چندهدفه باشد، `_removeIpFromExplicitSpeedQueues()` قبل از اعمال سرعت اختصاصی آن IP را از آن queueها حذف می‌کند؛ اگر queue فقط برای همان IP بوده و managed باشد، کل queue حذف می‌شود.
+8. `_setClientSpeedResolved()` تلاش می‌کند موثرترین queue قابل‌ویرایش را پیدا کند:
+   - اگر queue مستقیم مناسب وجود داشته باشد، همان update می‌شود
+   - اگر queue managed قبلی در جای اشتباه باشد، remove و recreate می‌شود
+   - اگر دستگاه زیر PCQ یا queue عمومی باشد، queue جدید `DEV-<ip>` با target=`<ip>/32` و `place-before` قبل از broad general match ساخته می‌شود تا بر queue عمومی precedence بگیرد
+9. بعد از add/set، `_verifyDedicatedSpeedOverride()` دوباره queueها را می‌خواند و چک می‌کند queue موثر نهایی واقعاً `direct` شده باشد؛ اگر دستگاه هنوز از queue عمومی تبعیت کند، خطا برمی‌گردد.
+10. اگر queue قبلی از نوع PCQ بوده باشد، سرویس برای queue اختصاصی type اختصاصی `default-small/default-small` را امتحان می‌کند و اگر RouterOS آن را نپذیرد، fallback بدون `=queue=` انجام می‌دهد.
+11. اگر کاربر حذف سرعت را بزند، `_removeSpeedLimitInternal()` از UI به `removeClientSpeed()` در Provider و سرویس می‌رسد و همان منطق پاکسازی explicit queueها را برعکس اجرا می‌کند.
+12. پس از موفقیت، UI مقدار جدید را موقتاً در state و cache می‌گذارد و با delay کوتاه دوباره `_loadSpeedLimit()` را اجرا می‌کند تا مقدار موثر واقعی از RouterOS تأیید شود.
 
 ### RouterOS API v6 / Script
 
@@ -781,46 +784,63 @@
   - `/ip/arp/print`
 - برای queue:
   - `/queue/simple/print`
+  - `/queue/type/print`
   - `/queue/simple/set`
   - `/queue/simple/add`
+  - `/queue/simple/remove`
 - اسکریپت RouterOS:
   - استفاده نشده
 
 ### دلیل عملیات
 
-- کنترل مستقیم پهنای باند هر دستگاه
-- حفظ queue بر اساس IP/target
-- استفاده از fallback by name برای افزایش پایداری
+- تشخیص درست speed موثر حتی وقتی دستگاه زیر `PCQ` یا queue عمومی باشد
+- override حرفه‌ای سرعت برای یک IP بدون دست‌زدن به queue عمومی کل subnet
+- جلوگیری از duplicate و precedence اشتباه در queueها
+- پاکسازی معکوس برای حذف IP از queueهای explicit و جلوگیری از ماندن state ناسازگار روی MikroTik
 
 ### قبل و بعد از عملیات
 
 - قبل از عملیات:
-  - ممکن است مقدار speed از cache آمده باشد
+  - ممکن است مقدار speed ابتدا از cache آمده باشد
+  - ممکن است queue موثر دستگاه direct نباشد و از `PCQ` یا queue عمومی خوانده شود
 - بعد از عملیات:
-  - queue ساخته یا update می‌شود
-  - UI refresh می‌شود
-  - صفحه جزئیات دوباره مقدار واقعی RouterOS را می‌خواند
+  - یا queue مستقیم دستگاه update می‌شود، یا queue اختصاصی جدید قبل از queue عمومی ساخته می‌شود
+  - اگر دستگاه قبلاً عضو queueهای explicit چند-IP بوده باشد، membership قدیمی پاکسازی می‌شود
+  - UI دوباره مقدار موثر واقعی RouterOS را می‌خواند و queue label جدید را نشان می‌دهد
 
 ### نکات مهم
 
-- UI فعلی برای تنظیم سرعت معمولاً IP را به سرویس می‌دهد.
-- متد معکوس `removeClientSpeed()` در سرویس وجود دارد، اما در UI فعلی دکمه مستقیمی برای آن دیده نشد.
+- UI فعلی تنظیم سرعت را با bottom sheet انجام می‌دهد، نه dialog.
+- دکمه حذف سرعت در UI فعلی expose شده است، اما فقط وقتی queue موثر از نوع `direct` یا `group` باشد فعال می‌شود.
+- اگر speed از `PCQ` خوانده شود، `getClientSpeed()` مقدار `pcq-rate` را از `/queue/type/print` استخراج می‌کند و فقط به `max-limit` والد اکتفا نمی‌کند.
+- `_talk()` در `MikroTikService` و صف داخلی `RouterOSClientV2.talk()` هر دو برای کاهش timeoutهای هم‌زمانی روی queueها اهمیت دارند.
+- `legacySetClientSpeed()` در فایل سرویس هنوز وجود دارد، اما مسیر عملیاتی فعلی از `setClientSpeedWithOptions()` و `_setClientSpeedResolved()` عبور می‌کند.
 
 ### رفرنس‌های کد
 
 - فرانت:
-  - `[lib/screens/device_detail_screen.dart](lib/screens/device_detail_screen.dart)` - `_setSpeedLimitInternal()` خط `908`
-  - `[lib/screens/device_detail_screen.dart](lib/screens/device_detail_screen.dart)` - `_loadSpeedLimit()` خط `1098`
+  - `[lib/screens/device_detail_screen.dart](lib/screens/device_detail_screen.dart)` - `_showSpeedLimitSheet()` خط `134`
+  - `[lib/screens/device_detail_screen.dart](lib/screens/device_detail_screen.dart)` - `_setSpeedLimitInternal()` خط `1041`
+  - `[lib/screens/device_detail_screen.dart](lib/screens/device_detail_screen.dart)` - `_removeSpeedLimitInternal()` خط `1185`
+  - `[lib/screens/device_detail_screen.dart](lib/screens/device_detail_screen.dart)` - `_loadSpeedLimit()` خط `1357`
 - Provider:
-  - `[lib/providers/clients_provider.dart](lib/providers/clients_provider.dart)` - `setClientSpeed()` خط `734`
+  - `[lib/providers/clients_provider.dart](lib/providers/clients_provider.dart)` - `setClientSpeedWithOptions()` خط `944`
+  - `[lib/providers/clients_provider.dart](lib/providers/clients_provider.dart)` - `removeClientSpeed()` خط `993`
 - سرویس:
-  - `[lib/services/mikrotik_service.dart](lib/services/mikrotik_service.dart)` - `setClientSpeed()` خط `1527`
-  - `[lib/services/mikrotik_service.dart](lib/services/mikrotik_service.dart)` - `removeClientSpeed()` خط `1760`
-  - `[lib/services/mikrotik_service.dart](lib/services/mikrotik_service.dart)` - `getClientSpeed()` خط `1919`
+  - `[lib/services/mikrotik_service.dart](lib/services/mikrotik_service.dart)` - `_getSimpleQueues()` خط `773`
+  - `[lib/services/mikrotik_service.dart](lib/services/mikrotik_service.dart)` - `_findQueueMatches()` خط `622`
+  - `[lib/services/mikrotik_service.dart](lib/services/mikrotik_service.dart)` - `_verifyDedicatedSpeedOverride()` خط `1008`
+  - `[lib/services/mikrotik_service.dart](lib/services/mikrotik_service.dart)` - `_setClientSpeedResolved()` خط `1040`
+  - `[lib/services/mikrotik_service.dart](lib/services/mikrotik_service.dart)` - `setClientSpeedWithOptions()` خط `3080`
+  - `[lib/services/mikrotik_service.dart](lib/services/mikrotik_service.dart)` - `removeClientSpeed()` خط `3160`
+  - `[lib/services/mikrotik_service.dart](lib/services/mikrotik_service.dart)` - `getClientSpeed()` خط `3174`
+  - `[lib/services/routeros_client_v2.dart](lib/services/routeros_client_v2.dart)` - `talk()` خط `50`
 
 ### عملیات معکوس
 
-- `removeClientSpeed()` وجود دارد، ولی از UI فعلی مستقیماً استفاده نشده است.
+- عملیات معکوس این بخش فعال و در UI در دسترس است.
+- `removeClientSpeed()` برای queueهای explicit فقط همان IP را پاک می‌کند؛ اگر queue managed تک‌هدفه باشد آن را کامل حذف می‌کند.
+- queueهای عمومی `PCQ` یا queueهای broad subnet در حذف سرعت اختصاصی دست‌کاری نمی‌شوند؛ فقط override اختصاصی و membershipهای صریح پاکسازی می‌شوند.
 
 ---
 
@@ -888,5 +908,5 @@
 3. Lock New Connections در این نسخه یک state محلی + access-list workflow است، نه قفل سراسری RouterOS.
 4. بن از صفحه جزئیات و بن از Provider دقیقاً یکسان نیستند؛ مسیر Provider می‌تواند fingerprint هم ذخیره کند.
 5. لیست banned بیشتر از نوع active/observable است، نه آرشیو کامل ruleها.
-6. متد حذف speed وجود دارد، اما در UI فعلی expose نشده است.
+6. تنظیم سرعت در نسخه فعلی فقط add/set ساده نیست؛ تشخیص queue موثر، override روی PCQ، verify بعد از اعمال، و حذف معکوس membershipهای explicit را هم شامل می‌شود.
 7. static lease روی رفتار lock اثر مستقیم دارد.

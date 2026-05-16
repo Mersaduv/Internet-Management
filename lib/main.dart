@@ -1,8 +1,8 @@
 /// Internet Management Application
-/// 
+///
 /// Developer: Mersad Karimi
 /// Email: mersadkarimi001@gmail.com
-/// 
+///
 /// A Flutter application for managing internet connections and MikroTik routers.
 
 import 'package:flutter/material.dart';
@@ -43,7 +43,7 @@ class _MyAppState extends State<MyApp> {
   ThemeMode _themeMode = ThemeMode.system; // 默认主题：跟随系统
   bool _isLoading = true;
   final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
-  
+
   @override
   void initState() {
     super.initState();
@@ -64,9 +64,9 @@ class _MyAppState extends State<MyApp> {
       print('═══════════════════════════════════════════════════════');
       print('🚀 [APP_STARTUP] برنامه در حال راه‌اندازی...');
       print('═══════════════════════════════════════════════════════');
-      
+
       final networkInfo = NetworkInfoService();
-      
+
       // دریافت IPv4 Address دستگاه
       final deviceIp = await networkInfo.getDeviceIPv4Address();
       if (deviceIp != null) {
@@ -74,19 +74,19 @@ class _MyAppState extends State<MyApp> {
       } else {
         print('⚠️ [APP_STARTUP] IPv4 Address دستگاه کاربر: یافت نشد');
       }
-      
+
       // دریافت Default Gateway
       // این متد به ترتیب از RouterOS API، حدس از IP دستگاه، یا IP روتر از تنظیمات استفاده می‌کند
       final gateway = await networkInfo.getDefaultGatewayOrRouterIp();
       if (gateway != null) {
         print('✅ [APP_STARTUP] Default Gateway اینترنت: $gateway');
-        
+
         // بررسی اینکه gateway از کجا آمده
         final serviceManager = MikroTikServiceManager();
         final settings = await _settingsService.getAllSettings();
         final routerHost = settings['host'] as String?;
         final deviceIp = await networkInfo.getDeviceIPv4Address();
-        
+
         String source = 'نامشخص';
         if (serviceManager.isConnected) {
           source = 'RouterOS API (route table)';
@@ -105,19 +105,19 @@ class _MyAppState extends State<MyApp> {
         } else if (gateway == routerHost) {
           source = 'IP روتر از تنظیمات (${routerHost})';
         }
-        
+
         print('   └─ منبع: $source');
       } else {
         print('⚠️ [APP_STARTUP] Default Gateway اینترنت: یافت نشد');
       }
-      
+
       // دریافت تنظیمات اتصال
       final settings = await _settingsService.getAllSettings();
       print('📋 [APP_STARTUP] تنظیمات اتصال:');
       print('   └─ Router Host: ${settings['host']}');
       print('   └─ Router Port: ${settings['port']}');
       print('   └─ Use SSL: ${settings['useSsl']}');
-      
+
       print('═══════════════════════════════════════════════════════');
     } catch (e) {
       print('❌ [APP_STARTUP] خطا در دریافت اطلاعات شبکه: $e');
@@ -131,7 +131,6 @@ class _MyAppState extends State<MyApp> {
     super.dispose();
   }
 
-
   /// 加载保存的设置（语言和主题）
   Future<void> _loadSettings() async {
     try {
@@ -140,10 +139,10 @@ class _MyAppState extends State<MyApp> {
       final locale = languageCode == 'en'
           ? const Locale('en', 'US')
           : const Locale('fa', 'IR');
-      
+
       // 加载主题设置
       final themeMode = await _settingsService.getThemeModeEnum();
-      
+
       setState(() {
         _locale = locale;
         _themeMode = themeMode;
@@ -194,9 +193,7 @@ class _MyAppState extends State<MyApp> {
         themeMode: ThemeMode.system,
         home: Scaffold(
           body: Center(
-            child: CircularProgressIndicator(
-              color: const Color(0xFF428B7C),
-            ),
+            child: CircularProgressIndicator(color: const Color(0xFF428B7C)),
           ),
         ),
       );
@@ -282,7 +279,9 @@ class _MyAppState extends State<MyApp> {
           '/home': (context) => const MainScaffold(),
           '/test': (context) => const ConnectionTestScreen(),
           '/device-detail': (context) {
-            final args = ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>;
+            final args =
+                ModalRoute.of(context)!.settings.arguments
+                    as Map<String, dynamic>;
             return DeviceDetailScreen(
               device: args['device'] as ClientInfo,
               isCurrentDevice: args['isCurrentDevice'] as bool? ?? false,
@@ -292,9 +291,9 @@ class _MyAppState extends State<MyApp> {
         },
         builder: (context, child) {
           return MediaQuery(
-            data: MediaQuery.of(context).copyWith(
-              textScaler: TextScaler.linear(1.0),
-            ),
+            data: MediaQuery.of(
+              context,
+            ).copyWith(textScaler: TextScaler.linear(1.0)),
             child: child!,
           );
         },
@@ -330,9 +329,9 @@ class _MainScaffoldState extends State<MainScaffold> {
       print('═══════════════════════════════════════════════════════');
       print('🌐 [NETWORK_INFO] در حال دریافت اطلاعات شبکه دستگاه...');
       print('═══════════════════════════════════════════════════════');
-      
+
       final networkInfo = NetworkInfoService();
-      
+
       // دریافت IPv4 Address دستگاه
       final deviceIp = await networkInfo.getDeviceIPv4Address();
       if (deviceIp != null) {
@@ -340,7 +339,7 @@ class _MainScaffoldState extends State<MainScaffold> {
       } else {
         print('⚠️ [NETWORK_INFO] IPv4 Address دستگاه کاربر: یافت نشد');
       }
-      
+
       // دریافت Default Gateway
       final gateway = await networkInfo.getDefaultGatewayOrRouterIp();
       if (gateway != null) {
@@ -348,7 +347,7 @@ class _MainScaffoldState extends State<MainScaffold> {
       } else {
         print('⚠️ [NETWORK_INFO] Default Gateway اینترنت: یافت نشد');
       }
-      
+
       // بررسی وضعیت اتصال RouterOS
       if (_serviceManager.isConnected) {
         print('✅ [NETWORK_INFO] اتصال به RouterOS: برقرار است');
@@ -361,13 +360,13 @@ class _MainScaffoldState extends State<MainScaffold> {
       } else {
         print('⚠️ [NETWORK_INFO] اتصال به RouterOS: برقرار نیست');
       }
-      
+
       // دریافت همه اطلاعات شبکه
       final allInfo = await networkInfo.getNetworkInfo();
       print('📊 [NETWORK_INFO] خلاصه اطلاعات شبکه:');
       print('   └─ Device IPv4: ${allInfo['deviceIp'] ?? 'N/A'}');
       print('   └─ Default Gateway: ${allInfo['defaultGateway'] ?? 'N/A'}');
-      
+
       print('═══════════════════════════════════════════════════════');
     } catch (e) {
       print('❌ [NETWORK_INFO] خطا در دریافت اطلاعات شبکه: $e');
@@ -399,7 +398,7 @@ class _MainScaffoldState extends State<MainScaffold> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    
+
     return Scaffold(
       body: IndexedStack(
         index: _currentIndex,
@@ -478,9 +477,7 @@ class _MainScaffoldState extends State<MainScaffold> {
         padding: const EdgeInsets.symmetric(vertical: 12),
         child: Icon(
           isActive ? activeIcon : icon,
-          color: isActive
-              ? const Color(0xFF428B7C)
-              : Colors.grey.shade600,
+          color: isActive ? const Color(0xFF428B7C) : Colors.grey.shade600,
           size: 28,
         ),
       ),
@@ -515,7 +512,7 @@ class _HomePageState extends State<HomePage> {
     final provider = Provider.of<ClientsProvider>(context);
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    
+
     return Scaffold(
       appBar: PreferredSize(
         preferredSize: const Size.fromHeight(kToolbarHeight),
@@ -562,7 +559,7 @@ class _HomePageState extends State<HomePage> {
         builder: (context) {
           final theme = Theme.of(context);
           final colorScheme = theme.colorScheme;
-          
+
           return Container(
             color: colorScheme.surfaceContainerHighest,
             child: Column(
@@ -573,288 +570,298 @@ class _HomePageState extends State<HomePage> {
                     width: double.infinity,
                     padding: const EdgeInsets.all(16),
                     color: colorScheme.surface,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Icon(
-                          Icons.router,
-                          color: Color(0xFF428B7C),
-                          size: 20,
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                provider.routerInfo?['identity'] != null && 
-                                provider.routerInfo!['identity'] != 'Unknown' &&
-                                provider.routerInfo!['identity']!.toString().isNotEmpty
-                                    ? provider.routerInfo!['identity']!
-                                    : provider.routerInfo?['board-name'] != null && 
-                                      provider.routerInfo!['board-name'] != 'Unknown'
+                        Row(
+                          children: [
+                            const Icon(
+                              Icons.router,
+                              color: Color(0xFF428B7C),
+                              size: 20,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    provider.routerInfo?['identity'] != null &&
+                                            provider.routerInfo!['identity'] !=
+                                                'Unknown' &&
+                                            provider.routerInfo!['identity']!
+                                                .toString()
+                                                .isNotEmpty
+                                        ? provider.routerInfo!['identity']!
+                                        : provider.routerInfo?['board-name'] !=
+                                                  null &&
+                                              provider.routerInfo!['board-name'] !=
+                                                  'Unknown'
                                         ? provider.routerInfo!['board-name']!
                                         : '${connection.host}:${connection.port}',
-                                style: TextStyle(
-                                  color: theme.brightness == Brightness.dark
-                                      ? colorScheme.onSurface
-                                      : Colors.black87,
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
-                                ),
+                                    style: TextStyle(
+                                      color: theme.brightness == Brightness.dark
+                                          ? colorScheme.onSurface
+                                          : Colors.black87,
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  if (provider.routerInfo?['platform'] !=
+                                          null &&
+                                      provider.routerInfo!['platform'] !=
+                                          'Unknown') ...[
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      provider.routerInfo!['platform']!,
+                                      style: TextStyle(
+                                        color: colorScheme.onSurface
+                                            .withOpacity(0.6),
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  ],
+                                ],
                               ),
-                              if (provider.routerInfo?['platform'] != null &&
-                                  provider.routerInfo!['platform'] != 'Unknown') ...[
-                                const SizedBox(height: 2),
-                                Text(
-                                  provider.routerInfo!['platform']!,
+                            ),
+                            if (connection.useSsl) ...[
+                              const SizedBox(width: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF428B7C),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: const Text(
+                                  'SSL',
                                   style: TextStyle(
-                                    color: colorScheme.onSurface.withOpacity(0.6),
-                                    fontSize: 12,
+                                    color: Colors.white,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
                                   ),
                                 ),
-                              ],
-                            ],
-                          ),
-                        ),
-                        if (connection.useSsl) ...[
-                          const SizedBox(width: 8),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 4,
-                            ),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF428B7C),
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: const Text(
-                              'SSL',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
                               ),
-                            ),
+                            ],
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        Builder(
+                          builder: (context) {
+                            final l10n = AppLocalizations.of(context);
+                            return Text(
+                              '${l10n?.user ?? 'User'}: ${connection.username}',
+                              style: TextStyle(
+                                color: theme.brightness == Brightness.dark
+                                    ? colorScheme.onSurface.withOpacity(0.7)
+                                    : Colors.grey.shade700,
+                                fontSize: 14,
+                              ),
+                            );
+                          },
+                        ),
+                        if (provider.deviceIp != null) ...[
+                          const SizedBox(height: 4),
+                          Builder(
+                            builder: (context) {
+                              final l10n = AppLocalizations.of(context);
+                              return Text(
+                                '${l10n?.yourDeviceIP ?? 'Your Device IP'}: ${provider.deviceIp}',
+                                style: TextStyle(
+                                  color: theme.brightness == Brightness.dark
+                                      ? colorScheme.onSurface.withOpacity(0.6)
+                                      : Colors.grey.shade600,
+                                  fontSize: 12,
+                                ),
+                              );
+                            },
                           ),
                         ],
                       ],
                     ),
-                    const SizedBox(height: 4),
-                    Builder(
-                      builder: (context) {
-                        final l10n = AppLocalizations.of(context);
-                        return Text(
-                          '${l10n?.user ?? 'User'}: ${connection.username}',
-                          style: TextStyle(
-                            color: theme.brightness == Brightness.dark
-                                ? colorScheme.onSurface.withOpacity(0.7)
-                                : Colors.grey.shade700,
-                            fontSize: 14,
-                          ),
-                        );
-                      },
-                    ),
-                    if (provider.deviceIp != null) ...[
-                      const SizedBox(height: 4),
-                      Builder(
-                        builder: (context) {
-                          final l10n = AppLocalizations.of(context);
-                          return Text(
-                            '${l10n?.yourDeviceIP ?? 'Your Device IP'}: ${provider.deviceIp}',
-                            style: TextStyle(
-                              color: theme.brightness == Brightness.dark
-                                  ? colorScheme.onSurface.withOpacity(0.6)
-                                  : Colors.grey.shade600,
-                              fontSize: 12,
-                            ),
-                          );
-                        },
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-
-            // Tab Bar و لیست دستگاه‌ها
-            Expanded(
-              child: Column(
-                children: [
-                  // دکمه قفل اتصال جدید
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    color: colorScheme.surface,
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: ElevatedButton.icon(
-                            onPressed: provider.isLoading
-                                ? null
-                                : () async {
-                                    // 切换锁定状态
-                                    final currentState = provider.isNewConnectionsLocked;
-                                    final success = currentState
-                                        ? await provider.unlockNewConnections()
-                                        : await provider.lockNewConnections();
-                                    
-                                    if (mounted) {
-                                      if (success) {
-                                        ScaffoldMessenger.of(context).showSnackBar(
-                                          SnackBar(
-                                            content: Row(
-                                              children: [
-                                                Icon(
-                                                  currentState ? Icons.lock_open : Icons.lock,
-                                                  color: Colors.white,
-                                                ),
-                                                const SizedBox(width: 8),
-                                                Expanded(
-                                                  child: Builder(
-                                                    builder: (context) {
-                                                      final l10n = AppLocalizations.of(context);
-                                                      return Text(
-                                                        currentState
-                                                            ? (l10n?.lockNewConnectionsDisabled ?? 'Lock disabled')
-                                                            : (l10n?.lockNewConnectionsEnabled ?? 'Lock enabled'),
-                                                      );
-                                                    },
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                            backgroundColor: currentState ? Colors.green : Colors.orange,
-                                            behavior: SnackBarBehavior.floating,
-                                            duration: const Duration(seconds: 3),
-                                          ),
-                                        );
-                                        // 刷新客户端列表以应用新的锁定状态
-                                        provider.refresh();
-                                      } else {
-                                        final l10n = AppLocalizations.of(context);
-                                        ScaffoldMessenger.of(context).showSnackBar(
-                                          SnackBar(
-                                            content: Text(
-                                              '${l10n?.error ?? 'Error'}: ${provider.errorMessage ?? (l10n?.lockStatusError ?? 'Error changing lock status')}',
-                                            ),
-                                            backgroundColor: Colors.red,
-                                            behavior: SnackBarBehavior.floating,
-                                          ),
-                                        );
-                                      }
-                                    }
-                                  },
-                            icon: Icon(
-                              provider.isNewConnectionsLocked
-                                  ? Icons.lock
-                                  : Icons.lock_open,
-                              size: 20,
-                            ),
-                            label: Builder(
-                              builder: (context) {
-                                final l10n = AppLocalizations.of(context);
-                                return Text(
-                                  provider.isNewConnectionsLocked
-                                      ? (l10n?.lockNewConnectionsActive ?? 'Lock New Connections (Active)')
-                                      : (l10n?.lockNewConnections ?? 'Lock New Connections'),
-                                  style: const TextStyle(fontSize: 14),
-                                );
-                              },
-                            ),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: provider.isNewConnectionsLocked
-                                  ? (theme.brightness == Brightness.dark
-                                      ? Colors.orange.shade800
-                                      : Colors.orange)
-                                  : (theme.brightness == Brightness.dark
-                                      ? colorScheme.surfaceContainerHighest
-                                      : Colors.grey.shade300),
-                              foregroundColor: provider.isNewConnectionsLocked
-                                  ? Colors.white
-                                  : (theme.brightness == Brightness.dark
-                                      ? colorScheme.onSurface
-                                      : Colors.black87),
-                              padding: const EdgeInsets.symmetric(vertical: 12),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
                   ),
-                  const SizedBox(height: 8),
-                  // Tab Bar
-                  Builder(
-                    builder: (context) {
-                      final theme = Theme.of(context);
-                      final colorScheme = theme.colorScheme;
-                      
-                      return Container(
+
+                // Tab Bar و لیست دستگاه‌ها
+                Expanded(
+                  child: Column(
+                    children: [
+                      // دکمه قفل اتصال جدید
+                      Container(
                         width: double.infinity,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 8,
+                        ),
                         color: colorScheme.surface,
                         child: Row(
-                          mainAxisSize: MainAxisSize.max,
                           children: [
                             Expanded(
-                              flex: 1,
-                              child: Builder(
-                                builder: (context) {
-                                  final l10n = AppLocalizations.of(context);
-                                  return _buildTabButton(
-                                    title: l10n?.connectedDevices ?? 'Connected Devices',
-                                    count: provider.clients.length,
-                                    icon: Icons.devices,
-                                    isActive: _selectedTab == 0,
-                                    onTap: () {
-                                      setState(() {
-                                        _selectedTab = 0;
-                                      });
-                                    },
-                                  );
-                                },
-                              ),
-                            ),
-                            Expanded(
-                              flex: 1,
-                              child: Builder(
-                                builder: (context) {
-                                  final l10n = AppLocalizations.of(context);
-                                  return _buildTabButton(
-                                    title: l10n?.bannedDevices ?? 'Banned Devices',
-                                    count: provider.bannedClients.length,
-                                    icon: Icons.block,
-                                    isActive: _selectedTab == 1,
-                                    onTap: () {
-                                      setState(() {
-                                        _selectedTab = 1;
-                                      });
-                                      provider.loadBannedClients();
-                                    },
-                                  );
-                                },
+                              child: ElevatedButton.icon(
+                                onPressed:
+                                    provider.isLoading ||
+                                        provider.isLockUpdating
+                                    ? null
+                                    : () async {
+                                        final l10n = AppLocalizations.of(
+                                          context,
+                                        );
+                                        final messenger = ScaffoldMessenger.of(
+                                          context,
+                                        );
+                                        final activating =
+                                            !provider.isNewConnectionsLocked;
+                                        final success = await provider
+                                            .toggleNewConnectionsLock();
+                                        if (!mounted) return;
+                                        messenger.showSnackBar(
+                                          SnackBar(
+                                            content: Text(
+                                              success
+                                                  ? (activating
+                                                        ? (l10n?.lockNewConnectionsEnabled ??
+                                                              'New connections locked')
+                                                        : (l10n?.lockNewConnectionsDisabled ??
+                                                              'New connections unlocked'))
+                                                  : (provider.errorMessage ??
+                                                        (l10n?.lockStatusError ??
+                                                            'Error changing lock status')),
+                                            ),
+                                            backgroundColor: success
+                                                ? const Color(0xFF428B7C)
+                                                : Colors.red,
+                                            behavior: SnackBarBehavior.floating,
+                                          ),
+                                        );
+                                      },
+                                icon: provider.isLockUpdating
+                                    ? const SizedBox(
+                                        width: 18,
+                                        height: 18,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          color: Colors.white,
+                                        ),
+                                      )
+                                    : Icon(
+                                        provider.isNewConnectionsLocked
+                                            ? Icons.lock
+                                            : Icons.lock_open,
+                                        size: 20,
+                                      ),
+                                label: Builder(
+                                  builder: (context) {
+                                    final l10n = AppLocalizations.of(context);
+                                    return Text(
+                                      provider.isNewConnectionsLocked
+                                          ? (l10n?.lockNewConnectionsActive ??
+                                                'Lock New Connections (Active)')
+                                          : (l10n?.lockNewConnections ??
+                                                'Lock New Connections'),
+                                      style: const TextStyle(fontSize: 14),
+                                    );
+                                  },
+                                ),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor:
+                                      provider.isNewConnectionsLocked
+                                      ? Colors.red.shade600
+                                      : (theme.brightness == Brightness.dark
+                                            ? colorScheme
+                                                  .surfaceContainerHighest
+                                            : Colors.grey.shade300),
+                                  foregroundColor:
+                                      provider.isNewConnectionsLocked
+                                      ? Colors.white
+                                      : (theme.brightness == Brightness.dark
+                                            ? colorScheme.onSurface
+                                            : Colors.black87),
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 12,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                ),
                               ),
                             ),
                           ],
                         ),
-                      );
-                    },
+                      ),
+                      const SizedBox(height: 8),
+                      // Tab Bar
+                      Builder(
+                        builder: (context) {
+                          final theme = Theme.of(context);
+                          final colorScheme = theme.colorScheme;
+
+                          return Container(
+                            width: double.infinity,
+                            color: colorScheme.surface,
+                            child: Row(
+                              mainAxisSize: MainAxisSize.max,
+                              children: [
+                                Expanded(
+                                  flex: 1,
+                                  child: Builder(
+                                    builder: (context) {
+                                      final l10n = AppLocalizations.of(context);
+                                      return _buildTabButton(
+                                        title:
+                                            l10n?.connectedDevices ??
+                                            'Connected Devices',
+                                        count: provider.clients.length,
+                                        icon: Icons.devices,
+                                        isActive: _selectedTab == 0,
+                                        onTap: () {
+                                          setState(() {
+                                            _selectedTab = 0;
+                                          });
+                                        },
+                                      );
+                                    },
+                                  ),
+                                ),
+                                Expanded(
+                                  flex: 1,
+                                  child: Builder(
+                                    builder: (context) {
+                                      final l10n = AppLocalizations.of(context);
+                                      return _buildTabButton(
+                                        title:
+                                            l10n?.bannedDevices ??
+                                            'Banned Devices',
+                                        count: provider.bannedClients.length,
+                                        icon: Icons.block,
+                                        isActive: _selectedTab == 1,
+                                        onTap: () {
+                                          setState(() {
+                                            _selectedTab = 1;
+                                          });
+                                          provider.loadBannedClients();
+                                        },
+                                      );
+                                    },
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+                      // محتوای Tab
+                      Expanded(
+                        child: _selectedTab == 0
+                            ? _buildConnectedDevicesTab(provider)
+                            : _buildBannedDevicesTab(provider),
+                      ),
+                    ],
                   ),
-                  // محتوای Tab
-                  Expanded(
-                    child: _selectedTab == 0
-                        ? _buildConnectedDevicesTab(provider)
-                        : _buildBannedDevicesTab(provider),
-                  ),
-                ],
-              ),
+                ),
+              ],
             ),
-          ],
-        ),
-      );
+          );
         },
       ),
     );
@@ -872,29 +879,29 @@ class _HomePageState extends State<HomePage> {
         final theme = Theme.of(context);
         final colorScheme = theme.colorScheme;
         final primaryColor = const Color(0xFF428B7C);
-        
+
         // تشخیص اندازه صفحه برای ریسپانسیو کردن
         final screenWidth = MediaQuery.of(context).size.width;
         final isSmallScreen = screenWidth < 360; // برای S8 و صفحه‌های کوچک‌تر
-        
+
         // تنظیم فونت و آیکون بر اساس اندازه صفحه
         // فقط کمی کوچک‌تر می‌کنیم برای صفحه‌های کوچک (S8)
         final fontSize = isSmallScreen ? 13.0 : 15.0;
         final iconSize = isSmallScreen ? 18.0 : 20.0;
-        final padding = isSmallScreen 
+        final padding = isSmallScreen
             ? const EdgeInsets.symmetric(vertical: 12, horizontal: 4)
             : const EdgeInsets.symmetric(vertical: 16);
         final spacing = isSmallScreen ? 6.0 : 8.0;
-        
+
         return InkWell(
           onTap: onTap,
           child: Container(
             padding: padding,
             decoration: BoxDecoration(
-              color: isActive 
+              color: isActive
                   ? (theme.brightness == Brightness.dark
-                      ? primaryColor.withOpacity(0.2)
-                      : primaryColor.withOpacity(0.1))
+                        ? primaryColor.withOpacity(0.2)
+                        : primaryColor.withOpacity(0.1))
                   : Colors.transparent,
               border: Border(
                 bottom: BorderSide(
@@ -910,11 +917,11 @@ class _HomePageState extends State<HomePage> {
                 Icon(
                   icon,
                   size: iconSize,
-                  color: isActive 
+                  color: isActive
                       ? primaryColor
                       : (theme.brightness == Brightness.dark
-                          ? colorScheme.onSurface.withOpacity(0.6)
-                          : Colors.grey.shade600),
+                            ? colorScheme.onSurface.withOpacity(0.6)
+                            : Colors.grey.shade600),
                 ),
                 SizedBox(width: spacing),
                 Flexible(
@@ -922,12 +929,14 @@ class _HomePageState extends State<HomePage> {
                     '$title ($count)',
                     style: TextStyle(
                       fontSize: fontSize,
-                      fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
-                      color: isActive 
+                      fontWeight: isActive
+                          ? FontWeight.bold
+                          : FontWeight.normal,
+                      color: isActive
                           ? primaryColor
                           : (theme.brightness == Brightness.dark
-                              ? colorScheme.onSurface.withOpacity(0.6)
-                              : Colors.grey.shade600),
+                                ? colorScheme.onSurface.withOpacity(0.6)
+                                : Colors.grey.shade600),
                     ),
                     overflow: TextOverflow.visible,
                     maxLines: 2,
@@ -959,7 +968,7 @@ class _HomePageState extends State<HomePage> {
         ],
       );
     }
-    
+
     // اگر در حال progressive loading هستیم و لیست خالی نیست، لیست فعلی را نمایش بده
     // (progressive loading در پس‌زمینه ادامه می‌دهد)
 
@@ -968,7 +977,7 @@ class _HomePageState extends State<HomePage> {
         builder: (context) {
           final theme = Theme.of(context);
           final colorScheme = theme.colorScheme;
-          
+
           return Center(
             child: Padding(
               padding: const EdgeInsets.all(24),
@@ -1021,7 +1030,7 @@ class _HomePageState extends State<HomePage> {
         builder: (context) {
           final theme = Theme.of(context);
           final colorScheme = theme.colorScheme;
-          
+
           return Center(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -1063,12 +1072,17 @@ class _HomePageState extends State<HomePage> {
         // اضافه کردن یک item برای نشان دادن progressive loading
         itemBuilder: (context, index) {
           // اگر آخرین آیتم است و هنوز در حال loading هستیم، یک indicator نمایش بده
-          if (index == provider.clients.length - 1 && 
-              !provider.isDataComplete && 
+          if (index == provider.clients.length - 1 &&
+              !provider.isDataComplete &&
               !provider.isLoading) {
             return Column(
               children: [
-                _buildClientCard(context, provider.clients[index], provider.deviceIp, provider),
+                _buildClientCard(
+                  context,
+                  provider.clients[index],
+                  provider.deviceIp,
+                  provider,
+                ),
                 const Padding(
                   padding: EdgeInsets.all(16.0),
                   child: Center(
@@ -1098,7 +1112,7 @@ class _HomePageState extends State<HomePage> {
       builder: (context) {
         final theme = Theme.of(context);
         final colorScheme = theme.colorScheme;
-        
+
         return Container(
           width: double.infinity,
           margin: const EdgeInsets.symmetric(vertical: 1),
@@ -1170,18 +1184,12 @@ class _HomePageState extends State<HomePage> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              Icons.block_outlined,
-              size: 64,
-              color: Colors.grey.shade400,
-            ),
+            Icon(Icons.block_outlined, size: 64, color: Colors.grey.shade400),
             const SizedBox(height: 16),
             Text(
-              AppLocalizations.of(context)?.noBannedDevices ?? 'No banned devices found',
-              style: TextStyle(
-                color: Colors.grey.shade600,
-                fontSize: 18,
-              ),
+              AppLocalizations.of(context)?.noBannedDevices ??
+                  'No banned devices found',
+              style: TextStyle(color: Colors.grey.shade600, fontSize: 18),
             ),
           ],
         ),
@@ -1220,7 +1228,7 @@ class _HomePageState extends State<HomePage> {
       builder: (context) {
         final theme = Theme.of(context);
         final colorScheme = theme.colorScheme;
-        
+
         return Material(
           color: colorScheme.surface,
           child: InkWell(
@@ -1256,11 +1264,7 @@ class _HomePageState extends State<HomePage> {
                   // آیکون مسدود شده
                   CircleAvatar(
                     backgroundColor: Colors.red.withOpacity(0.2),
-                    child: const Icon(
-                      Icons.block,
-                      color: Colors.red,
-                      size: 24,
-                    ),
+                    child: const Icon(Icons.block, color: Colors.red, size: 24),
                   ),
                   const SizedBox(width: 16),
                   // اطلاعات دستگاه
@@ -1272,7 +1276,12 @@ class _HomePageState extends State<HomePage> {
                           children: [
                             Expanded(
                               child: Text(
-                                hostName ?? ipAddress ?? AppLocalizations.of(context)?.bannedDevice ?? 'Banned Device',
+                                hostName ??
+                                    ipAddress ??
+                                    AppLocalizations.of(
+                                      context,
+                                    )?.bannedDevice ??
+                                    'Banned Device',
                                 style: const TextStyle(
                                   fontWeight: FontWeight.bold,
                                   fontSize: 16,
@@ -1290,7 +1299,8 @@ class _HomePageState extends State<HomePage> {
                                 borderRadius: BorderRadius.circular(12),
                               ),
                               child: Text(
-                                AppLocalizations.of(context)?.banned ?? 'Banned',
+                                AppLocalizations.of(context)?.banned ??
+                                    'Banned',
                                 style: TextStyle(
                                   color: Colors.white,
                                   fontSize: 11,
@@ -1328,11 +1338,16 @@ class _HomePageState extends State<HomePage> {
                             child: Row(
                               children: [
                                 Icon(
-                                  banned['comment'].toString().contains('Auto-banned: New connection while locked')
+                                  banned['comment'].toString().contains(
+                                        'Auto-banned:',
+                                      )
                                       ? Icons.auto_fix_high
                                       : Icons.block,
                                   size: 14,
-                                  color: banned['comment'].toString().contains('Auto-banned: New connection while locked')
+                                  color:
+                                      banned['comment'].toString().contains(
+                                        'Auto-banned:',
+                                      )
                                       ? Colors.orange
                                       : Colors.red,
                                 ),
@@ -1340,11 +1355,14 @@ class _HomePageState extends State<HomePage> {
                                 Builder(
                                   builder: (context) {
                                     final l10n = AppLocalizations.of(context);
-                                    final isAutoBanned = banned['comment'].toString().contains('Auto-banned: New connection while locked');
+                                    final isAutoBanned = banned['comment']
+                                        .toString()
+                                        .contains('Auto-banned:');
                                     return Text(
                                       isAutoBanned
-                                          ? (l10n?.autoBanned ?? 'Auto-banned (New connection lock)')
-                                          : (l10n?.manualBanned ?? 'Manual Ban'),
+                                          ? (l10n?.autoBanned ?? 'Auto Ban')
+                                          : (l10n?.manualBanned ??
+                                                'Manual Ban'),
                                       style: TextStyle(
                                         fontSize: 11,
                                         color: isAutoBanned
@@ -1361,144 +1379,172 @@ class _HomePageState extends State<HomePage> {
                       ],
                     ),
                   ),
-              const SizedBox(width: 8),
-              // دکمه رفع مسدودیت سریع
-              Builder(
-                builder: (context) {
-                  final l10n = AppLocalizations.of(context);
-                  return IconButton(
-                    icon: const Icon(Icons.lock_open, color: Colors.green),
-                    tooltip: l10n?.unbanDeviceTooltip ?? 'Unban Device',
-                    onPressed: () async {
-                      if (ipAddress == null) return;
-                      
-                      final confirmed = await showDialog<bool>(
-                        context: context,
-                        builder: (context) => AlertDialog(
-                          backgroundColor: colorScheme.surface,
-                          title: Text(
-                            l10n?.unbanDeviceTitle ?? 'Unban Device',
-                            style: TextStyle(color: colorScheme.onSurface),
-                          ),
-                          content: Text(
-                            l10n?.unbanDeviceConfirmTextWithIP(ipAddress) ?? 'Are you sure you want to unban device $ipAddress?',
-                            style: TextStyle(color: colorScheme.onSurface),
-                          ),
-                          actions: [
-                            TextButton(
-                              onPressed: () => Navigator.pop(context, false),
-                              child: Text(
-                                l10n?.cancel ?? 'Cancel',
-                                style: TextStyle(color: colorScheme.primary),
+                  const SizedBox(width: 8),
+                  // دکمه رفع مسدودیت سریع
+                  Builder(
+                    builder: (context) {
+                      final l10n = AppLocalizations.of(context);
+                      return IconButton(
+                        icon: const Icon(Icons.lock_open, color: Colors.green),
+                        tooltip: l10n?.unbanDeviceTooltip ?? 'Unban Device',
+                        onPressed: () async {
+                          if (ipAddress == null) return;
+
+                          final confirmed = await showDialog<bool>(
+                            context: context,
+                            builder: (context) => AlertDialog(
+                              backgroundColor: colorScheme.surface,
+                              title: Text(
+                                l10n?.unbanDeviceTitle ?? 'Unban Device',
+                                style: TextStyle(color: colorScheme.onSurface),
                               ),
-                            ),
-                            ElevatedButton(
-                              onPressed: () => Navigator.pop(context, true),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.green,
-                                foregroundColor: Colors.white,
+                              content: Text(
+                                l10n?.unbanDeviceConfirmTextWithIP(ipAddress) ??
+                                    'Are you sure you want to unban device $ipAddress?',
+                                style: TextStyle(color: colorScheme.onSurface),
                               ),
-                              child: Text(l10n?.unban ?? 'Unban'),
-                            ),
-                          ],
-                        ),
-                      );
-                  
-                  if (confirmed == true) {
-                    try {
-                      final provider = Provider.of<ClientsProvider>(context, listen: false);
-                      final success = await provider.unbanClient(
-                        ipAddress,
-                        macAddress: macAddress,
-                        hostname: hostName?.toString(),
-                        ssid: banned['ssid']?.toString(),
-                      );
-                      
-                      if (mounted) {
-                        final l10n = AppLocalizations.of(context);
-                        if (success) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Row(
-                                children: [
-                                  Icon(Icons.check_circle, color: Colors.white),
-                                  SizedBox(width: 8),
-                                  Expanded(
-                                    child: Text(l10n?.deviceUnbannedSuccess ?? 'Device unbanned successfully'),
+                              actions: [
+                                TextButton(
+                                  onPressed: () =>
+                                      Navigator.pop(context, false),
+                                  child: Text(
+                                    l10n?.cancel ?? 'Cancel',
+                                    style: TextStyle(
+                                      color: colorScheme.primary,
+                                    ),
                                   ),
-                                ],
-                              ),
-                              backgroundColor: Colors.green,
-                              behavior: SnackBarBehavior.floating,
-                              duration: Duration(seconds: 3),
+                                ),
+                                ElevatedButton(
+                                  onPressed: () => Navigator.pop(context, true),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.green,
+                                    foregroundColor: Colors.white,
+                                  ),
+                                  child: Text(l10n?.unban ?? 'Unban'),
+                                ),
+                              ],
                             ),
                           );
-                          // به‌روزرسانی لیست
-                          provider.loadBannedClients();
-                          // هدایت به صفحه اصلی
-                          Future.delayed(const Duration(milliseconds: 300), () {
-                            if (mounted) {
-                              Navigator.of(context).pushNamedAndRemoveUntil(
-                                '/home',
-                                (route) => false,
+
+                          if (confirmed == true) {
+                            try {
+                              final provider = Provider.of<ClientsProvider>(
+                                context,
+                                listen: false,
                               );
+                              final success = await provider.unbanClient(
+                                ipAddress,
+                                macAddress: macAddress,
+                                hostname: hostName?.toString(),
+                                ssid: banned['ssid']?.toString(),
+                              );
+
+                              if (mounted) {
+                                final l10n = AppLocalizations.of(context);
+                                if (success) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Row(
+                                        children: [
+                                          Icon(
+                                            Icons.check_circle,
+                                            color: Colors.white,
+                                          ),
+                                          SizedBox(width: 8),
+                                          Expanded(
+                                            child: Text(
+                                              l10n?.deviceUnbannedSuccess ??
+                                                  'Device unbanned successfully',
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      backgroundColor: Colors.green,
+                                      behavior: SnackBarBehavior.floating,
+                                      duration: Duration(seconds: 3),
+                                    ),
+                                  );
+                                  // به‌روزرسانی لیست
+                                  provider.loadBannedClients();
+                                  // هدایت به صفحه اصلی
+                                  Future.delayed(
+                                    const Duration(milliseconds: 300),
+                                    () {
+                                      if (mounted) {
+                                        Navigator.of(
+                                          context,
+                                        ).pushNamedAndRemoveUntil(
+                                          '/home',
+                                          (route) => false,
+                                        );
+                                      }
+                                    },
+                                  );
+                                } else {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text(
+                                        '${l10n?.error ?? 'Error'}: ${provider.errorMessage ?? (l10n?.errorUnbanning ?? 'Error unbanning device')}',
+                                      ),
+                                      backgroundColor: Colors.red,
+                                      behavior: SnackBarBehavior.floating,
+                                    ),
+                                  );
+                                }
+                              }
+                            } catch (e) {
+                              if (mounted) {
+                                final l10n = AppLocalizations.of(context);
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                      '${l10n?.error ?? 'Error'}: $e',
+                                    ),
+                                    backgroundColor: Colors.red,
+                                    behavior: SnackBarBehavior.floating,
+                                  ),
+                                );
+                              }
                             }
-                          });
-                        } else {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text('${l10n?.error ?? 'Error'}: ${provider.errorMessage ?? (l10n?.errorUnbanning ?? 'Error unbanning device')}'),
-                              backgroundColor: Colors.red,
-                              behavior: SnackBarBehavior.floating,
-                            ),
-                          );
-                        }
-                      }
-                    } catch (e) {
-                      if (mounted) {
-                        final l10n = AppLocalizations.of(context);
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text('${l10n?.error ?? 'Error'}: $e'),
-                            backgroundColor: Colors.red,
-                            behavior: SnackBarBehavior.floating,
-                          ),
-                        );
-                      }
-                    }
-                  }
-                },
-              ); // 结束 return IconButton
-              },
+                          }
+                        },
+                      ); // 结束 return IconButton
+                    },
+                  ),
+                  const SizedBox(width: 4),
+                  Builder(
+                    builder: (context) {
+                      final theme = Theme.of(context);
+                      final colorScheme = theme.colorScheme;
+
+                      return Icon(
+                        Icons.chevron_right,
+                        color: theme.brightness == Brightness.dark
+                            ? colorScheme.onSurface.withOpacity(0.4)
+                            : Colors.grey,
+                      );
+                    },
+                  ),
+                ],
               ),
-              const SizedBox(width: 4),
-              Builder(
-                builder: (context) {
-                  final theme = Theme.of(context);
-                  final colorScheme = theme.colorScheme;
-                  
-                  return Icon(
-                    Icons.chevron_right,
-                    color: theme.brightness == Brightness.dark
-                        ? colorScheme.onSurface.withOpacity(0.4)
-                        : Colors.grey,
-                  );
-                },
-              ),
-            ],
+            ),
           ),
-        ),
-      ),
-    );
+        );
       },
     );
   }
 
-  Widget _buildClientCard(BuildContext context, ClientInfo client, String? deviceIp, ClientsProvider provider) {
+  Widget _buildClientCard(
+    BuildContext context,
+    ClientInfo client,
+    String? deviceIp,
+    ClientsProvider provider,
+  ) {
     Color typeColor;
     IconData typeIcon;
     String typeLabel;
-    final bool isCurrentDevice = deviceIp != null && client.ipAddress == deviceIp;
+    final bool isCurrentDevice =
+        deviceIp != null && client.ipAddress == deviceIp;
 
     switch (client.type) {
       case 'wireless':
@@ -1528,909 +1574,364 @@ class _HomePageState extends State<HomePage> {
     }
 
     final theme = Theme.of(context);
-    return Material(
-      color: theme.colorScheme.surface,
-      child: FutureBuilder<bool>(
-        future: provider.isDeviceAllowed(client.macAddress, client.ipAddress, client: client),
-        builder: (context, snapshot) {
-          final isAllowed = snapshot.hasData && snapshot.data == true;
-          
-          // 如果设备未被允许且不是 static 设备，禁用点击
-          final shouldDisableClick = provider.isNewConnectionsLocked && 
-                                     !_isStaticDevice(client) && 
-                                     !isCurrentDevice && 
-                                     !isAllowed;
-          
-          return GestureDetector(
-            onTap: shouldDisableClick ? null : () {
-              Navigator.pushNamed(
-                context,
-                '/device-detail',
-                arguments: {
-                  'device': client,
-                  'isCurrentDevice': isCurrentDevice,
-                },
-              );
-            },
-            onLongPress: () {
-              // نمایش منوی dropdown
-              _showDeviceContextMenu(context, client, provider, isCurrentDevice);
-            },
-            child: InkWell(
-              onTap: shouldDisableClick ? null : () {
-                Navigator.pushNamed(
-                  context,
-                  '/device-detail',
-                  arguments: {
-                    'device': client,
-                    'isCurrentDevice': isCurrentDevice,
-                  },
-                );
-              },
-              splashColor: shouldDisableClick ? Colors.transparent : const Color(0xFF428B7C).withOpacity(0.1),
-              highlightColor: shouldDisableClick ? Colors.transparent : const Color(0xFF428B7C).withOpacity(0.05),
-              child: Builder(
-                builder: (context) {
-                  final theme = Theme.of(context);
-                  final colorScheme = theme.colorScheme;
-                  
-                  return Container(
-                    width: double.infinity,
-                    margin: const EdgeInsets.symmetric(vertical: 1),
-                    decoration: BoxDecoration(
-                      border: Border(
-                        bottom: BorderSide(
-                          color: theme.brightness == Brightness.dark
-                              ? colorScheme.outline.withOpacity(0.2)
-                              : Colors.grey.shade300,
-                          width: 1,
-                        ),
-                      ),
-                    ),
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                    child: Row(
-                  children: [
-                    // آیکون دستگاه
-                    Opacity(
-                      opacity: shouldDisableClick ? 0.6 : 1.0,
-                      child: Stack(
-                        children: [
-                          CircleAvatar(
-                            backgroundColor: isCurrentDevice
-                                ? const Color(0xFF428B7C).withOpacity(0.2)
-                                : typeColor.withOpacity(0.2),
-                            child: Icon(
-                              typeIcon,
-                              color: isCurrentDevice ? const Color(0xFF428B7C) : typeColor,
-                              size: 24,
-                            ),
-                          ),
-                          if (isCurrentDevice)
-                            Positioned(
-                              right: 0,
-                              bottom: 0,
-                              child: Container(
-                                padding: const EdgeInsets.all(2),
-                                decoration: const BoxDecoration(
-                                  color: Color(0xFF428B7C),
-                                  shape: BoxShape.circle,
-                                ),
-                                child: const Icon(
-                                  Icons.check,
-                                  color: Colors.white,
-                                  size: 12,
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 16),
-                    // اطلاعات دستگاه
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          // 设备名称 - 单独一行，完整显示
-                          Opacity(
-                            opacity: shouldDisableClick ? 0.6 : 1.0,
-                            child: Builder(
-                              builder: (context) {
-                                final theme = Theme.of(context);
-                                final colorScheme = theme.colorScheme;
-                                
-                                return Text(
-                                  _getDeviceDisplayName(client),
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 16,
-                                    color: isCurrentDevice
-                                        ? const Color(0xFF428B7C)
-                                        : colorScheme.onSurface,
-                                  ),
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                );
-                              },
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          // Badge 行
-                          Opacity(
-                            opacity: shouldDisableClick ? 0.6 : 1.0,
-                            child: Wrap(
-                              spacing: 6,
-                              runSpacing: 4,
-                              children: [
-                                // Static Lease Badge
-                                if (_isStaticDevice(client))
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 6,
-                                      vertical: 3,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFF428B7C).withOpacity(0.15),
-                                      borderRadius: BorderRadius.circular(8),
-                                      border: Border.all(
-                                        color: const Color(0xFF428B7C),
-                                        width: 1,
-                                      ),
-                                    ),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Icon(
-                                          Icons.lock,
-                                          size: 12,
-                                          color: const Color(0xFF428B7C),
-                                        ),
-                                        const SizedBox(width: 3),
-                                        Text(
-                                          'Static',
-                                          style: TextStyle(
-                                            color: const Color(0xFF428B7C),
-                                            fontSize: 10,
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                // Pending Approval Badge - 显示新设备待批准状态
-                                if (!_isStaticDevice(client) && !isCurrentDevice)
-                                  FutureBuilder<bool>(
-                                    key: ValueKey('pending_${client.macAddress}_${client.ipAddress}'),
-                                    future: provider.isDevicePendingApproval(client.macAddress, client.ipAddress, client: client),
-                                    builder: (context, snapshot) {
-                                      if (snapshot.connectionState == ConnectionState.waiting) {
-                                        return const SizedBox.shrink();
-                                      }
-                                      
-                                      final isPending = snapshot.hasData && snapshot.data == true;
-                                      
-                                      if (!isPending) {
-                                        return const SizedBox.shrink();
-                                      }
-                                      
-                                      return Container(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 6,
-                                          vertical: 3,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: Colors.orange.withOpacity(0.15),
-                                          borderRadius: BorderRadius.circular(8),
-                                          border: Border.all(
-                                            color: Colors.orange,
-                                            width: 1,
-                                          ),
-                                        ),
-                                        child: Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            Icon(
-                                              Icons.pending,
-                                              size: 12,
-                                              color: Colors.orange,
-                                            ),
-                                            const SizedBox(width: 3),
-                                            Builder(
-                                              builder: (context) {
-                                                final l10n = AppLocalizations.of(context);
-                                                return Text(
-                                                  l10n?.pendingApproval ?? 'Pending Approval',
-                                                  style: TextStyle(
-                                                    color: Colors.orange,
-                                                    fontSize: 10,
-                                                    fontWeight: FontWeight.bold,
-                                                  ),
-                                                );
-                                              },
-                                            ),
-                                          ],
-                                        ),
-                                      );
-                                    },
-                                  ),
-                                // Lock New Connections Pending Badge (原有逻辑保留)
-                                if (provider.isNewConnectionsLocked && 
-                                    !_isStaticDevice(client) && 
-                                    !isCurrentDevice)
-                                  FutureBuilder<bool>(
-                                    key: ValueKey('allowed_${client.macAddress}_${client.ipAddress}'),
-                                    future: provider.isDeviceAllowed(client.macAddress, client.ipAddress),
-                                    builder: (context, snapshot) {
-                                      if (snapshot.connectionState == ConnectionState.waiting || 
-                                          (snapshot.hasData && snapshot.data == true)) {
-                                        return const SizedBox.shrink();
-                                      }
-                                      
-                                      // 检查是否已经显示新设备待批准badge
-                                      return FutureBuilder<bool>(
-                                        future: provider.isDevicePendingApproval(client.macAddress, client.ipAddress),
-                                        builder: (context, pendingSnapshot) {
-                                          // 如果已经显示新设备待批准badge，不显示这个
-                                          if (pendingSnapshot.hasData && pendingSnapshot.data == true) {
-                                            return const SizedBox.shrink();
-                                          }
-                                          
-                                          return Container(
-                                            padding: const EdgeInsets.symmetric(
-                                              horizontal: 6,
-                                              vertical: 3,
-                                            ),
-                                            decoration: BoxDecoration(
-                                              color: Colors.orange.withOpacity(0.15),
-                                              borderRadius: BorderRadius.circular(8),
-                                              border: Border.all(
-                                                color: Colors.orange,
-                                                width: 1,
-                                              ),
-                                            ),
-                                            child: Row(
-                                              mainAxisSize: MainAxisSize.min,
-                                              children: [
-                                                Icon(
-                                                  Icons.pending,
-                                                  size: 12,
-                                                  color: Colors.orange,
-                                                ),
-                                                const SizedBox(width: 3),
-                                                Text(
-                                                  'Pending',
-                                                  style: TextStyle(
-                                                    color: Colors.orange,
-                                                    fontSize: 10,
-                                                    fontWeight: FontWeight.bold,
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                          );
-                                        },
-                                      );
-                                    },
-                                  ),
-                                // Current Device Badge
-                                if (isCurrentDevice)
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 8,
-                                      vertical: 4,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFF428B7C),
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                    child: Text(
-                                      AppLocalizations.of(context)?.you ?? 'You',
-                                      style: TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                  ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Opacity(
-                            opacity: shouldDisableClick ? 0.6 : 1.0,
-                            child: Builder(
-                              builder: (context) {
-                                final theme = Theme.of(context);
-                                final colorScheme = theme.colorScheme;
-                                
-                                return Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    if (client.ipAddress != null)
-                                      Text(
-                                        'IP: ${client.ipAddress}',
-                                        style: TextStyle(
-                                          fontSize: 13,
-                                          color: theme.brightness == Brightness.dark
-                                              ? colorScheme.onSurface.withOpacity(0.7)
-                                              : Colors.grey.shade600,
-                                        ),
-                                      ),
-                                    if (client.macAddress != null)
-                                      Text(
-                                        'MAC: ${client.macAddress}',
-                                        style: TextStyle(
-                                          fontSize: 12,
-                                          color: theme.brightness == Brightness.dark
-                                              ? colorScheme.onSurface.withOpacity(0.6)
-                                              : Colors.grey.shade500,
-                                        ),
-                                      ),
-                                  ],
-                                );
-                              },
-                            ),
-                          ),
-                          // Approve/Reject 按钮 - 显示在设备名称下方（不受Opacity影响）
-                          FutureBuilder<bool>(
-                            future: provider.isDevicePendingApproval(client.macAddress, client.ipAddress, client: client),
-                            builder: (context, pendingSnapshot) {
-                              final isPendingApproval = pendingSnapshot.hasData && pendingSnapshot.data == true;
-                              final isLoadingPending = pendingSnapshot.connectionState == ConnectionState.waiting;
-                              
-                              // 如果设备待批准，显示 approve/reject 按钮
-                              if (isPendingApproval) {
-                                return Padding(
-                                  padding: const EdgeInsets.only(top: 8),
-                                  child: Row(
-                                    children: [
-                                      // Approve 按钮
-                                      Expanded(
-                                        child: ElevatedButton.icon(
-                                          onPressed: isLoadingPending ? null : () async {
-                                            if (client.macAddress == null) return;
-                                            
-                                            final confirmed = await showDialog<bool>(
-                                              context: context,
-                                              builder: (dialogContext) {
-                                                final theme = Theme.of(dialogContext);
-                                                final colorScheme = theme.colorScheme;
-                                                
-                                                final l10n = AppLocalizations.of(dialogContext);
-                                                final deviceName = client.hostName ?? client.ipAddress ?? (l10n?.unknownDevice ?? 'Unknown');
-                                                return AlertDialog(
-                                                  backgroundColor: colorScheme.surface,
-                                                  title: Text(
-                                                    l10n?.approveDevice ?? 'Approve Device',
-                                                    style: TextStyle(color: colorScheme.onSurface),
-                                                  ),
-                                                  content: Text(
-                                                    l10n?.approveDeviceConfirmWithDevice(deviceName) ?? 'Do you want to approve device "$deviceName"?\n\nThis device will be able to connect to the network and use the internet.',
-                                                    style: TextStyle(color: colorScheme.onSurface),
-                                                  ),
-                                                  actions: [
-                                                    TextButton(
-                                                      onPressed: () => Navigator.pop(dialogContext, false),
-                                                      child: Text(
-                                                        l10n?.cancel ?? 'Cancel',
-                                                        style: TextStyle(color: colorScheme.primary),
-                                                      ),
-                                                    ),
-                                                    ElevatedButton(
-                                                      onPressed: () => Navigator.pop(dialogContext, true),
-                                                      style: ElevatedButton.styleFrom(
-                                                        backgroundColor: Colors.green,
-                                                        foregroundColor: Colors.white,
-                                                      ),
-                                                      child: Text(l10n?.approve ?? 'Approve'),
-                                                    ),
-                                                  ],
-                                                );
-                                              },
-                                            );
+    final colorScheme = theme.colorScheme;
+    final isStatic = _isStaticDevice(client);
+    final isPendingApproval = provider.isDevicePendingApproval(
+      client,
+      isCurrentDevice: isCurrentDevice,
+    );
+    final isApprovalBusy = provider.isApprovalActionInProgress(client);
 
-                                            if (confirmed == true && mounted) {
-                                              try {
-                                                final success = await provider.approveDevice(
-                                                  client.macAddress!,
-                                                  ipAddress: client.ipAddress,
-                                                );
-                                                
-                                                if (mounted) {
-                                                  final l10n = AppLocalizations.of(context);
-                                                  if (success) {
-                                                    ScaffoldMessenger.of(context).showSnackBar(
-                                                      SnackBar(
-                                                        content: Row(
-                                                          children: [
-                                                            Icon(Icons.check_circle, color: Colors.white),
-                                                            SizedBox(width: 8),
-                                                            Expanded(
-                                                              child: Text(l10n?.deviceApproved ?? 'Device approved successfully'),
-                                                            ),
-                                                          ],
-                                                        ),
-                                                        backgroundColor: Colors.green,
-                                                        behavior: SnackBarBehavior.floating,
-                                                        duration: Duration(seconds: 3),
-                                                      ),
-                                                    );
-                                                    provider.refresh();
-                                                  } else {
-                                                    ScaffoldMessenger.of(context).showSnackBar(
-                                                      SnackBar(
-                                                        content: Text('${l10n?.error ?? 'Error'}: ${provider.errorMessage ?? (l10n?.approveError ?? 'Error approving device')}'),
-                                                        backgroundColor: Colors.red,
-                                                        behavior: SnackBarBehavior.floating,
-                                                      ),
-                                                    );
-                                                  }
-                                                }
-                                              } catch (e) {
-                                                if (mounted) {
-                                                  final l10n = AppLocalizations.of(context);
-                                                  ScaffoldMessenger.of(context).showSnackBar(
-                                                    SnackBar(
-                                                      content: Text('${l10n?.error ?? 'Error'}: $e'),
-                                                      backgroundColor: Colors.red,
-                                                      behavior: SnackBarBehavior.floating,
-                                                    ),
-                                                  );
-                                                }
-                                              }
-                                            }
-                                          },
-                                          icon: const Icon(Icons.check_circle, size: 20),
-                                          label: Builder(
-                                            builder: (context) {
-                                              final l10n = AppLocalizations.of(context);
-                                              return Text(l10n?.approve ?? 'Approve');
-                                            },
-                                          ),
-                                          style: ElevatedButton.styleFrom(
-                                            backgroundColor: Colors.green,
-                                            foregroundColor: Colors.white,
-                                            padding: const EdgeInsets.symmetric(vertical: 12),
-                                          ),
-                                        ),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      // Reject 按钮
-                                      Expanded(
-                                        child: ElevatedButton.icon(
-                                          onPressed: isLoadingPending ? null : () async {
-                                            if (client.macAddress == null) return;
-                                            
-                                            final confirmed = await showDialog<bool>(
-                                              context: context,
-                                              builder: (context) {
-                                                final l10n = AppLocalizations.of(context);
-                                                final deviceName = client.hostName ?? client.ipAddress ?? (l10n?.unknownDevice ?? 'Unknown');
-                                                return AlertDialog(
-                                                  title: Text(l10n?.rejectDevice ?? 'Reject Device'),
-                                                  content: Text(
-                                                    l10n?.rejectDeviceConfirmWithDevice(deviceName) ?? 'Do you want to reject device "$deviceName"?\n\nThis device will be banned and removed from the network.',
-                                                  ),
-                                                  actions: [
-                                                    TextButton(
-                                                      onPressed: () => Navigator.pop(context, false),
-                                                      child: Text(l10n?.cancel ?? 'Cancel'),
-                                                    ),
-                                                    ElevatedButton(
-                                                      onPressed: () => Navigator.pop(context, true),
-                                                      style: ElevatedButton.styleFrom(
-                                                        backgroundColor: Colors.red,
-                                                        foregroundColor: Colors.white,
-                                                      ),
-                                                      child: Text(l10n?.reject ?? 'Reject'),
-                                                    ),
-                                                  ],
-                                                );
-                                              },
-                                            );
+    void openDeviceDetail() {
+      Navigator.pushNamed(
+        context,
+        '/device-detail',
+        arguments: {'device': client, 'isCurrentDevice': isCurrentDevice},
+      );
+    }
 
-                                            if (confirmed == true && mounted) {
-                                              try {
-                                                final success = await provider.rejectDevice(
-                                                  client.macAddress!,
-                                                  ipAddress: client.ipAddress,
-                                                );
-                                                
-                                                if (mounted) {
-                                                  final l10n = AppLocalizations.of(context);
-                                                  if (success) {
-                                                    ScaffoldMessenger.of(context).showSnackBar(
-                                                      SnackBar(
-                                                        content: Row(
-                                                          children: [
-                                                            Icon(Icons.cancel, color: Colors.white),
-                                                            SizedBox(width: 8),
-                                                            Expanded(
-                                                              child: Text(l10n?.deviceRejected ?? 'Device rejected and banned'),
-                                                            ),
-                                                          ],
-                                                        ),
-                                                        backgroundColor: Colors.orange,
-                                                        behavior: SnackBarBehavior.floating,
-                                                        duration: Duration(seconds: 3),
-                                                      ),
-                                                    );
-                                                    provider.refresh();
-                                                  } else {
-                                                    ScaffoldMessenger.of(context).showSnackBar(
-                                                      SnackBar(
-                                                        content: Text('${l10n?.error ?? 'Error'}: ${provider.errorMessage ?? (l10n?.rejectError ?? 'Error rejecting device')}'),
-                                                        backgroundColor: Colors.red,
-                                                        behavior: SnackBarBehavior.floating,
-                                                      ),
-                                                    );
-                                                  }
-                                                }
-                                              } catch (e) {
-                                                if (mounted) {
-                                                  final l10n = AppLocalizations.of(context);
-                                                  ScaffoldMessenger.of(context).showSnackBar(
-                                                    SnackBar(
-                                                      content: Text('${l10n?.error ?? 'Error'}: $e'),
-                                                      backgroundColor: Colors.red,
-                                                      behavior: SnackBarBehavior.floating,
-                                                    ),
-                                                  );
-                                                }
-                                              }
-                                            }
-                                          },
-                                          icon: const Icon(Icons.cancel, size: 20),
-                                          label: Builder(
-                                            builder: (context) {
-                                              final l10n = AppLocalizations.of(context);
-                                              return Text(l10n?.reject ?? 'Reject');
-                                            },
-                                          ),
-                                          style: ElevatedButton.styleFrom(
-                                            backgroundColor: Colors.red,
-                                            foregroundColor: Colors.white,
-                                            padding: const EdgeInsets.symmetric(vertical: 12),
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                );
-                              }
-                              
-                              // 不再显示重复的批准/拒绝按钮
-                              // 只使用上面的 isDevicePendingApproval() 逻辑
-                              return const SizedBox.shrink();
-                            },
-                          ),
-                        ],
-                      ),
-                    ),
-                    // نوع دستگاه (只在设备已批准时显示)
-                    Opacity(
-                      opacity: shouldDisableClick ? 0.6 : 1.0,
-                      child:                           FutureBuilder<bool>(
-                            future: provider.isDeviceAllowed(client.macAddress, client.ipAddress, client: client),
-                        builder: (context, snapshot) {
-                          final isAllowed = snapshot.hasData && snapshot.data == true;
-                          
-                          // 如果设备未被允许且不是 static 设备，不显示类型标签
-                          final shouldShowButtons = provider.isNewConnectionsLocked && 
-                                                    !_isStaticDevice(client) && 
-                                                    !isCurrentDevice && 
-                                                    !isAllowed;
-                          
-                          if (shouldShowButtons) {
-                            return const SizedBox.shrink();
-                          }
-                          
-                          // 如果设备已被允许或是 static 设备，显示类型标签
-                          return Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                decoration: BoxDecoration(
-                                  color: typeColor.withOpacity(0.2),
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: Text(
-                                  typeLabel,
-                                  style: TextStyle(
-                                    color: typeColor,
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Builder(
-                                builder: (context) {
-                                  final theme = Theme.of(context);
-                                  final colorScheme = theme.colorScheme;
-                                  
-                                  return Icon(
-                                    Icons.chevron_right,
-                                    color: theme.brightness == Brightness.dark
-                                        ? colorScheme.onSurface.withOpacity(0.4)
-                                        : Colors.grey,
-                                  );
-                                },
-                              ),
-                            ],
-                          );
-                        },
-                      ),
-                    ),
-                  ],
-                ),
-              );
-            },
+    Future<void> runPendingAction({required bool approve}) async {
+      final l10n = AppLocalizations.of(context);
+      final messenger = ScaffoldMessenger.of(context);
+      final success = approve
+          ? await provider.approveDevice(client)
+          : await provider.rejectDevice(client);
+      if (!mounted) return;
+
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            success
+                ? (approve
+                      ? (l10n?.deviceApproved ?? 'Device approved')
+                      : (l10n?.deviceRejected ?? 'Device rejected'))
+                : (provider.errorMessage ??
+                      (approve
+                          ? (l10n?.approveError ?? 'Error approving device')
+                          : (l10n?.rejectError ?? 'Error rejecting device'))),
+          ),
+          backgroundColor: success
+              ? (approve ? const Color(0xFF428B7C) : Colors.red)
+              : Colors.red,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+
+    Widget pendingActionButton({
+      required bool approve,
+      required String label,
+      required IconData icon,
+    }) {
+      final color = approve ? const Color(0xFF428B7C) : Colors.red.shade600;
+      return SizedBox(
+        height: 38,
+        child: ElevatedButton.icon(
+          onPressed: isApprovalBusy
+              ? null
+              : () => runPendingAction(approve: approve),
+          icon: isApprovalBusy
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : Icon(icon, size: 18),
+          label: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: color,
+            foregroundColor: Colors.white,
+            disabledBackgroundColor: color.withOpacity(0.45),
+            disabledForegroundColor: Colors.white,
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
           ),
         ),
       );
-    },
-  ),
-    );
-  }
-
-  /// نمایش منوی context برای دستگاه
-  void _showDeviceContextMenu(BuildContext context, ClientInfo client, ClientsProvider provider, bool isCurrentDevice) async {
-    // بررسی اینکه آیا دستگاه در لیست مجاز است
-    final isAllowed = await provider.isDeviceAllowed(client.macAddress, client.ipAddress);
-    
-    final RenderBox? overlay = Overlay.of(context).context.findRenderObject() as RenderBox?;
-    if (overlay == null) return;
-    
-    final RenderBox? button = context.findRenderObject() as RenderBox?;
-    if (button == null) return;
-    
-    final RelativeRect position = RelativeRect.fromRect(
-      Rect.fromPoints(
-        button.localToGlobal(Offset.zero, ancestor: overlay),
-        button.localToGlobal(button.size.bottomRight(Offset.zero), ancestor: overlay),
-      ),
-      Offset.zero & overlay.size,
-    );
-
-    final String? value = await showMenu<String>(
-      context: context,
-      position: position,
-      items: [
-        // اگر设备在允许列表中，显示"从允许列表删除"
-        if (provider.isNewConnectionsLocked && !isCurrentDevice && isAllowed)
-          const PopupMenuItem<String>(
-            value: 'remove_from_allowed',
-            child: Row(
-              children: [
-                Icon(Icons.remove_circle_outline, color: Colors.red, size: 20),
-                SizedBox(width: 12),
-                Text('Remove from Allowed List'),
-              ],
-            ),
-          ),
-        // 如果设备不在允许列表中且不是 static，显示"添加到允许列表"
-        if (provider.isNewConnectionsLocked && 
-            !_isStaticDevice(client) && 
-            !isCurrentDevice &&
-            !isAllowed)
-          const PopupMenuItem<String>(
-            value: 'add_to_allowed',
-            child: Row(
-              children: [
-                Icon(Icons.check_circle_outline, color: Colors.green, size: 20),
-                SizedBox(width: 12),
-                Text('Add to Allowed List'),
-              ],
-            ),
-          ),
-      ],
-    );
-
-    if (value == null) return;
-
-    if (value == 'remove_from_allowed') {
-      // 从允许列表中删除
-      if (client.macAddress == null) return;
-      
-      final confirmed = await showDialog<bool>(
-        context: context,
-        builder: (dialogContext) {
-          final theme = Theme.of(dialogContext);
-          final colorScheme = theme.colorScheme;
-          
-          return AlertDialog(
-            backgroundColor: colorScheme.surface,
-            title: Text(
-              'Remove from Allowed List',
-              style: TextStyle(color: colorScheme.onSurface),
-            ),
-            content: Text(
-              'Are you sure you want to remove device ${client.hostName ?? client.ipAddress ?? "Unknown"} from the allowed list?',
-              style: TextStyle(color: colorScheme.onSurface),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(dialogContext, false),
-                child: Text(
-                  'Cancel',
-                  style: TextStyle(color: colorScheme.primary),
-                ),
-              ),
-              ElevatedButton(
-                onPressed: () => Navigator.pop(dialogContext, true),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.red,
-                  foregroundColor: Colors.white,
-                ),
-                child: const Text('Remove'),
-              ),
-            ],
-          );
-        },
-      );
-
-      if (confirmed == true && mounted) {
-        try {
-          final success = await provider.removeFromAllowedList(
-            client.macAddress!,
-            ipAddress: client.ipAddress,
-          );
-          
-          if (mounted) {
-            if (success) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Row(
-                    children: [
-                      Icon(Icons.check_circle, color: Colors.white),
-                      SizedBox(width: 8),
-                      Expanded(
-                        child: Text('Device has been removed from allowed list'),
-                      ),
-                    ],
-                  ),
-                  backgroundColor: Colors.green,
-                  behavior: SnackBarBehavior.floating,
-                  duration: Duration(seconds: 3),
-                ),
-              );
-              // 更新列表
-              provider.refresh();
-            } else {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('خطا: ${provider.errorMessage ?? "خطا در حذف از لیست مجاز"}'),
-                  backgroundColor: Colors.red,
-                  behavior: SnackBarBehavior.floating,
-                ),
-              );
-            }
-          }
-        } catch (e) {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('خطا: $e'),
-                backgroundColor: Colors.red,
-                behavior: SnackBarBehavior.floating,
-              ),
-            );
-          }
-        }
-      }
-    } else if (value == 'add_to_allowed') {
-      // 添加到允许列表
-      if (client.macAddress == null) return;
-      
-      final confirmed = await showDialog<bool>(
-        context: context,
-        builder: (dialogContext) {
-          final theme = Theme.of(dialogContext);
-          final colorScheme = theme.colorScheme;
-          
-          return AlertDialog(
-            backgroundColor: colorScheme.surface,
-            title: Text(
-              'Add to Allowed List',
-              style: TextStyle(color: colorScheme.onSurface),
-            ),
-            content: Text(
-              'Allow device ${client.hostName ?? client.ipAddress ?? "Unknown"} to fully connect to WiFi?',
-              style: TextStyle(color: colorScheme.onSurface),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(dialogContext, false),
-                child: Text(
-                  'Cancel',
-                  style: TextStyle(color: colorScheme.primary),
-                ),
-              ),
-              ElevatedButton(
-                onPressed: () => Navigator.pop(dialogContext, true),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.green,
-                  foregroundColor: Colors.white,
-                ),
-                child: const Text('Allow'),
-              ),
-            ],
-          );
-        },
-      );
-
-      if (confirmed == true && mounted) {
-        try {
-          final success = await provider.allowNonStaticDevice(
-            client.macAddress!,
-            ipAddress: client.ipAddress,
-          );
-          
-          if (mounted) {
-            if (success) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Row(
-                    children: [
-                      Icon(Icons.check_circle, color: Colors.white),
-                      SizedBox(width: 8),
-                      Expanded(
-                        child: Text('Device has been allowed access and can now fully connect to WiFi'),
-                      ),
-                    ],
-                  ),
-                  backgroundColor: Colors.green,
-                  behavior: SnackBarBehavior.floating,
-                  duration: Duration(seconds: 3),
-                ),
-              );
-              // 更新列表
-              provider.refresh();
-            } else {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('خطا: ${provider.errorMessage ?? "خطا در اجازه دادن به دستگاه"}'),
-                  backgroundColor: Colors.red,
-                  behavior: SnackBarBehavior.floating,
-                ),
-              );
-            }
-          }
-        } catch (e) {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('خطا: $e'),
-                backgroundColor: Colors.red,
-                behavior: SnackBarBehavior.floating,
-              ),
-            );
-          }
-        }
-      }
     }
+
+    Widget pendingApprovalPanel() {
+      final l10n = AppLocalizations.of(context);
+      return Padding(
+        padding: const EdgeInsets.only(top: 10),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final approveButton = pendingActionButton(
+              approve: true,
+              label: l10n?.approve ?? 'Approve',
+              icon: Icons.check_circle,
+            );
+            final rejectButton = pendingActionButton(
+              approve: false,
+              label: l10n?.reject ?? 'Reject',
+              icon: Icons.block,
+            );
+
+            if (constraints.maxWidth < 280) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  approveButton,
+                  const SizedBox(height: 8),
+                  rejectButton,
+                ],
+              );
+            }
+
+            return Row(
+              children: [
+                Expanded(child: approveButton),
+                const SizedBox(width: 8),
+                Expanded(child: rejectButton),
+              ],
+            );
+          },
+        ),
+      );
+    }
+
+    return Material(
+      color: colorScheme.surface,
+      child: InkWell(
+        onTap: openDeviceDetail,
+        splashColor: const Color(0xFF428B7C).withOpacity(0.1),
+        highlightColor: const Color(0xFF428B7C).withOpacity(0.05),
+        child: Container(
+          width: double.infinity,
+          margin: const EdgeInsets.symmetric(vertical: 1),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          decoration: BoxDecoration(
+            border: Border(
+              bottom: BorderSide(
+                color: theme.brightness == Brightness.dark
+                    ? colorScheme.outline.withOpacity(0.2)
+                    : Colors.grey.shade300,
+                width: 1,
+              ),
+            ),
+          ),
+          child: Row(
+            children: [
+              Stack(
+                children: [
+                  CircleAvatar(
+                    backgroundColor: isCurrentDevice
+                        ? const Color(0xFF428B7C).withOpacity(0.2)
+                        : typeColor.withOpacity(0.2),
+                    child: Icon(
+                      typeIcon,
+                      color: isCurrentDevice
+                          ? const Color(0xFF428B7C)
+                          : typeColor,
+                      size: 24,
+                    ),
+                  ),
+                  if (isCurrentDevice)
+                    Positioned(
+                      right: 0,
+                      bottom: 0,
+                      child: Container(
+                        padding: const EdgeInsets.all(2),
+                        decoration: const BoxDecoration(
+                          color: Color(0xFF428B7C),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.check,
+                          color: Colors.white,
+                          size: 12,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _getDeviceDisplayName(client),
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                        color: isCurrentDevice
+                            ? const Color(0xFF428B7C)
+                            : colorScheme.onSurface,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    if (isStatic) ...[
+                      const SizedBox(height: 4),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 4,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 3,
+                            ),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF428B7C).withOpacity(0.15),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                color: const Color(0xFF428B7C),
+                                width: 1,
+                              ),
+                            ),
+                            child: const Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.lock,
+                                  size: 12,
+                                  color: Color(0xFF428B7C),
+                                ),
+                                SizedBox(width: 3),
+                                Text(
+                                  'Static',
+                                  style: TextStyle(
+                                    color: Color(0xFF428B7C),
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                    if (isPendingApproval) ...[
+                      const SizedBox(height: 4),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 4,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 3,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.orange.withOpacity(0.15),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                color: Colors.orange,
+                                width: 1,
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(
+                                  Icons.pending_actions,
+                                  size: 12,
+                                  color: Colors.orange,
+                                ),
+                                const SizedBox(width: 3),
+                                Text(
+                                  AppLocalizations.of(
+                                        context,
+                                      )?.pendingApproval ??
+                                      'Pending Approval',
+                                  style: const TextStyle(
+                                    color: Colors.orange,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                    const SizedBox(height: 4),
+                    if (client.ipAddress != null)
+                      Text(
+                        'IP: ${client.ipAddress}',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: theme.brightness == Brightness.dark
+                              ? colorScheme.onSurface.withOpacity(0.7)
+                              : Colors.grey.shade600,
+                        ),
+                      ),
+                    if (client.macAddress != null)
+                      Text(
+                        'MAC: ${client.macAddress}',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: theme.brightness == Brightness.dark
+                              ? colorScheme.onSurface.withOpacity(0.6)
+                              : Colors.grey.shade500,
+                        ),
+                      ),
+                    if (isPendingApproval) pendingApprovalPanel(),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: typeColor.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      typeLabel,
+                      style: TextStyle(
+                        color: typeColor,
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Icon(
+                    Icons.chevron_right,
+                    color: theme.brightness == Brightness.dark
+                        ? colorScheme.onSurface.withOpacity(0.4)
+                        : Colors.grey,
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
-  /// بررسی اینکه آیا دستگاه Static است
-  /// بررسی هم از isStaticLease و هم از rawData
   bool _isStaticDevice(ClientInfo client) {
     // 1. بررسی مستقیم isStaticLease
     if (client.isStaticLease == true) {
       return true;
     }
-    
+
     // 2. اگر isStaticLease null است، از rawData  بررسی کن
     if (client.isStaticLease == null && client.rawData.isNotEmpty) {
       if (client.rawData.containsKey('dynamic')) {
-        final dynamicValue = client.rawData['dynamic']?.toString().toLowerCase();
+        final dynamicValue = client.rawData['dynamic']
+            ?.toString()
+            .toLowerCase();
         if (dynamicValue == 'false' || dynamicValue == 'no') {
           return true; // Static
         }
       }
     }
-    
+
     return false;
   }
 

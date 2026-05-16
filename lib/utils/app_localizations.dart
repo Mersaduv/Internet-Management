@@ -17,7 +17,8 @@ class AppLocalizations {
   String get language =>
       locale.languageCode == 'en' ? 'Language' : 'زبان برنامه';
   String get persian => locale.languageCode == 'en' ? 'Persian' : 'فارسی';
-  String get english => locale.languageCode == 'en' ? 'English' : 'انگلیسی';
+  String get english =>
+      locale.languageCode == 'en' ? 'English' : 'انگلیسی';
   String get languageChanged => locale.languageCode == 'en'
       ? 'Language changed successfully'
       : 'زبان با موفقیت تغییر یافت';
@@ -26,16 +27,21 @@ class AppLocalizations {
       : 'خطا در تغییر زبان';
 
   // 应用标题
-  String get appTitle =>
-      locale.languageCode == 'en' ? 'Internet Management' : 'مدیریت انترنت';
+  String get appTitle => locale.languageCode == 'en'
+      ? 'Internet Management'
+      : 'مدیریت انترنت';
 
   // 设置页面
-  String get settings => locale.languageCode == 'en' ? 'Settings' : 'تنظیمات';
-  String get appSettings =>
-      locale.languageCode == 'en' ? 'App Settings' : 'تنظیمات برنامه';
-  String get connectionSettings =>
-      locale.languageCode == 'en' ? 'Connection Settings' : 'تنظیمات اتصال';
-  String get darkMode => locale.languageCode == 'en' ? 'Theme Mode' : 'حالت تم';
+  String get settings =>
+      locale.languageCode == 'en' ? 'Settings' : 'تنظیمات';
+  String get appSettings => locale.languageCode == 'en'
+      ? 'App Settings'
+      : 'تنظیمات برنامه';
+  String get connectionSettings => locale.languageCode == 'en'
+      ? 'Connection Settings'
+      : 'تنظیمات اتصال';
+  String get darkMode =>
+      locale.languageCode == 'en' ? 'Theme Mode' : 'حالت تم';
   String get dark => locale.languageCode == 'en' ? 'Dark' : 'تاریک';
   String get light => locale.languageCode == 'en' ? 'Light' : 'روشن';
   String get system => locale.languageCode == 'en' ? 'System' : 'سیستم';
@@ -43,9 +49,11 @@ class AppLocalizations {
       locale.languageCode == 'en' ? 'Light Mode' : 'حالت روشن';
   String get darkModeText =>
       locale.languageCode == 'en' ? 'Dark Mode' : 'حالت تاریک';
-  String get followSystem =>
-      locale.languageCode == 'en' ? 'Follow System' : 'پیروی از سیستم';
-  String get logout => locale.languageCode == 'en' ? 'Logout' : 'خروج از حساب';
+  String get followSystem => locale.languageCode == 'en'
+      ? 'Follow System'
+      : 'پیروی از سیستم';
+  String get logout =>
+      locale.languageCode == 'en' ? 'Logout' : 'خروج از حساب';
   String get logoutMessage => locale.languageCode == 'en'
       ? 'Logout from account'
       : 'خروج از حساب کاربری';
@@ -63,8 +71,9 @@ class AppLocalizations {
       : 'آدرس IP یا Hostname';
   String get port => locale.languageCode == 'en' ? 'Port' : 'پورت';
   String get ssl => locale.languageCode == 'en' ? 'SSL' : 'SSL';
-  String get saveSettings =>
-      locale.languageCode == 'en' ? 'Save Settings' : 'ذخیره تنظیمات';
+  String get saveSettings => locale.languageCode == 'en'
+      ? 'Save Settings'
+      : 'ذخیره تنظیمات';
   String get saving =>
       locale.languageCode == 'en' ? 'Saving...' : 'در حال ذخیره...';
   String get settingsSaved => locale.languageCode == 'en'
@@ -73,12 +82,14 @@ class AppLocalizations {
   String get settingsSaveError => locale.languageCode == 'en'
       ? 'Error saving settings'
       : 'خطا در ذخیره تنظیمات';
-  String get resetToDefaults =>
-      locale.languageCode == 'en' ? 'Reset to Defaults' : 'بازنشانی به پیش‌فرض';
+  String get resetToDefaults => locale.languageCode == 'en'
+      ? 'Reset to Defaults'
+      : 'بازنشانی به پیش‌فرض';
   String get resetSettingsConfirm => locale.languageCode == 'en'
       ? 'Are you sure you want to reset settings to default values?'
       : 'آیا مطمئن هستید که می‌خواهید تنظیمات را به حالت پیش‌فرض بازگردانید؟';
-  String get reset => locale.languageCode == 'en' ? 'Reset' : 'بازنشانی';
+  String get reset =>
+      locale.languageCode == 'en' ? 'Reset' : 'بازنشانی';
   String get settingsReset => locale.languageCode == 'en'
       ? 'Settings reset to default'
       : 'تنظیمات به حالت پیش‌فرض بازگردانده شد';
@@ -95,14 +106,17 @@ class AppLocalizations {
       ? 'Error loading settings'
       : 'خطا در بارگذاری تنظیمات';
 
-  // 主页
+  // ä¸»é¡µ
   String get home => locale.languageCode == 'en' ? 'Home' : 'خانه';
-  String get internetService =>
-      locale.languageCode == 'en' ? 'Internet Service' : 'سرویس انترنت';
-  String get connectedDevices =>
-      locale.languageCode == 'en' ? 'Connected Devices' : 'دستگاه‌های متصل';
-  String get bannedDevices =>
-      locale.languageCode == 'en' ? 'Banned Devices' : 'دستگاه‌های مسدود';
+  String get internetService => locale.languageCode == 'en'
+      ? 'Internet Service'
+      : 'سرویس انترنت';
+  String get connectedDevices => locale.languageCode == 'en'
+      ? 'Connected Devices'
+      : 'دستگاه‌های متصل';
+  String get bannedDevices => locale.languageCode == 'en'
+      ? 'Banned Devices'
+      : 'دستگاه‌های مسدود';
   String get you => locale.languageCode == 'en' ? 'You' : 'شما';
   String get user => locale.languageCode == 'en' ? 'User' : 'کاربر';
   String get yourDeviceIP =>
@@ -113,45 +127,42 @@ class AppLocalizations {
   String get noBannedDevices => locale.languageCode == 'en'
       ? 'No banned devices found'
       : 'هیچ دستگاه مسدود شده‌ای یافت نشد';
-  String get retry => locale.languageCode == 'en' ? 'Retry' : 'تلاش مجدد';
-  String get unknownDevice =>
-      locale.languageCode == 'en' ? 'Unknown Device' : 'دستگاه ناشناس';
+  String get retry =>
+      locale.languageCode == 'en' ? 'Retry' : 'تلاش مجدد';
+  String get unknownDevice => locale.languageCode == 'en'
+      ? 'Unknown Device'
+      : 'دستگاه ناشناس';
   String get device => locale.languageCode == 'en' ? 'Device' : 'دستگاه';
-  String get lockNewConnections =>
-      locale.languageCode == 'en' ? 'Lock New Connections' : 'قفل اتصال جدید';
+  String get lockNewConnections => locale.languageCode == 'en'
+      ? 'Lock New Connections'
+      : 'قفل اتصال جدید';
   String get lockNewConnectionsActive => locale.languageCode == 'en'
       ? 'Lock New Connections (Active)'
       : 'قفل اتصال جدید (فعال)';
-  String get lockNewConnectionsDisabled => locale.languageCode == 'en'
-      ? 'Lock New Connections disabled'
-      : 'قفل اتصال جدید غیرفعال شد';
   String get lockNewConnectionsEnabled => locale.languageCode == 'en'
-      ? 'Lock New Connections enabled'
+      ? 'New connections locked'
       : 'قفل اتصال جدید فعال شد';
+  String get lockNewConnectionsDisabled => locale.languageCode == 'en'
+      ? 'New connections unlocked'
+      : 'قفل اتصال جدید غیرفعال شد';
+  String get lockStatusError => locale.languageCode == 'en'
+      ? 'Error changing lock status'
+      : 'خطا در تغییر وضعیت قفل';
 
   // 设备相关
   String get static => locale.languageCode == 'en' ? 'Static' : 'Static';
   String get pending => locale.languageCode == 'en' ? 'Pending' : 'Pending';
-  String get pendingApproval =>
-      locale.languageCode == 'en' ? 'Pending Approval' : 'در انتظار تایید';
+  String get pendingApproval => locale.languageCode == 'en'
+      ? 'Pending Approval'
+      : 'در انتظار تایید';
   String get approve => locale.languageCode == 'en' ? 'Approve' : 'تایید';
   String get reject => locale.languageCode == 'en' ? 'Reject' : 'رد';
-  String get approveDevice =>
-      locale.languageCode == 'en' ? 'Approve Device' : 'تایید دستگاه';
-  String get rejectDevice =>
-      locale.languageCode == 'en' ? 'Reject Device' : 'رد دستگاه';
-  String get approveDeviceConfirm => locale.languageCode == 'en'
-      ? 'Do you want to approve device "{device}"?\n\nThis device will be able to connect to the network and use the internet.'
-      : 'آیا می‌خواهید دستگاه "{device}" را تایید کنید؟\n\nاین دستگاه می‌تواند به شبکه متصل شود و از انترنت استفاده کند.';
-  String get rejectDeviceConfirm => locale.languageCode == 'en'
-      ? 'Do you want to reject device "{device}"?\n\nThis device will be banned and removed from the network.'
-      : 'آیا می‌خواهید دستگاه "{device}" را رد کنید؟\n\nاین دستگاه مسدود خواهد شد و از شبکه حذف می‌شود.';
   String get deviceApproved => locale.languageCode == 'en'
-      ? 'Device approved successfully'
-      : 'دستگاه با موفقیت تایید شد';
+      ? 'Device approved'
+      : 'دستگاه تایید شد';
   String get deviceRejected => locale.languageCode == 'en'
-      ? 'Device rejected and banned'
-      : 'دستگاه رد شد و مسدود شد';
+      ? 'Device rejected'
+      : 'دستگاه رد و مسدود شد';
   String get approveError => locale.languageCode == 'en'
       ? 'Error approving device'
       : 'خطا در تایید دستگاه';
@@ -159,14 +170,17 @@ class AppLocalizations {
       ? 'Error rejecting device'
       : 'خطا در رد دستگاه';
   String get banned => locale.languageCode == 'en' ? 'Banned' : 'مسدود';
-  String get bannedDevice =>
-      locale.languageCode == 'en' ? 'Banned Device' : 'دستگاه مسدود شده';
-  String get unbanDevice =>
-      locale.languageCode == 'en' ? 'Unban Device' : 'رفع مسدودیت دستگاه';
+  String get bannedDevice => locale.languageCode == 'en'
+      ? 'Banned Device'
+      : 'دستگاه مسدود شده';
+  String get unbanDevice => locale.languageCode == 'en'
+      ? 'Unban Device'
+      : 'رفع مسدودیت دستگاه';
   String get unbanDeviceConfirm => locale.languageCode == 'en'
       ? 'Are you sure you want to unban device {ip}?'
       : 'آیا مطمئن هستید که می‌خواهید مسدودیت دستگاه {ip} را بردارید؟';
-  String get unban => locale.languageCode == 'en' ? 'Unban' : 'رفع مسدودیت';
+  String get unban =>
+      locale.languageCode == 'en' ? 'Unban' : 'رفع مسدودیت';
   String get deviceUnbanned => locale.languageCode == 'en'
       ? 'Device unbanned successfully'
       : 'مسدودیت دستگاه با موفقیت برداشته شد';
@@ -174,7 +188,7 @@ class AppLocalizations {
       ? 'Error unbanning device'
       : 'خطا در رفع مسدودیت';
   String get autoBanned => locale.languageCode == 'en'
-      ? 'Auto-banned (New connection lock)'
+      ? 'Auto Ban'
       : 'مسدود خودکار (قفل اتصال جدید)';
   String get manualBanned =>
       locale.languageCode == 'en' ? 'Manual Ban' : 'مسدود دستی';
@@ -184,19 +198,25 @@ class AppLocalizations {
   String get dhcp => locale.languageCode == 'en' ? 'DHCP' : 'DHCP';
   String get hotspot => locale.languageCode == 'en' ? 'Hotspot' : 'Hotspot';
   String get ppp => locale.languageCode == 'en' ? 'PPP' : 'PPP';
-  String get unknown => locale.languageCode == 'en' ? 'Unknown' : 'نامشخص';
-  String get download => locale.languageCode == 'en' ? 'Download' : 'دانلود';
+  String get unknown =>
+      locale.languageCode == 'en' ? 'Unknown' : 'نامشخص';
+  String get download =>
+      locale.languageCode == 'en' ? 'Download' : 'دانلود';
   String get upload => locale.languageCode == 'en' ? 'Upload' : 'آپلود';
-  String get maximum => locale.languageCode == 'en' ? 'Maximum' : 'حداکثر';
+  String get maximum =>
+      locale.languageCode == 'en' ? 'Maximum' : 'حداکثر';
   // 通用
-  String get loading =>
-      locale.languageCode == 'en' ? 'Loading...' : 'در حال بارگذاری...';
+  String get loading => locale.languageCode == 'en'
+      ? 'Loading...'
+      : 'در حال بارگذاری...';
   String get error => locale.languageCode == 'en' ? 'Error' : 'خطا';
-  String get success => locale.languageCode == 'en' ? 'Success' : 'موفقیت';
+  String get success =>
+      locale.languageCode == 'en' ? 'Success' : 'موفقیت';
   String get ok => locale.languageCode == 'en' ? 'OK' : 'تایید';
   String get yes => locale.languageCode == 'en' ? 'Yes' : 'بله';
   String get no => locale.languageCode == 'en' ? 'No' : 'خیر';
-  String get refresh => locale.languageCode == 'en' ? 'Refresh' : 'به‌روزرسانی';
+  String get refresh =>
+      locale.languageCode == 'en' ? 'Refresh' : 'به‌روزرسانی';
   String get close => locale.languageCode == 'en' ? 'Close' : 'بستن';
   String get delete => locale.languageCode == 'en' ? 'Delete' : 'حذف';
   String get edit => locale.languageCode == 'en' ? 'Edit' : 'ویرایش';
@@ -211,13 +231,6 @@ class AppLocalizations {
   String get none => locale.languageCode == 'en' ? 'None' : 'هیچکدام';
 
   // 辅助方法
-  String approveDeviceConfirmWithDevice(String device) {
-    return approveDeviceConfirm.replaceAll('{device}', device);
-  }
-
-  String rejectDeviceConfirmWithDevice(String device) {
-    return rejectDeviceConfirm.replaceAll('{device}', device);
-  }
 
   String unbanDeviceConfirmWithIP(String ip) {
     return unbanDeviceConfirm.replaceAll('{ip}', ip);
@@ -229,7 +242,8 @@ class AppLocalizations {
       : 'لطفاً اطلاعات خود را وارد کنید';
   String get username =>
       locale.languageCode == 'en' ? 'Username' : 'نام کاربری';
-  String get password => locale.languageCode == 'en' ? 'Password' : 'رمز عبور';
+  String get password =>
+      locale.languageCode == 'en' ? 'Password' : 'رمز عبور';
   String get pleaseEnterUsername => locale.languageCode == 'en'
       ? 'Please enter username'
       : 'لطفاً نام کاربری را وارد کنید';
@@ -248,12 +262,30 @@ class AppLocalizations {
       : 'ورود ناموفق بود. لطفاً اطلاعات ورود خود را بررسی کنید.';
 
   // 设备详情页面
-  String get deviceDetails =>
-      locale.languageCode == 'en' ? 'Device Details' : 'جزئیات دستگاه';
+  String get deviceDetails => locale.languageCode == 'en'
+      ? 'Device Details'
+      : 'جزئیات دستگاه';
   String get deviceName =>
       locale.languageCode == 'en' ? 'Device Name' : 'نام دستگاه';
-  String get deviceInformation =>
-      locale.languageCode == 'en' ? 'Device Information' : 'اطلاعات دستگاه';
+  String get deviceNameHint =>
+      locale.languageCode == 'en' ? 'Example: Office PC' : 'مثال: Office PC';
+  String get deviceNameHelper => locale.languageCode == 'en'
+      ? 'This name is saved as DHCP lease comment and will be shown in the app.'
+      : 'این نام در comment مربوط به DHCP lease ذخیره می‌شود و از این به بعد در برنامه نمایش داده می‌شود.';
+  String get dhcpLeaseComment => locale.languageCode == 'en'
+      ? 'Comment for DHCP Lease'
+      : 'Comment برای DHCP Lease';
+  String get deviceNameSaved =>
+      locale.languageCode == 'en' ? 'Device name saved' : 'نام دستگاه ذخیره شد';
+  String get deviceNameSaveError => locale.languageCode == 'en'
+      ? 'Error saving device name'
+      : 'خطا در ذخیره نام دستگاه';
+  String get deviceNameRequired => locale.languageCode == 'en'
+      ? 'Please enter a device name'
+      : 'لطفاً نام دستگاه را وارد کنید';
+  String get deviceInformation => locale.languageCode == 'en'
+      ? 'Device Information'
+      : 'اطلاعات دستگاه';
   String get operations =>
       locale.languageCode == 'en' ? 'Operations' : 'عملیات';
   String get type => locale.languageCode == 'en' ? 'Type' : 'نوع';
@@ -283,8 +315,9 @@ class AppLocalizations {
   String get numberMustBeGreaterThanZero => locale.languageCode == 'en'
       ? 'Number must be greater than zero'
       : 'عدد باید بزرگتر از صفر باشد';
-  String get unitGuide =>
-      locale.languageCode == 'en' ? 'Unit Guide:' : 'راهنمای واحدها:';
+  String get unitGuide => locale.languageCode == 'en'
+      ? 'Unit Guide:'
+      : 'راهنمای واحدها:';
   String get unitGuideText => locale.languageCode == 'en'
       ? '• Mbps = Megabits per second\n• Kbps = Kilobits per second'
       : '• Mbps = مگابیت بر ثانیه\n• Kbps = کیلوبیت بر ثانیه';
@@ -311,32 +344,21 @@ class AppLocalizations {
   String get thisDeviceIsBanned => locale.languageCode == 'en'
       ? 'This device is banned'
       : 'این دستگاه مسدود شده است';
-  String get removeFromAllowedList => locale.languageCode == 'en'
-      ? 'Remove from Allowed List'
-      : 'Remove from Allowed List';
-  String get allowDevice =>
-      locale.languageCode == 'en' ? 'Allow Device' : 'Allow Device';
-  String get errorRemovingFromAllowed => locale.languageCode == 'en'
-      ? 'Error removing from allowed list'
-      : 'خطا در حذف از لیست مجاز';
-  String get errorAllowingDevice => locale.languageCode == 'en'
-      ? 'Error allowing device'
-      : 'خطا در اجازه دادن به دستگاه';
   String get deviceWithIP =>
       locale.languageCode == 'en' ? 'Device {ip}' : 'دستگاه {ip}';
   String get deviceWithMAC =>
       locale.languageCode == 'en' ? 'Device {mac}' : 'دستگاه {mac}';
-  String get unknownDeviceText =>
-      locale.languageCode == 'en' ? 'Unknown Device' : 'دستگاه ناشناس';
-  String get lockStatusError => locale.languageCode == 'en'
-      ? 'Error changing lock status'
-      : 'خطا در تغییر وضعیت قفل';
-  String get bannedDeviceText =>
-      locale.languageCode == 'en' ? 'Banned Device' : 'دستگاه مسدود شده';
+  String get unknownDeviceText => locale.languageCode == 'en'
+      ? 'Unknown Device'
+      : 'دستگاه ناشناس';
+  String get bannedDeviceText => locale.languageCode == 'en'
+      ? 'Banned Device'
+      : 'دستگاه مسدود شده';
   String get unbanDeviceTooltip =>
       locale.languageCode == 'en' ? 'Unban Device' : 'رفع مسدودیت';
-  String get unbanDeviceTitle =>
-      locale.languageCode == 'en' ? 'Unban Device' : 'رفع مسدودیت دستگاه';
+  String get unbanDeviceTitle => locale.languageCode == 'en'
+      ? 'Unban Device'
+      : 'رفع مسدودیت دستگاه';
   String get unbanDeviceConfirmText => locale.languageCode == 'en'
       ? 'Are you sure you want to unban device {ip}?'
       : 'آیا مطمئن هستید که می‌خواهید مسدودیت دستگاه {ip} را بردارید؟';
@@ -352,7 +374,8 @@ class AppLocalizations {
   String get errorBanningDevice => locale.languageCode == 'en'
       ? 'Error banning device'
       : 'خطا در مسدود کردن دستگاه';
-  String get retryText => locale.languageCode == 'en' ? 'Retry' : 'تلاش مجدد';
+  String get retryText =>
+      locale.languageCode == 'en' ? 'Retry' : 'تلاش مجدد';
   String get noConnectedDevicesText => locale.languageCode == 'en'
       ? 'No connected devices found'
       : 'هیچ دستگاه متصلی یافت نشد';
@@ -382,8 +405,9 @@ class AppLocalizations {
   }
 
   // MikroTik Service 错误消息
-  String get connectionError =>
-      locale.languageCode == 'en' ? 'Connection error' : 'خطا در اتصال';
+  String get connectionError => locale.languageCode == 'en'
+      ? 'Connection error'
+      : 'خطا در اتصال';
   String get connectionNotEstablishedError => locale.languageCode == 'en'
       ? 'Connection not established'
       : 'اتصال برقرار نشده';
@@ -402,8 +426,9 @@ class AppLocalizations {
   String get speedSettingError => locale.languageCode == 'en'
       ? 'Error setting speed: {error}'
       : 'خطا در تنظیم سرعت: {error}';
-  String get timeoutError =>
-      locale.languageCode == 'en' ? 'Timeout error' : 'خطای زمان‌بندی';
+  String get timeoutError => locale.languageCode == 'en'
+      ? 'Timeout error'
+      : 'خطای زمان‌بندی';
   String get queueEditTimeout => locale.languageCode == 'en'
       ? 'Timeout editing queue'
       : 'Timeout در ویرایش queue';
@@ -436,6 +461,10 @@ class AppLocalizations {
 
   /// 将服务层的错误消息转换为本地化消息
   String localizeServiceError(String errorMessage) {
+    if (errorMessage.contains('خطا در فرمان صف:') ||
+        errorMessage.contains('Timeout در فرمان صف:')) {
+      return errorMessage;
+    }
     if (errorMessage.contains('خطا در اتصال') ||
         errorMessage.contains('Connection error')) {
       return connectionError;

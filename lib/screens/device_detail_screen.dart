@@ -32,9 +32,16 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
 
   // برای ذخیره سرعت تنظیم شده (برای نمایش سریع)
   String? _currentSpeedLimit; // فرمت: "8M/7M"
+  String? _currentSpeedPolicyLabel;
+  String? _currentSpeedPolicyKind;
+  String? _currentSpeedSource;
   bool _isLoadingSpeed = false; // برای بارگذاری سرعت از RouterOS
 
   bool _isDisposed = false; // برای جلوگیری از setState بعد از dispose
+
+  bool _isSavingLeaseName = false;
+  late final TextEditingController _leaseNameController;
+  String? _displayHostName;
 
   static const Color _primaryColor = Color(0xFF428B7C);
 
@@ -42,6 +49,8 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _displayHostName = _initialLeaseDisplayName();
+    _leaseNameController = TextEditingController(text: _displayHostName ?? '');
 
     print('═══════════════════════════════════════════════════════════');
     print('📱 [DEVICE_DETAIL] صفحه جزئیات دستگاه باز شد');
@@ -64,6 +73,7 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
   @override
   void dispose() {
     _cancelAllPendingOperations();
+    _leaseNameController.dispose();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -88,13 +98,43 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
         oldWidget.device.macAddress != widget.device.macAddress ||
         oldWidget.isBanned != widget.isBanned) {
       _currentSpeedLimit = null;
+      _currentSpeedPolicyLabel = null;
+      _currentSpeedPolicyKind = null;
+      _currentSpeedSource = null;
+      _displayHostName = _initialLeaseDisplayName();
+      _leaseNameController.text = _displayHostName ?? '';
       _loadAllData();
       return;
+    }
+
+    if (oldWidget.device.hostName != widget.device.hostName &&
+        !_isSavingLeaseName) {
+      _displayHostName = _initialLeaseDisplayName();
+      _leaseNameController.text = _displayHostName ?? '';
     }
 
     if (widget.device.ipAddress != null && !widget.isBanned) {
       _loadSpeedLimit();
     }
+  }
+
+  String? _initialLeaseDisplayName() {
+    final name = widget.device.hostName?.trim();
+    if (name != null && name.isNotEmpty) {
+      return name;
+    }
+    return null;
+  }
+
+  String _resolvedDeviceTitle() {
+    final customName = _displayHostName?.trim();
+    if (customName != null && customName.isNotEmpty) {
+      return customName;
+    }
+    return widget.device.user ??
+        widget.device.name ??
+        AppLocalizations.of(context)?.unknown ??
+        'Unknown';
   }
 
   /// بارگذاری اطلاعات صفحه
@@ -109,7 +149,378 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
     await _loadSpeedLimit();
   }
 
+  bool get _speedBottomSheetEnabled => true;
+  bool get _canDeleteCurrentSpeedLimit =>
+      (_currentSpeedLimit?.isNotEmpty ?? false) &&
+      (_currentSpeedPolicyKind == null || _currentSpeedPolicyKind == 'dhcp') &&
+      !widget.isBanned;
+  bool get _hasSpeedDetails =>
+      (_currentSpeedLimit?.isNotEmpty ?? false) ||
+      (_currentSpeedPolicyLabel?.isNotEmpty ?? false);
+
+  Map<String, String> _speedPartForInput(String part) {
+    final match = RegExp(r'^(\d+(?:\.\d+)?)([KMkm]?)$').firstMatch(part.trim());
+    return {
+      'value': match?.group(1) ?? '',
+      'unit': (match?.group(2)?.isNotEmpty == true ? match!.group(2)! : 'M')
+          .toUpperCase(),
+    };
+  }
+
+  Future<void> _showSpeedLimitSheet() async {
+    if (_isDisposed || widget.device.ipAddress == null) return;
+
+    if (!mounted || _isDisposed) return;
+
+    final currentLimit = _currentSpeedLimit ?? '10M/10M';
+    final parts = currentLimit.split('/');
+    final uploadPart = _speedPartForInput(parts.isNotEmpty ? parts[0] : '10M');
+    final downloadPart = _speedPartForInput(
+      parts.length > 1 ? parts[1] : '10M',
+    );
+
+    final downloadValueController = TextEditingController(
+      text: downloadPart['value'],
+    );
+    final uploadValueController = TextEditingController(
+      text: uploadPart['value'],
+    );
+    final formKey = GlobalKey<FormState>();
+    var selectedDownloadUnit = downloadPart['unit'] ?? 'M';
+    var selectedUploadUnit = uploadPart['unit'] ?? 'M';
+    var isSaving = false;
+
+    final result = await showModalBottomSheet<Map<String, dynamic>>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) {
+        final theme = Theme.of(sheetContext);
+        final colorScheme = theme.colorScheme;
+
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            Widget speedField({
+              required TextEditingController controller,
+              required String unit,
+              required ValueChanged<String> onUnitChanged,
+              required IconData icon,
+              required Color color,
+              required String label,
+            }) {
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    flex: 5,
+                    child: TextFormField(
+                      controller: controller,
+                      decoration: InputDecoration(
+                        prefixIcon: Icon(icon, color: color),
+                        labelText: label,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      textDirection: TextDirection.ltr,
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                      validator: (value) {
+                        final number = double.tryParse(value?.trim() ?? '');
+                        if (number == null || number <= 0) {
+                          return 'عدد معتبر وارد کنید';
+                        }
+                        return null;
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    flex: 3,
+                    child: DropdownButtonFormField<String>(
+                      value: unit,
+                      decoration: InputDecoration(
+                        labelText: 'واحد',
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      items: const [
+                        DropdownMenuItem(value: 'M', child: Text('Mbps')),
+                        DropdownMenuItem(value: 'K', child: Text('Kbps')),
+                      ],
+                      onChanged: (value) {
+                        if (value != null) onUnitChanged(value);
+                      },
+                    ),
+                  ),
+                ],
+              );
+            }
+
+            final keyboardOpen = MediaQuery.of(context).viewInsets.bottom > 0;
+            final heightFactor = keyboardOpen ? 0.9 : 0.52;
+            final canDeleteSpeed = _currentSpeedLimit != null;
+
+            return Padding(
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.of(context).viewInsets.bottom,
+              ),
+              child: FractionallySizedBox(
+                heightFactor: heightFactor,
+                alignment: Alignment.bottomCenter,
+                child: Align(
+                  alignment: Alignment.bottomCenter,
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 760),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: colorScheme.surface,
+                        borderRadius: const BorderRadius.vertical(
+                          top: Radius.circular(24),
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.18),
+                            blurRadius: 24,
+                            offset: const Offset(0, -6),
+                          ),
+                        ],
+                      ),
+                      child: Column(
+                        children: [
+                          const SizedBox(height: 10),
+                          Container(
+                            width: 42,
+                            height: 4,
+                            decoration: BoxDecoration(
+                              color: colorScheme.outlineVariant,
+                              borderRadius: BorderRadius.circular(99),
+                            ),
+                          ),
+                          Expanded(
+                            child: SingleChildScrollView(
+                              padding: const EdgeInsets.fromLTRB(
+                                20,
+                                18,
+                                20,
+                                20,
+                              ),
+                              child: Form(
+                                key: formKey,
+                                child: Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.stretch,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        const Icon(
+                                          Icons.speed,
+                                          color: _primaryColor,
+                                          size: 28,
+                                        ),
+                                        const SizedBox(width: 10),
+                                        Expanded(
+                                          child: Text(
+                                            AppLocalizations.of(
+                                                  context,
+                                                )?.setSpeedLimit ??
+                                                'Set Speed Limit',
+                                            style: TextStyle(
+                                              fontSize: 20,
+                                              fontWeight: FontWeight.bold,
+                                              color: colorScheme.onSurface,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 18),
+                                    LayoutBuilder(
+                                      builder: (context, constraints) {
+                                        final compact =
+                                            constraints.maxWidth < 560;
+                                        final uploadField = speedField(
+                                          controller: uploadValueController,
+                                          unit: selectedUploadUnit,
+                                          onUnitChanged: (value) =>
+                                              setSheetState(() {
+                                                selectedUploadUnit = value;
+                                              }),
+                                          icon: Icons.upload,
+                                          color: Colors.green,
+                                          label: 'Upload',
+                                        );
+                                        final downloadField = speedField(
+                                          controller: downloadValueController,
+                                          unit: selectedDownloadUnit,
+                                          onUnitChanged: (value) =>
+                                              setSheetState(() {
+                                                selectedDownloadUnit = value;
+                                              }),
+                                          icon: Icons.download,
+                                          color: Colors.blue,
+                                          label: 'Download',
+                                        );
+                                        if (compact) {
+                                          return Column(
+                                            children: [
+                                              uploadField,
+                                              const SizedBox(height: 14),
+                                              downloadField,
+                                            ],
+                                          );
+                                        }
+                                        return Row(
+                                          children: [
+                                            Expanded(child: uploadField),
+                                            const SizedBox(width: 14),
+                                            Expanded(child: downloadField),
+                                          ],
+                                        );
+                                      },
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(20, 10, 20, 20),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if (canDeleteSpeed) ...[
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: OutlinedButton.icon(
+                                          onPressed: isSaving
+                                              ? null
+                                              : () => Navigator.pop(context, {
+                                                  'action': 'delete',
+                                                }),
+                                          icon: const Icon(
+                                            Icons.delete_outline,
+                                          ),
+                                          label: const Text('حذف سرعت'),
+                                          style: OutlinedButton.styleFrom(
+                                            foregroundColor: Colors.red,
+                                            minimumSize: const Size.fromHeight(
+                                              48,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 10),
+                                ],
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: OutlinedButton(
+                                        onPressed: isSaving
+                                            ? null
+                                            : () => Navigator.pop(context),
+                                        style: OutlinedButton.styleFrom(
+                                          minimumSize: const Size.fromHeight(
+                                            48,
+                                          ),
+                                        ),
+                                        child: Text(
+                                          AppLocalizations.of(
+                                                context,
+                                              )?.cancel ??
+                                              'Cancel',
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: ElevatedButton.icon(
+                                        onPressed: isSaving
+                                            ? null
+                                            : () {
+                                                if (!formKey.currentState!
+                                                    .validate()) {
+                                                  return;
+                                                }
+                                                setSheetState(() {
+                                                  isSaving = true;
+                                                });
+                                                Navigator.pop(context, {
+                                                  'action': 'save',
+                                                  'max_limit':
+                                                      '${uploadValueController.text.trim()}$selectedUploadUnit/'
+                                                      '${downloadValueController.text.trim()}$selectedDownloadUnit',
+                                                });
+                                              },
+                                        icon: isSaving
+                                            ? const SizedBox(
+                                                width: 18,
+                                                height: 18,
+                                                child:
+                                                    CircularProgressIndicator(
+                                                      strokeWidth: 2,
+                                                      color: Colors.white,
+                                                    ),
+                                              )
+                                            : const Icon(Icons.save),
+                                        label: Text(
+                                          AppLocalizations.of(context)?.save ??
+                                              'Save',
+                                        ),
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: _primaryColor,
+                                          foregroundColor: Colors.white,
+                                          minimumSize: const Size.fromHeight(
+                                            48,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+
+    if (result == null || _isDisposed || !mounted) return;
+
+    setState(() {
+      _isLoading = true;
+    });
+
+    if (result['action'] == 'delete') {
+      await _removeSpeedLimitInternal(widget.device.ipAddress!);
+    } else {
+      await _setSpeedLimitInternal(
+        widget.device.ipAddress!,
+        result['max_limit'] as String,
+      );
+    }
+  }
+
   Future<void> _setSpeedLimit() async {
+    if (_speedBottomSheetEnabled) {
+      await _showSpeedLimitSheet();
+      return;
+    }
+
     if (_isDisposed || widget.device.ipAddress == null) return;
 
     // اگر سرعت قبلاً تنظیم شده، آن را از state بگیر و به فرمت قابل نمایش تبدیل کن
@@ -674,24 +1085,24 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
         // فوراً سرعت را در state ذخیره کن (برای نمایش سریع)
         setState(() {
           _currentSpeedLimit = maxLimit;
+          _currentSpeedPolicyLabel = 'DHCP';
+          _currentSpeedPolicyKind = 'dhcp';
+          _currentSpeedSource = 'dhcp_lease';
         });
 
         // ذخیره در cache برای بارگذاری بعدی
-        _saveSpeedLimitToCache(maxLimit);
+        _saveSpeedLimitToCache(
+          maxLimit,
+          policyLabel: _currentSpeedPolicyLabel,
+          policyKind: _currentSpeedPolicyKind,
+          source: _currentSpeedSource,
+        );
 
-        // تازه‌سازی داده‌ها در پس‌زمینه
-        try {
-          provider.refresh();
-          // در پس‌زمینه از RouterOS بارگذاری کن (برای تأیید)
-          // 延迟一点时间，让 RouterOS 有时间创建 queue
-          Future.delayed(const Duration(seconds: 2), () {
-            if (mounted && !_isDisposed) {
-              _loadSpeedLimit();
-            }
-          });
-        } catch (e) {
-          // ignore refresh errors
-        }
+        Future.delayed(const Duration(milliseconds: 800), () {
+          if (mounted && !_isDisposed) {
+            _loadSpeedLimit();
+          }
+        });
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -753,13 +1164,113 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
   }
 
   /// بارگذاری سرعت از cache (SharedPreferences)
+  Future<void> _removeSpeedLimitInternal(String ipAddress) async {
+    try {
+      final provider = Provider.of<ClientsProvider>(context, listen: false);
+      final success = await provider
+          .removeClientSpeed(ipAddress)
+          .timeout(
+            const Duration(seconds: 30),
+            onTimeout: () {
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('زمان حذف سرعت به پایان رسید.'),
+                    backgroundColor: Colors.orange,
+                  ),
+                );
+              }
+              return false;
+            },
+          );
+
+      if (!mounted) return;
+
+      if (success) {
+        setState(() {
+          _currentSpeedLimit = null;
+          _currentSpeedPolicyLabel = null;
+          _currentSpeedPolicyKind = null;
+          _currentSpeedSource = null;
+        });
+        await _clearSpeedLimitCache();
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Row(
+              children: [
+                Icon(Icons.check_circle, color: Colors.white),
+                SizedBox(width: 8),
+                Expanded(child: Text('سرعت اختصاصی حذف شد')),
+              ],
+            ),
+            backgroundColor: Colors.green,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+
+        Future.delayed(const Duration(milliseconds: 500), () {
+          if (mounted && !_isDisposed) {
+            _loadSpeedLimit();
+          }
+        });
+      } else {
+        final errorMsg =
+            provider.errorMessage ?? 'سرعت اختصاصی برای حذف پیدا نشد.';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.error, color: Colors.white),
+                const SizedBox(width: 8),
+                Expanded(child: Text(errorMsg)),
+              ],
+            ),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+
+      final errorMsg = e.toString().replaceFirst('Exception: ', '');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(Icons.error, color: Colors.white),
+              const SizedBox(width: 8),
+              Expanded(child: Text('خطا در حذف سرعت: $errorMsg')),
+            ],
+          ),
+          backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
   Future<void> _loadSpeedLimitFromCache() async {
     if (_isDisposed || widget.device.ipAddress == null) return;
 
     try {
       final prefs = await SharedPreferences.getInstance();
-      final cacheKey = 'speed_limit_${widget.device.ipAddress}';
-      final cachedSpeed = prefs.getString(cacheKey);
+      final speedCacheKey = 'speed_limit_${widget.device.ipAddress}';
+      final policyLabelCacheKey =
+          'speed_policy_label_${widget.device.ipAddress}';
+      final policyKindCacheKey = 'speed_policy_kind_${widget.device.ipAddress}';
+      final sourceCacheKey = 'speed_source_${widget.device.ipAddress}';
+      final cachedSpeed = prefs.getString(speedCacheKey);
+      final cachedPolicyLabel = prefs.getString(policyLabelCacheKey);
+      final cachedPolicyKind = prefs.getString(policyKindCacheKey);
+      final cachedSource = prefs.getString(sourceCacheKey);
 
       if (cachedSpeed != null && cachedSpeed.isNotEmpty) {
         // 检查 cache 中的值是否有效（排除 "0K/0K" 或类似的值）
@@ -769,6 +1280,9 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
           if (mounted && !_isDisposed) {
             setState(() {
               _currentSpeedLimit = cachedSpeed;
+              _currentSpeedPolicyLabel = cachedPolicyLabel;
+              _currentSpeedPolicyKind = cachedPolicyKind;
+              _currentSpeedSource = cachedSource;
             });
           }
         } else {
@@ -776,7 +1290,19 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
             '⚠️ [LOAD_SPEED_CACHE] مقدار cache نامعتبر است (نادیده گرفته شد): $cachedSpeed',
           );
           // 清除无效的 cache
-          await prefs.remove(cacheKey);
+          await prefs.remove(speedCacheKey);
+          await prefs.remove(policyLabelCacheKey);
+          await prefs.remove(policyKindCacheKey);
+          await prefs.remove(sourceCacheKey);
+        }
+      } else if (cachedPolicyLabel != null && cachedPolicyLabel.isNotEmpty) {
+        if (mounted && !_isDisposed) {
+          setState(() {
+            _currentSpeedLimit = cachedSpeed;
+            _currentSpeedPolicyLabel = cachedPolicyLabel;
+            _currentSpeedPolicyKind = cachedPolicyKind;
+            _currentSpeedSource = cachedSource;
+          });
         }
       }
     } catch (e) {
@@ -805,13 +1331,37 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
   }
 
   /// ذخیره سرعت در cache (SharedPreferences)
-  Future<void> _saveSpeedLimitToCache(String speedLimit) async {
+  Future<void> _saveSpeedLimitToCache(
+    String speedLimit, {
+    String? policyLabel,
+    String? policyKind,
+    String? source,
+  }) async {
     if (widget.device.ipAddress == null) return;
 
     try {
       final prefs = await SharedPreferences.getInstance();
-      final cacheKey = 'speed_limit_${widget.device.ipAddress}';
-      await prefs.setString(cacheKey, speedLimit);
+      final speedCacheKey = 'speed_limit_${widget.device.ipAddress}';
+      final policyLabelCacheKey =
+          'speed_policy_label_${widget.device.ipAddress}';
+      final policyKindCacheKey = 'speed_policy_kind_${widget.device.ipAddress}';
+      final sourceCacheKey = 'speed_source_${widget.device.ipAddress}';
+      await prefs.setString(speedCacheKey, speedLimit);
+      if (policyLabel != null && policyLabel.isNotEmpty) {
+        await prefs.setString(policyLabelCacheKey, policyLabel);
+      } else {
+        await prefs.remove(policyLabelCacheKey);
+      }
+      if (policyKind != null && policyKind.isNotEmpty) {
+        await prefs.setString(policyKindCacheKey, policyKind);
+      } else {
+        await prefs.remove(policyKindCacheKey);
+      }
+      if (source != null && source.isNotEmpty) {
+        await prefs.setString(sourceCacheKey, source);
+      } else {
+        await prefs.remove(sourceCacheKey);
+      }
       print('✅ [SAVE_SPEED_CACHE] سرعت در cache ذخیره شد: $speedLimit');
     } catch (e) {
       print('⚠️ [SAVE_SPEED_CACHE] خطا در ذخیره cache: $e');
@@ -820,6 +1370,20 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
   }
 
   /// بارگذاری سرعت از RouterOS (در پس‌زمینه)
+  Future<void> _clearSpeedLimitCache() async {
+    if (widget.device.ipAddress == null) return;
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('speed_limit_${widget.device.ipAddress}');
+      await prefs.remove('speed_policy_label_${widget.device.ipAddress}');
+      await prefs.remove('speed_policy_kind_${widget.device.ipAddress}');
+      await prefs.remove('speed_source_${widget.device.ipAddress}');
+    } catch (_) {
+      // ignore cache errors
+    }
+  }
+
   Future<void> _loadSpeedLimit() async {
     if (_isDisposed || widget.device.ipAddress == null || widget.isBanned) {
       return;
@@ -855,6 +1419,9 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
 
       if (speedInfo != null && speedInfo['max_limit'] != null) {
         final maxLimit = speedInfo['max_limit'] as String;
+        final policyLabel = speedInfo['policy_label']?.trim();
+        final policyKind = speedInfo['policy_kind']?.trim();
+        final source = speedInfo['source']?.trim();
         print('✅ [LOAD_SPEED] سرعت از RouterOS دریافت شد: $maxLimit');
         // maxLimit 从 getClientSpeed 已经转换好了（M/K 格式），直接使用
         // getClientSpeed 已经处理了所有格式转换（位格式 -> M/K 格式）
@@ -864,23 +1431,33 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
         // فقط اگر از RouterOS 成功获取到值，才更新 state
         setState(() {
           _currentSpeedLimit = formattedLimit;
+          _currentSpeedPolicyLabel =
+              policyLabel != null && policyLabel.isNotEmpty
+              ? policyLabel
+              : null;
+          _currentSpeedPolicyKind = policyKind != null && policyKind.isNotEmpty
+              ? policyKind
+              : null;
+          _currentSpeedSource = source != null && source.isNotEmpty
+              ? source
+              : null;
         });
 
         // ذخیره در cache برای بارگذاری بعدی
-        _saveSpeedLimitToCache(formattedLimit);
+        _saveSpeedLimitToCache(
+          formattedLimit,
+          policyLabel: _currentSpeedPolicyLabel,
+          policyKind: _currentSpeedPolicyKind,
+          source: _currentSpeedSource,
+        );
       } else {
-        // اگر queue وجود ندارد，但 _currentSpeedLimit 已经有值（刚刚设置的），不要清空它
-        // 因为 queue 可能需要一点时间才能在 RouterOS 中完全可用
-        // 只在页面首次加载时（_currentSpeedLimit 为 null）才清空
-        if (_currentSpeedLimit == null) {
+        if (_currentSpeedLimit == null && _currentSpeedPolicyLabel == null) {
           setState(() {
             _currentSpeedLimit = null;
+            _currentSpeedPolicyLabel = null;
+            _currentSpeedPolicyKind = null;
+            _currentSpeedSource = null;
           });
-        } else {
-          // 如果已经有值，保留它（可能是刚刚设置的，RouterOS 还没完全创建）
-          print(
-            '⚠️ [LOAD_SPEED] Queue 在 RouterOS 中还未找到،但保留本地值: $_currentSpeedLimit',
-          );
         }
       }
     } catch (e) {
@@ -910,7 +1487,176 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
   }
 
   /// مسدود کردن دستگاه
-  /// الگو برداری از _unbanDevice و rejectDevice
+  /// الگو برداری از _unbanDevice و banClient
+  Future<void> _saveLeaseDisplayName() async {
+    if (_isDisposed ||
+        _isSavingLeaseName ||
+        widget.isBanned ||
+        widget.device.ipAddress == null) {
+      return;
+    }
+
+    final l10n = AppLocalizations.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+    final displayName = _leaseNameController.text.trim();
+
+    if (displayName.isEmpty) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            l10n?.deviceNameRequired ?? 'Please enter a device name',
+          ),
+          backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    setState(() {
+      _isSavingLeaseName = true;
+    });
+
+    try {
+      final provider = Provider.of<ClientsProvider>(context, listen: false);
+      final savedName = await provider.updateClientLeaseDisplayName(
+        widget.device,
+        displayName,
+      );
+
+      if (!mounted || _isDisposed) {
+        return;
+      }
+
+      if (savedName != null && savedName.isNotEmpty) {
+        setState(() {
+          _displayHostName = savedName;
+          _leaseNameController.text = savedName;
+          _leaseNameController.selection = TextSelection.fromPosition(
+            TextPosition(offset: savedName.length),
+          );
+        });
+      }
+
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            savedName != null
+                ? (l10n?.deviceNameSaved ?? 'Device name saved')
+                : (provider.errorMessage ??
+                      (l10n?.deviceNameSaveError ??
+                          'Error saving device name')),
+          ),
+          backgroundColor: savedName != null ? _primaryColor : Colors.red,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } finally {
+      if (mounted && !_isDisposed) {
+        setState(() {
+          _isSavingLeaseName = false;
+        });
+      }
+    }
+  }
+
+  Widget _buildLeaseNameEditor() {
+    return Builder(
+      builder: (context) {
+        final l10n = AppLocalizations.of(context);
+        final theme = Theme.of(context);
+        final colorScheme = theme.colorScheme;
+        final isDisabled =
+            widget.isBanned || widget.device.ipAddress == null || _isDisposed;
+
+        final field = TextField(
+          controller: _leaseNameController,
+          enabled: !isDisabled && !_isSavingLeaseName,
+          textInputAction: TextInputAction.done,
+          onSubmitted: (_) => _saveLeaseDisplayName(),
+          decoration: InputDecoration(
+            labelText: l10n?.deviceName ?? 'Device Name',
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+            prefixIcon: const Icon(Icons.edit_outlined),
+          ),
+        );
+
+        final saveButton = SizedBox(
+          height: 52,
+          child: ElevatedButton.icon(
+            onPressed: isDisabled || _isSavingLeaseName
+                ? null
+                : _saveLeaseDisplayName,
+            icon: _isSavingLeaseName
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
+                  )
+                : const Icon(Icons.save_outlined),
+            label: Text(l10n?.save ?? 'Save'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: _primaryColor,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+          ),
+        );
+
+        return Padding(
+          padding: const EdgeInsets.only(top: 12),
+          child: Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: theme.brightness == Brightness.dark
+                  ? colorScheme.surfaceContainerHighest.withOpacity(0.35)
+                  : const Color(0xFFF4F7F6),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: theme.brightness == Brightness.dark
+                    ? colorScheme.outline.withOpacity(0.25)
+                    : const Color(0xFFD7E5E1),
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    if (constraints.maxWidth < 520) {
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          field,
+                          const SizedBox(height: 10),
+                          saveButton,
+                        ],
+                      );
+                    }
+
+                    return Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(child: field),
+                        const SizedBox(width: 10),
+                        SizedBox(width: 132, child: saveButton),
+                      ],
+                    );
+                  },
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   Future<void> _banDevice() async {
     if (_isDisposed || widget.device.ipAddress == null || widget.isBanned)
       return;
@@ -974,7 +1720,7 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
     if (confirmed == true && !_isDisposed) {
       if (!mounted) return;
 
-      // بدون loading state - فوراً عملیات را انجام می‌دهیم (الگو از rejectDevice)
+      // بدون loading state - فوراً عملیات را انجام می‌دهیم (الگو از banClient)
       try {
         await _banDeviceInternal();
       } catch (e) {
@@ -990,7 +1736,7 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
     try {
       final provider = Provider.of<ClientsProvider>(context, listen: false);
 
-      // الگو برداری از rejectDevice: فوراً UI را به‌روزرسانی می‌کنیم و عملیات را در پس‌زمینه انجام می‌دهیم
+      // الگو برداری از banClient: فوراً UI را به‌روزرسانی می‌کنیم و عملیات را در پس‌زمینه انجام می‌دهیم
       // استفاده از banClientInstant که فوراً UI را به‌روزرسانی می‌کند
       provider.banClientInstant(
         widget.device.ipAddress!,
@@ -1107,7 +1853,7 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
       final success = await provider.unbanClient(
         widget.device.ipAddress!,
         macAddress: widget.device.macAddress,
-        hostname: widget.device.hostName,
+        hostname: _displayHostName ?? widget.device.hostName,
         ssid: widget.device.ssid,
       );
 
@@ -1318,11 +2064,7 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
                             ),
                             const SizedBox(height: 16),
                             Text(
-                              widget.device.hostName ??
-                                  widget.device.user ??
-                                  widget.device.name ??
-                                  AppLocalizations.of(context)?.unknown ??
-                                  'Unknown',
+                              _resolvedDeviceTitle(),
                               style: TextStyle(
                                 fontSize: 24,
                                 fontWeight: FontWeight.bold,
@@ -1415,13 +2157,13 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
                                   );
                                 },
                               ),
-                            if (widget.device.hostName != null)
+                            if ((_displayHostName?.isNotEmpty ?? false))
                               Builder(
                                 builder: (context) {
                                   final l10n = AppLocalizations.of(context);
                                   return _buildInfoRow(
                                     l10n?.hostname ?? 'Hostname',
-                                    widget.device.hostName!,
+                                    _displayHostName!,
                                   );
                                 },
                               ),
@@ -1448,8 +2190,9 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
                                 },
                               ),
                             // نمایش سرعت تنظیم شده (با نمایش بهتر)
-                            if (_currentSpeedLimit != null && !widget.isBanned)
-                              _buildSpeedLimitRow(_currentSpeedLimit!),
+                            if (_hasSpeedDetails && !widget.isBanned)
+                              _buildSpeedLimitRow(),
+                            _buildLeaseNameEditor(),
                             if (widget.isBanned)
                               Container(
                                 padding: const EdgeInsets.all(12),
@@ -1550,6 +2293,36 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
                                 ),
                               ),
                             ),
+                            if (_canDeleteCurrentSpeedLimit) ...[
+                              const SizedBox(height: 12),
+                              OutlinedButton.icon(
+                                onPressed: _isLoading
+                                    ? null
+                                    : () async {
+                                        setState(() {
+                                          _isLoading = true;
+                                        });
+                                        await _removeSpeedLimitInternal(
+                                          widget.device.ipAddress!,
+                                        );
+                                      },
+                                icon: const Icon(Icons.delete_outline),
+                                label: const Text(
+                                  'حذف سرعت',
+                                  style: TextStyle(fontSize: 20),
+                                ),
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: Colors.red,
+                                  side: const BorderSide(color: Colors.red),
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 16,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                ),
+                              ),
+                            ],
                             const SizedBox(height: 12),
                             // دکمه مسدود کردن دستگاه (فقط برای دستگاه‌های غیر مسدود شده)
                             if (!widget.isBanned)
@@ -1664,9 +2437,33 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
     );
   }
 
+  String _speedPolicyTitle() {
+    final isEnglish = Localizations.localeOf(context).languageCode == 'en';
+    switch (_currentSpeedSource) {
+      case 'dhcp_lease':
+        return isEnglish ? 'Source' : 'منبع';
+      case 'simple_queue':
+        return isEnglish ? 'Queue' : 'صف';
+      default:
+        return isEnglish ? 'Policy' : 'سیاست';
+    }
+  }
+
+  String _speedPolicyValue() {
+    if ((_currentSpeedPolicyLabel?.isNotEmpty ?? false)) {
+      return _currentSpeedPolicyLabel!;
+    }
+
+    final isEnglish = Localizations.localeOf(context).languageCode == 'en';
+    if (_currentSpeedSource == 'dhcp_lease') {
+      return 'DHCP';
+    }
+    return isEnglish ? 'Unknown' : 'نامشخص';
+  }
+
   /// نمایش سرعت با فرمت کاربرپسند (با مشخص کردن دانلود و آپلود)
-  Widget _buildSpeedLimitRow(String speedLimit) {
-    // پارس کردن سرعت: "8M/7M" -> upload: 8M, download: 7M
+  Widget _buildSpeedLimitRow() {
+    final speedLimit = _currentSpeedLimit ?? '';
     String uploadSpeed = '';
     String downloadSpeed = '';
 
@@ -1682,6 +2479,8 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
       downloadSpeed = speedLimit;
     }
 
+    final showSpeedValues = speedLimit.isNotEmpty;
+
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(
@@ -1690,7 +2489,7 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
           SizedBox(
             width: 120,
             child: Text(
-              AppLocalizations.of(context)?.maximum ?? 'Maximum',
+              AppLocalizations.of(context)?.speedLimit ?? 'Speed Limit',
               style: TextStyle(color: Colors.grey.shade600, fontSize: 14),
             ),
           ),
@@ -1698,50 +2497,80 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // آپلود
+                if (showSpeedValues) ...[
+                  Row(
+                    children: [
+                      const Icon(Icons.upload, color: Colors.green, size: 16),
+                      const SizedBox(width: 6),
+                      Text(
+                        AppLocalizations.of(context)?.upload ?? 'Upload: ',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.grey.shade700,
+                        ),
+                      ),
+                      Text(
+                        uploadSpeed,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.green,
+                        ),
+                        textDirection: TextDirection.ltr,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Row(
+                    children: [
+                      const Icon(Icons.download, color: Colors.blue, size: 16),
+                      const SizedBox(width: 6),
+                      Text(
+                        AppLocalizations.of(context)?.download ?? 'Download: ',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.grey.shade700,
+                        ),
+                      ),
+                      Text(
+                        downloadSpeed,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.blue,
+                        ),
+                        textDirection: TextDirection.ltr,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                ],
                 Row(
                   children: [
-                    const Icon(Icons.upload, color: Colors.green, size: 16),
+                    Icon(
+                      _currentSpeedSource == 'simple_queue'
+                          ? Icons.account_tree_outlined
+                          : Icons.router_outlined,
+                      color: _primaryColor,
+                      size: 16,
+                    ),
                     const SizedBox(width: 6),
                     Text(
-                      AppLocalizations.of(context)?.upload ?? 'Upload: ',
+                      '${_speedPolicyTitle()}: ',
                       style: TextStyle(
-                        fontSize: 14,
+                        fontSize: 13,
                         color: Colors.grey.shade700,
                       ),
                     ),
-                    Text(
-                      uploadSpeed,
-                      style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.green,
+                    Flexible(
+                      child: Text(
+                        _speedPolicyValue(),
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: _primaryColor,
+                        ),
                       ),
-                      textDirection: TextDirection.ltr,
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 6),
-                // دانلود
-                Row(
-                  children: [
-                    const Icon(Icons.download, color: Colors.blue, size: 16),
-                    const SizedBox(width: 6),
-                    Text(
-                      AppLocalizations.of(context)?.download ?? 'Download: ',
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.grey.shade700,
-                      ),
-                    ),
-                    Text(
-                      downloadSpeed,
-                      style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.blue,
-                      ),
-                      textDirection: TextDirection.ltr,
                     ),
                   ],
                 ),
