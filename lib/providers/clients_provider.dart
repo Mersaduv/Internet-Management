@@ -6,6 +6,12 @@ import '../services/mikrotik_service_manager.dart';
 /// Provider برای مدیریت state کلاینت‌ها به صورت real-time
 class ClientsProvider extends ChangeNotifier {
   final MikroTikServiceManager _serviceManager = MikroTikServiceManager();
+  static const Duration _deviceIpTimeout = Duration(seconds: 10);
+  static const Duration _autoStaticTimeout = Duration(seconds: 10);
+  static const Duration _routerInfoTimeout = Duration(seconds: 8);
+  static const Duration _lockStatusTimeout = Duration(seconds: 8);
+  static const Duration _bannedClientsTimeout = Duration(seconds: 10);
+  static const Duration _connectedClientsTimeout = Duration(seconds: 12);
 
   // State variables
   bool _isLoading = false;
@@ -18,12 +24,15 @@ class ClientsProvider extends ChangeNotifier {
   Map<String, dynamic>? _routerInfo;
   bool _isNewConnectionsLocked = false;
   bool _isLockUpdating = false;
+  bool _isEnsuringCurrentDeviceStatic = false;
+  String? _lastAutoStaticIp;
   final Set<String> _approvalActionsInProgress = <String>{};
-
-  // برای progressive loading
   bool _isProgressiveLoading = false;
   Timer? _progressiveLoadTimer;
+  Future<void>? _activeRefreshFuture;
+  bool _isBootstrappingHome = false;
 
+  // برای progressive loading
   // Getters
   bool get isLoading => _isLoading;
   bool get isDataComplete => _isDataComplete;
@@ -36,6 +45,34 @@ class ClientsProvider extends ChangeNotifier {
   Map<String, dynamic>? get routerInfo => _routerInfo;
   bool get isNewConnectionsLocked => _isNewConnectionsLocked;
   bool get isLockUpdating => _isLockUpdating;
+
+  bool _isCurrentDeviceTarget(String ipAddress, {String? macAddress}) {
+    final normalizedIp = ipAddress.trim();
+    if (_deviceIp != null &&
+        _deviceIp!.isNotEmpty &&
+        normalizedIp == _deviceIp!.trim()) {
+      return true;
+    }
+
+    final normalizedMac = macAddress?.trim().toUpperCase();
+    if (normalizedMac == null || normalizedMac.isEmpty) {
+      return false;
+    }
+
+    String? currentDeviceMac;
+    for (final client in _clients) {
+      if (client.ipAddress != _deviceIp) {
+        continue;
+      }
+      final clientMac = client.macAddress?.trim().toUpperCase();
+      if (clientMac != null && clientMac.isNotEmpty) {
+        currentDeviceMac = clientMac;
+        break;
+      }
+    }
+
+    return currentDeviceMac != null && currentDeviceMac == normalizedMac;
+  }
 
   int? _lastIpOctet(String? ipAddress) {
     if (ipAddress == null || ipAddress.isEmpty) {
@@ -130,55 +167,99 @@ class ClientsProvider extends ChangeNotifier {
     return _compareClientsByIpOrder(a, b);
   }
 
+  void _sortClientsForDisplay() {
+    _clients.sort(_compareClientsForDisplay);
+  }
+
   /// بارگذاری IP دستگاه
-  Future<void> loadDeviceIp({bool forceRefresh = false}) async {
-    // اگر IP قبلاً لود شده و force refresh نیست، دوباره لود نکن
+  Future<void> loadDeviceIp({
+    bool forceRefresh = false,
+    bool notifyChanges = true,
+  }) async {
     if (_deviceIp != null && !_isRefreshing && !forceRefresh) {
       return;
     }
 
     try {
       final ip = await _serviceManager.getDeviceIp().timeout(
-        const Duration(
-          seconds: 10,
-        ), // افزایش timeout برای اطمینان از تشخیص صحیح
+        _deviceIpTimeout,
         onTimeout: () => null,
       );
-      if (ip != null) {
-        // همیشه IP را به‌روزرسانی کن (حتی اگر تغییر نکرده باشد)
-        // چون ممکن است IP قبلی اشتباه تشخیص داده شده باشد
+      if (ip != null && ip != _deviceIp) {
         _deviceIp = ip;
-        notifyListeners();
+        if (_clients.isNotEmpty) {
+          _sortClientsForDisplay();
+        }
+        if (notifyChanges) {
+          notifyListeners();
+        }
       }
-    } catch (e) {
-      // در صورت خطا، IP قبلی را حفظ کن
+    } catch (_) {
+      // Keep the previous IP when detection fails.
     }
   }
 
   /// بارگذاری اطلاعات روتر (board-name و platform)
-  Future<void> loadRouterInfo() async {
+  Future<void> loadRouterInfo({bool notifyChanges = true}) async {
     if (!_serviceManager.isConnected) {
       return;
     }
 
     try {
-      final routerInfo = await _serviceManager.getRouterInfo();
+      final routerInfo = await _serviceManager.getRouterInfo().timeout(
+        _routerInfoTimeout,
+        onTimeout: () => null,
+      );
       if (routerInfo != null) {
         _routerInfo = routerInfo;
-        notifyListeners();
+        if (notifyChanges) {
+          notifyListeners();
+        }
       }
-    } catch (e) {
-      // ignore errors - router info optional است
+    } catch (_) {
+      // Router info is optional.
+    }
+  }
+
+  Future<void> _ensureCurrentDeviceStatic() async {
+    if (_isEnsuringCurrentDeviceStatic ||
+        !_serviceManager.isConnected ||
+        _serviceManager.service == null) {
+      return;
+    }
+
+    final ip = _deviceIp?.trim();
+    if (ip == null || ip.isEmpty || _lastAutoStaticIp == ip) {
+      return;
+    }
+
+    _isEnsuringCurrentDeviceStatic = true;
+    try {
+      final success = await _serviceManager
+          .makeClientStatic(ipAddress: ip)
+          .timeout(_autoStaticTimeout, onTimeout: () => false);
+      if (success) {
+        _lastAutoStaticIp = ip;
+      }
+    } catch (_) {
+      // Ignore auto-static errors and keep the app responsive.
+    } finally {
+      _isEnsuringCurrentDeviceStatic = false;
     }
   }
 
   /// بارگذاری لیست کلاینت‌های متصل
-  Future<void> loadClients({bool showLoading = true}) async {
+  Future<void> loadClients({
+    bool showLoading = true,
+    bool notifyChanges = true,
+  }) async {
     if (!_serviceManager.isConnected) {
       _errorMessage = '????? ?????? ???? ???. ???? ?????? ???? ????.';
       _isLoading = false;
       _isDataComplete = false;
-      notifyListeners();
+      if (notifyChanges) {
+        notifyListeners();
+      }
       return;
     }
 
@@ -186,18 +267,18 @@ class ClientsProvider extends ChangeNotifier {
       _isLoading = true;
       _isDataComplete = false;
       _errorMessage = null;
-      notifyListeners();
+      if (notifyChanges) {
+        notifyListeners();
+      }
     }
 
     try {
-      final result = await _serviceManager.getConnectedClients();
+      final result = await _serviceManager.getConnectedClients().timeout(
+        _connectedClientsTimeout,
+      );
       final clientsList = (result['clients'] as List)
           .map((c) => ClientInfo.fromMap(c as Map<String, dynamic>))
           .toList();
-
-      if (_deviceIp == null) {
-        await loadDeviceIp(forceRefresh: true);
-      }
 
       final bannedMacs = <String>{};
       final bannedIps = <String>{};
@@ -219,56 +300,134 @@ class ClientsProvider extends ChangeNotifier {
             (ip == null || !bannedIps.contains(ip));
       }).toList();
 
-      filteredClientsList.sort(_compareClientsForDisplay);
-
-      if (showLoading && filteredClientsList.isNotEmpty) {
-        await _progressiveLoadClients(filteredClientsList, true);
-      } else {
-        _clients = filteredClientsList;
-        _isDataComplete = true;
-        _isLoading = false;
-        _errorMessage = null;
+      _clients = filteredClientsList..sort(_compareClientsForDisplay);
+      _isDataComplete = true;
+      _isLoading = false;
+      _errorMessage = null;
+      if (notifyChanges) {
         notifyListeners();
       }
     } catch (e) {
       _errorMessage = '??? ?? ?????? ???? ???????: $e';
       _isLoading = false;
       _isDataComplete = false;
-      notifyListeners();
+      if (notifyChanges) {
+        notifyListeners();
+      }
     }
   }
 
-  Future<void> loadBannedClients() async {
+  Future<void> loadBannedClients({bool notifyChanges = true}) async {
     if (!_serviceManager.isConnected) {
       return;
     }
 
     try {
-      final bannedList = await _serviceManager.getBannedClients();
+      final bannedList = await _serviceManager.getBannedClients().timeout(
+        _bannedClientsTimeout,
+        onTimeout: () => <Map<String, dynamic>>[],
+      );
       _bannedClients = bannedList;
-      notifyListeners();
+      if (notifyChanges) {
+        notifyListeners();
+      }
     } catch (e) {
       // ignore
     }
   }
 
-  /// به‌روزرسانی کامل داده‌ها (برای refresh)
-  Future<void> refresh() async {
-    // توقف progressive loading قبلی
-    _progressiveLoadTimer?.cancel();
-    _isProgressiveLoading = false;
+  Future<void> _loadDeviceIpSafely({bool forceRefresh = false}) {
+    return loadDeviceIp(
+      forceRefresh: forceRefresh,
+      notifyChanges: false,
+    ).timeout(_deviceIpTimeout, onTimeout: () {});
+  }
 
+  Future<void> _loadRouterInfoSafely() {
+    return loadRouterInfo(
+      notifyChanges: false,
+    ).timeout(_routerInfoTimeout, onTimeout: () {});
+  }
+
+  Future<void> _loadLockStatusSafely() {
+    return loadNewConnectionsLockStatus(
+      notifyChanges: false,
+    ).timeout(_lockStatusTimeout, onTimeout: () {});
+  }
+
+  Future<void> _loadBannedClientsSafely() {
+    return loadBannedClients(
+      notifyChanges: false,
+    ).timeout(_bannedClientsTimeout, onTimeout: () {});
+  }
+
+  Future<void> _ensureCurrentDeviceStaticSafely() {
+    return _ensureCurrentDeviceStatic().timeout(
+      _autoStaticTimeout,
+      onTimeout: () {},
+    );
+  }
+
+  Future<void> _loadClientsSafely() {
+    return loadClients(
+      showLoading: false,
+      notifyChanges: false,
+    ).timeout(_connectedClientsTimeout);
+  }
+
+  Future<void> _loadHomeSecondaryData({
+    bool forceDeviceIpRefresh = false,
+  }) async {
+    if (_isBootstrappingHome || !_serviceManager.isConnected) {
+      return;
+    }
+
+    _isBootstrappingHome = true;
+    try {
+      await _loadDeviceIpSafely(forceRefresh: forceDeviceIpRefresh);
+      notifyListeners();
+      await _ensureCurrentDeviceStaticSafely();
+      await _loadBannedClientsSafely();
+      notifyListeners();
+      await _loadRouterInfoSafely();
+      notifyListeners();
+      await _loadLockStatusSafely();
+      notifyListeners();
+    } catch (_) {
+      // Keep the current state; secondary data is optional.
+    } finally {
+      _isBootstrappingHome = false;
+    }
+  }
+
+  /// به‌روزرسانی کامل داده‌ها (برای refresh)
+  Future<void> refresh() {
+    final activeRefresh = _activeRefreshFuture;
+    if (activeRefresh != null) {
+      return activeRefresh;
+    }
+
+    final future = _performRefresh();
+    _activeRefreshFuture = future;
+    future.whenComplete(() {
+      if (identical(_activeRefreshFuture, future)) {
+        _activeRefreshFuture = null;
+      }
+    });
+    return future;
+  }
+
+  Future<void> _performRefresh() async {
     _isRefreshing = true;
     notifyListeners();
 
     try {
-      // بارگذاری banned clients اول (برای استفاده در فیلتر)
-      await loadBannedClients();
-      await loadDeviceIp();
-      await loadRouterInfo();
-      await loadNewConnectionsLockStatus();
-      // در refresh از progressive loading استفاده نمی‌کنیم (برای سرعت بیشتر)
-      await loadClients(showLoading: false);
+      await _loadClientsSafely();
+      notifyListeners();
+      await _loadHomeSecondaryData(forceDeviceIpRefresh: true);
+    } catch (_) {
+      _errorMessage = 'Refresh failed.';
+      _isLoading = false;
     } finally {
       _isRefreshing = false;
       notifyListeners();
@@ -297,10 +456,7 @@ class ClientsProvider extends ChangeNotifier {
               comment: 'Banned via Flutter App - Device Detail',
             )
             .timeout(const Duration(seconds: 15), onTimeout: () => false);
-        await loadBannedClients().timeout(
-          const Duration(seconds: 10),
-          onTimeout: () {},
-        );
+        await refresh().timeout(const Duration(seconds: 10), onTimeout: () {});
       } catch (_) {
         // Background ban errors should not block the already-updated UI.
       }
@@ -317,6 +473,12 @@ class ClientsProvider extends ChangeNotifier {
   }) async {
     if (!_serviceManager.isConnected || _serviceManager.service == null) {
       _errorMessage = 'Connection is not established.';
+      notifyListeners();
+      return false;
+    }
+
+    if (_isCurrentDeviceTarget(ipAddress, macAddress: macAddress)) {
+      _errorMessage = 'امکان مسدود کردن دستگاه فعلی وجود ندارد.';
       notifyListeners();
       return false;
     }
@@ -348,16 +510,7 @@ class ClientsProvider extends ChangeNotifier {
       }
 
       _removeClientFromList(ipAddress, macAddress: macAddress);
-      await loadBannedClients();
-      notifyListeners();
-
-      Future.microtask(() async {
-        try {
-          await _serviceManager.service?.checkAndBanBannedDevices();
-        } catch (_) {
-          // Optional background reconciliation.
-        }
-      });
+      await refresh();
 
       _errorMessage = null;
       return true;
@@ -376,10 +529,12 @@ class ClientsProvider extends ChangeNotifier {
             client.macAddress?.toUpperCase() == macUpper ||
             client.ipAddress == ipAddress,
       );
+      _isDataComplete = true;
       return;
     }
 
     _clients.removeWhere((client) => client.ipAddress == ipAddress);
+    _isDataComplete = true;
   }
 
   /// بهینه‌سازی: refresh در پس‌زمینه انجام می‌شود تا UI فوراً پاسخ دهد
@@ -416,6 +571,7 @@ class ClientsProvider extends ChangeNotifier {
         ..['is_static_lease'] = true;
       return client.copyWith(isStaticLease: true, rawData: rawData);
     }).toList();
+    _sortClientsForDisplay();
   }
 
   void _updateClientDisplayName(ClientInfo target, String displayName) {
@@ -453,7 +609,7 @@ class ClientsProvider extends ChangeNotifier {
             ipAddress: client.ipAddress,
             macAddress: client.macAddress,
           )
-          .timeout(const Duration(seconds: 10), onTimeout: () => false);
+          .timeout(_autoStaticTimeout, onTimeout: () => false);
 
       if (!success) {
         _errorMessage = 'Make Static failed.';
@@ -462,7 +618,7 @@ class ClientsProvider extends ChangeNotifier {
 
       _markClientStatic(client);
       _errorMessage = null;
-      Future.microtask(() => loadClients(showLoading: false));
+      Future.microtask(refresh);
       return true;
     } catch (e) {
       _errorMessage = 'Error approving device: $e';
@@ -494,16 +650,20 @@ class ClientsProvider extends ChangeNotifier {
             ipAddress: client.ipAddress,
             macAddress: client.macAddress,
           )
-          .timeout(const Duration(seconds: 10), onTimeout: () => false);
+          .timeout(_autoStaticTimeout, onTimeout: () => false);
 
       if (!staticSuccess) {
         _errorMessage = 'Make Static failed.';
         return false;
       }
 
-      final banned = await banClientInstant(
+      _markClientStatic(client);
+
+      final banned = await banClient(
         client.ipAddress!,
         macAddress: client.macAddress,
+        hostname: client.hostName,
+        ssid: client.ssid,
       );
       _errorMessage = banned ? null : 'Device ban failed.';
       return banned;
@@ -516,7 +676,7 @@ class ClientsProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> loadNewConnectionsLockStatus() async {
+  Future<void> loadNewConnectionsLockStatus({bool notifyChanges = true}) async {
     if (!_serviceManager.isConnected) {
       _isNewConnectionsLocked = false;
       return;
@@ -526,7 +686,9 @@ class ClientsProvider extends ChangeNotifier {
       _isNewConnectionsLocked = await _serviceManager
           .isNewConnectionsLocked()
           .timeout(const Duration(seconds: 5), onTimeout: () => false);
-      notifyListeners();
+      if (notifyChanges) {
+        notifyListeners();
+      }
     } catch (_) {
       _isNewConnectionsLocked = false;
     }
@@ -624,12 +786,11 @@ class ClientsProvider extends ChangeNotifier {
             macAddress: client.macAddress,
             displayName: normalizedName,
           )
-          .timeout(const Duration(seconds: 10));
+          .timeout(const Duration(seconds: 20));
 
       _updateClientDisplayName(client, savedName);
       _errorMessage = null;
       notifyListeners();
-      Future.microtask(() => loadClients(showLoading: false));
       return savedName;
     } catch (e) {
       _errorMessage = 'Error saving device name: $e';
@@ -651,33 +812,25 @@ class ClientsProvider extends ChangeNotifier {
     }
 
     try {
-      final success = await _serviceManager.service?.unbanClientWithFingerprint(
-        ipAddress,
-        macAddress: macAddress,
-        hostname: hostname,
-        ssid: ssid,
-      );
+      final success =
+          await _serviceManager.service?.unbanClientWithFingerprint(
+            ipAddress,
+            macAddress: macAddress,
+            hostname: hostname,
+            ssid: ssid,
+          ) ??
+          false;
 
-      if (success == true) {
-        // به‌روزرسانی state در پس‌زمینه (non-blocking)
-        // این عملیات را non-blocking می‌کنیم تا UI فوراً پاسخ دهد
-        Future.microtask(() async {
-          try {
-            // ابتدا لیست banned clients را به‌روزرسانی کن تا دستگاه از لیست حذف شود
-            await loadBannedClients();
-            // سپس لیست متصل را به‌روزرسانی کن
-            await loadClients(showLoading: false);
-            // اطمینان از به‌روزرسانی UI
-            notifyListeners();
-          } catch (e) {
-            // ignore errors in refresh
-          }
-        });
-
-        // فوراً return true تا UI بتواند navigation کند
-        return true;
+      if (!success) {
+        _errorMessage = 'رفع مسدودیت انجام نشد.';
+        notifyListeners();
+        return false;
       }
-      return false;
+
+      await refresh();
+      _errorMessage = null;
+      notifyListeners();
+      return true;
     } catch (e) {
       _errorMessage = 'خطا در رفع مسدودیت کلاینت: $e';
       notifyListeners();
@@ -696,7 +849,7 @@ class ClientsProvider extends ChangeNotifier {
     try {
       final success = await _serviceManager.service
           ?.setClientSpeed(target, maxLimit)
-          .timeout(const Duration(seconds: 10), onTimeout: () => false);
+          .timeout(_autoStaticTimeout, onTimeout: () => false);
 
       if (success == true) {
         _errorMessage = null;
@@ -723,7 +876,7 @@ class ClientsProvider extends ChangeNotifier {
     try {
       final success = await _serviceManager.service
           ?.removeClientSpeed(target)
-          .timeout(const Duration(seconds: 10), onTimeout: () => false);
+          .timeout(_autoStaticTimeout, onTimeout: () => false);
 
       if (success == true) {
         _errorMessage = null;
@@ -756,6 +909,9 @@ class ClientsProvider extends ChangeNotifier {
     _routerInfo = null;
     _isNewConnectionsLocked = false;
     _isLockUpdating = false;
+    _isEnsuringCurrentDeviceStatic = false;
+    _lastAutoStaticIp = null;
+    _isBootstrappingHome = false;
     _approvalActionsInProgress.clear();
     notifyListeners();
   }
@@ -784,13 +940,30 @@ class ClientsProvider extends ChangeNotifier {
   }
 
   Future<void> initialize() async {
-    await loadDeviceIp();
-    await loadRouterInfo();
-    await loadNewConnectionsLockStatus();
-    await loadBannedClients();
-    await loadClients();
+    if (_isLoading || _isRefreshing) {
+      return;
+    }
+
+    _isLoading = true;
+    _isDataComplete = false;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      await _loadClientsSafely();
+      notifyListeners();
+    } catch (_) {
+      _errorMessage = 'Initial data loading failed.';
+      _isDataComplete = false;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+
+    Future.microtask(() => _loadHomeSecondaryData(forceDeviceIpRefresh: true));
   }
 
+  // ignore: unused_element
   Future<void> _progressiveLoadClients(
     List<ClientInfo> allClients,
     bool dataComplete,

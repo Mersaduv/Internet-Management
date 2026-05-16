@@ -108,6 +108,20 @@ class MikroTikService {
         value.startsWith('Banned:');
   }
 
+  String _managedBanCommentGroupKey(String? comment) {
+    final value = comment?.trim() ?? '';
+    if (value.isEmpty || !_isManagedBanComment(value)) {
+      return '';
+    }
+
+    return value
+        .replaceFirst(
+          RegExp(r'\s*-\s*(IP|MAC|Wireless)\s*$', caseSensitive: false),
+          '',
+        )
+        .trim();
+  }
+
   String _withMarker(String? comment, String marker) {
     final value = comment?.trim() ?? '';
     if (value.contains(marker)) {
@@ -124,6 +138,35 @@ class MikroTikService {
         .replaceAll(marker, '')
         .replaceAll(RegExp(r'\s{2,}'), ' ')
         .trim();
+  }
+
+  String _leaseCommentWithDisplayName(String? existingComment, String displayName) {
+    final value = existingComment?.trim() ?? '';
+    final preserved = <String>[];
+    if (value.contains(_staticMarker)) {
+      preserved.add(_staticMarker);
+    }
+    if (value.contains(_banMarker)) {
+      preserved.add(_banMarker);
+    }
+
+    final parts = <String>[displayName.trim(), ...preserved];
+    return parts.where((part) => part.isNotEmpty).join(' ').trim();
+  }
+
+  Map<String, String>? _pickPreferredDhcpLease(List<Map<String, String>> leases) {
+    if (leases.isEmpty) {
+      return null;
+    }
+
+    for (final lease in leases) {
+      final dynamicValue = lease['dynamic']?.toLowerCase();
+      if (dynamicValue == 'false' || dynamicValue == 'no') {
+        return lease;
+      }
+    }
+
+    return leases.first;
   }
 
   bool _isDisabledFlag(String? value) {
@@ -429,14 +472,15 @@ class MikroTikService {
     await _addAccessRule(mac, allow: allow, comment: comment);
   }
 
-  Future<void> _removeManagedAccessRules(
+  Future<bool> _removeManagedAccessRules(
     String macAddress, {
     bool includeLegacyEmptyDeny = false,
   }) async {
     if (!await _supportsWirelessFeatures()) {
-      return;
+      return false;
     }
 
+    var removed = false;
     final rules = await _accessListForMac(macAddress);
     for (final rule in rules) {
       final id = rule['.id'];
@@ -453,21 +497,25 @@ class MikroTikService {
       if (shouldRemove) {
         try {
           await _talk(['/interface/wireless/access-list/remove', '=.id=$id']);
+          removed = true;
         } catch (_) {}
       }
     }
+
+    return removed;
   }
 
-  Future<void> _setDhcpBlockForMac(
+  Future<bool> _setDhcpBlockForMac(
     String macAddress, {
     required bool block,
     bool allowLegacyUnblock = false,
   }) async {
     final mac = _normalizeMac(macAddress);
     if (mac == null) {
-      return;
+      return false;
     }
 
+    var changed = false;
     final leases = await _talk([
       '/ip/dhcp-server/lease/print',
       '?=mac-address=$mac',
@@ -502,6 +550,7 @@ class MikroTikService {
           '=block-access=yes',
           '=comment=${_withMarker(comment, _banMarker)}',
         ]);
+        changed = true;
       } else if (hasMarker || allowLegacyUnblock) {
         final restoredComment = _withoutMarker(comment, _banMarker);
         await _talk([
@@ -510,8 +559,11 @@ class MikroTikService {
           '=block-access=no',
           '=comment=$restoredComment',
         ]);
+        changed = true;
       }
     }
+
+    return changed;
   }
 
   int? _ipv4ToInt(String address) {
@@ -581,363 +633,6 @@ class MikroTikService {
       return _formatRatePart(raw);
     }
     return '${_formatRatePart(parts[0])}/${_formatRatePart(parts[1])}';
-  }
-
-  String _firstUsableRateValue(String? primary, [String? secondary]) {
-    if (_hasUsableMaxLimit(primary)) {
-      return _formatRatePair(primary);
-    }
-    if (_hasUsableMaxLimit(secondary)) {
-      return _formatRatePair(secondary);
-    }
-    return '';
-  }
-
-  String _formatSingleRateValue(String? value) {
-    if (!_hasUsableMaxLimit(value)) {
-      return '';
-    }
-    return _formatRatePart(value!.trim());
-  }
-
-  Map<String, String> _splitFormattedRatePair(String value) {
-    final parts = value.split('/');
-    if (parts.length != 2) {
-      final normalized = value.trim();
-      return {'upload': normalized, 'download': normalized};
-    }
-
-    return {'upload': parts[0].trim(), 'download': parts[1].trim()};
-  }
-
-  String _mergeRatePair(String? upload, String? download) {
-    final normalizedUpload = upload?.trim() ?? '';
-    final normalizedDownload = download?.trim() ?? '';
-    if (normalizedUpload.isEmpty && normalizedDownload.isEmpty) {
-      return '';
-    }
-    if (normalizedUpload.isEmpty) {
-      return normalizedDownload;
-    }
-    if (normalizedDownload.isEmpty) {
-      return normalizedUpload;
-    }
-    return '$normalizedUpload/$normalizedDownload';
-  }
-
-  bool _queueTargetContainsIp(String? target, String ipAddress) {
-    final rawTarget = target?.trim() ?? '';
-    if (rawTarget.isEmpty) {
-      return false;
-    }
-
-    final ipValue = _ipv4ToInt(ipAddress);
-    if (ipValue == null) {
-      return false;
-    }
-
-    for (final item in rawTarget.split(',')) {
-      final normalized = item.trim();
-      if (normalized.isEmpty) {
-        continue;
-      }
-
-      final parts = normalized.split('/');
-      final baseAddress = parts.first.trim();
-      if (baseAddress == ipAddress) {
-        return true;
-      }
-
-      if (parts.length == 2) {
-        final networkValue = _ipv4ToInt(baseAddress);
-        final prefixLength = int.tryParse(parts[1].trim());
-        if (networkValue == null ||
-            prefixLength == null ||
-            prefixLength < 0 ||
-            prefixLength > 32) {
-          continue;
-        }
-
-        final mask = prefixLength == 0
-            ? 0
-            : (0xFFFFFFFF << (32 - prefixLength));
-        if ((ipValue & mask) == (networkValue & mask)) {
-          return true;
-        }
-      }
-    }
-
-    return false;
-  }
-
-  bool _queueUsesPcq(String? queueValue, Map<String, String> queueTypeKinds) {
-    final rawQueue = queueValue?.trim() ?? '';
-    if (rawQueue.isEmpty) {
-      return false;
-    }
-
-    for (final item in rawQueue.split('/')) {
-      final normalized = item.trim();
-      if (normalized.isEmpty) {
-        continue;
-      }
-
-      if (normalized.toLowerCase().contains('pcq')) {
-        return true;
-      }
-
-      final kind = queueTypeKinds[normalized]?.toLowerCase() ?? '';
-      if (kind.contains('pcq')) {
-        return true;
-      }
-    }
-
-    return false;
-  }
-
-  bool _isDhcpAutoQueueName(String? queueName) {
-    final normalized = queueName?.trim().toLowerCase() ?? '';
-    return normalized.startsWith('dhcp-ds<');
-  }
-
-  int _queueTargetSpecificity(String? target, String ipAddress) {
-    final rawTarget = target?.trim() ?? '';
-    if (rawTarget.isEmpty) {
-      return 0;
-    }
-
-    final ipValue = _ipv4ToInt(ipAddress);
-    if (ipValue == null) {
-      return 0;
-    }
-
-    var best = 0;
-    for (final item in rawTarget.split(',')) {
-      final normalized = item.trim();
-      if (normalized.isEmpty) {
-        continue;
-      }
-
-      final parts = normalized.split('/');
-      final baseAddress = parts.first.trim();
-      if (baseAddress == ipAddress) {
-        if (best < 32) {
-          best = 32;
-        }
-        continue;
-      }
-
-      if (parts.length != 2) {
-        continue;
-      }
-
-      final networkValue = _ipv4ToInt(baseAddress);
-      final prefixLength = int.tryParse(parts[1].trim());
-      if (networkValue == null ||
-          prefixLength == null ||
-          prefixLength < 0 ||
-          prefixLength > 32) {
-        continue;
-      }
-
-      final mask = prefixLength == 0 ? 0 : (0xFFFFFFFF << (32 - prefixLength));
-      if ((ipValue & mask) == (networkValue & mask) && prefixLength > best) {
-        best = prefixLength;
-      }
-    }
-
-    return best;
-  }
-
-  String? _normalizeQueueGroupLabel(String? value) {
-    final rawValue = value?.trim() ?? '';
-    if (rawValue.isEmpty) {
-      return null;
-    }
-
-    const ignoredValues = {
-      'none',
-      'global',
-      'global-in',
-      'global-out',
-      'global-total',
-    };
-    if (ignoredValues.contains(rawValue.toLowerCase())) {
-      return null;
-    }
-
-    return rawValue.split(RegExp(r'\s+')).first.trim();
-  }
-
-  Future<Map<String, String>?> _getSimpleQueueSpeed(String ipAddress) async {
-    List<Map<String, String>> queueTypes = const [];
-    try {
-      queueTypes = await _talk([
-        '/queue/type/print',
-        _proplist([
-          'name',
-          'kind',
-          'pcq-rate',
-          'pcq-limit',
-          'pcq-total-limit',
-          'pcq-classifier',
-        ]),
-      ], timeout: const Duration(seconds: 4));
-    } catch (_) {
-      queueTypes = const [];
-    }
-
-    final queueTypeKinds = <String, String>{};
-    final queueTypesByName = <String, Map<String, String>>{};
-    for (final type in queueTypes) {
-      final name = type['name']?.trim();
-      if (name == null || name.isEmpty) {
-        continue;
-      }
-      queueTypeKinds[name] = type['kind']?.trim() ?? '';
-      queueTypesByName[name] = type;
-    }
-
-    final queues = await _talk([
-      '/queue/simple/print',
-      _proplist([
-        '.id',
-        'name',
-        'target',
-        'max-limit',
-        'limit-at',
-        'queue',
-        'parent',
-        'disabled',
-      ]),
-    ], timeout: const Duration(seconds: 4));
-
-    final queuesByName = <String, Map<String, String>>{};
-    for (final queue in queues) {
-      final name = queue['name']?.trim();
-      if (name != null && name.isNotEmpty) {
-        queuesByName[name] = queue;
-      }
-    }
-
-    final matches = queues.where((queue) {
-      if (_isDisabledFlag(queue['disabled'])) {
-        return false;
-      }
-      return _queueTargetContainsIp(queue['target'], ipAddress);
-    }).toList();
-
-    if (matches.isEmpty) {
-      return null;
-    }
-
-    String resolveRate(Map<String, String> queue) {
-      final queueValue = queue['queue']?.trim() ?? '';
-      final usesPcq = _queueUsesPcq(queueValue, queueTypeKinds);
-      if (usesPcq) {
-        final queueParts = queueValue.split('/');
-        final uploadType = queueParts.isNotEmpty ? queueParts.first.trim() : '';
-        final downloadType = queueParts.length > 1 ? queueParts[1].trim() : '';
-        final uploadRate = _formatSingleRateValue(
-          queueTypesByName[uploadType]?['pcq-rate'],
-        );
-        final downloadRate = _formatSingleRateValue(
-          queueTypesByName[downloadType]?['pcq-rate'],
-        );
-
-        if (uploadRate.isNotEmpty || downloadRate.isNotEmpty) {
-          final fallbackRate = _firstUsableRateValue(
-            queue['max-limit'],
-            queue['limit-at'],
-          );
-          final fallbackParts = _splitFormattedRatePair(fallbackRate);
-          return _mergeRatePair(
-            uploadRate.isNotEmpty ? uploadRate : fallbackParts['upload'],
-            downloadRate.isNotEmpty ? downloadRate : fallbackParts['download'],
-          );
-        }
-      }
-
-      final directRate = _firstUsableRateValue(
-        queue['max-limit'],
-        queue['limit-at'],
-      );
-      if (directRate.isNotEmpty) {
-        return directRate;
-      }
-
-      final parentName = queue['parent']?.trim();
-      if (parentName == null || parentName.isEmpty) {
-        return '';
-      }
-
-      final parentQueue = queuesByName[parentName];
-      if (parentQueue == null) {
-        return '';
-      }
-
-      return _firstUsableRateValue(
-        parentQueue['max-limit'],
-        parentQueue['limit-at'],
-      );
-    }
-
-    matches.sort((a, b) {
-      final aIsDhcpAutoQueue = _isDhcpAutoQueueName(a['name']) ? 1 : 0;
-      final bIsDhcpAutoQueue = _isDhcpAutoQueueName(b['name']) ? 1 : 0;
-      if (aIsDhcpAutoQueue != bIsDhcpAutoQueue) {
-        return bIsDhcpAutoQueue.compareTo(aIsDhcpAutoQueue);
-      }
-
-      final aSpecificity = _queueTargetSpecificity(a['target'], ipAddress);
-      final bSpecificity = _queueTargetSpecificity(b['target'], ipAddress);
-      if (aSpecificity != bSpecificity) {
-        return bSpecificity.compareTo(aSpecificity);
-      }
-
-      final aPcq = _queueUsesPcq(a['queue'], queueTypeKinds) ? 1 : 0;
-      final bPcq = _queueUsesPcq(b['queue'], queueTypeKinds) ? 1 : 0;
-      if (aPcq != bPcq) {
-        return bPcq.compareTo(aPcq);
-      }
-
-      final aRate = resolveRate(a).isNotEmpty ? 1 : 0;
-      final bRate = resolveRate(b).isNotEmpty ? 1 : 0;
-      if (aRate != bRate) {
-        return bRate.compareTo(aRate);
-      }
-
-      return 0;
-    });
-
-    final selectedQueue = matches.first;
-    final speedLimit = resolveRate(selectedQueue);
-    final usesPcq = _queueUsesPcq(selectedQueue['queue'], queueTypeKinds);
-    final groupLabel = _normalizeQueueGroupLabel(selectedQueue['parent']);
-    final queueName = selectedQueue['name']?.trim() ?? '';
-    final isDhcpAutoQueue = _isDhcpAutoQueueName(queueName);
-    final policyLabel = usesPcq
-        ? 'PCQ'
-        : isDhcpAutoQueue
-        ? 'DHCP'
-        : (groupLabel ??
-              (queueName.isNotEmpty
-                  ? queueName.split(RegExp(r'\s+')).first
-                  : 'Queue'));
-
-    return {
-      'max_limit': speedLimit,
-      'rate_limit': speedLimit,
-      'source': isDhcpAutoQueue ? 'dhcp_lease' : 'simple_queue',
-      'policy_label': policyLabel,
-      'policy_kind': usesPcq
-          ? 'pcq'
-          : isDhcpAutoQueue
-          ? 'dhcp'
-          : (groupLabel != null ? 'group' : 'queue'),
-      'queue_name': queueName,
-      'queue_parent': selectedQueue['parent']?.trim() ?? '',
-    };
   }
 
   Future<String?> _findIpForMac(String macAddress) async {
@@ -1013,8 +708,9 @@ class MikroTikService {
           '?=address=$ipAddress',
           proplist,
         ], timeout: const Duration(seconds: 4));
-        if (leases.isNotEmpty) {
-          return leases.first;
+        final preferred = _pickPreferredDhcpLease(leases);
+        if (preferred != null) {
+          return preferred;
         }
       } catch (_) {}
     }
@@ -1027,8 +723,9 @@ class MikroTikService {
           '?=mac-address=$mac',
           proplist,
         ], timeout: const Duration(seconds: 4));
-        if (leases.isNotEmpty) {
-          return leases.first;
+        final preferred = _pickPreferredDhcpLease(leases);
+        if (preferred != null) {
+          return preferred;
         }
       } catch (_) {}
     }
@@ -1185,31 +882,29 @@ class MikroTikService {
       throw Exception('Display name is required.');
     }
 
-    try {
-      if (ipAddress != null && ipAddress.trim().isNotEmpty) {
-        await _talk([
-          '/ip/dhcp-server/lease/set',
-          '=numbers=[find where address=${ipAddress.trim()}]',
-          '=comment=$normalizedName',
-        ], timeout: const Duration(seconds: 4));
-        return normalizedName;
-      }
-    } catch (_) {}
-
     final lease = await _findDhcpLease(
       ipAddress: ipAddress?.trim(),
       macAddress: macAddress,
     );
-    final leaseId = lease?['.id'];
+    if (lease == null) {
+      throw Exception('DHCP lease was not found for this client.');
+    }
+
+    final leaseId = lease['.id'];
     if (leaseId == null || leaseId.isEmpty) {
       throw Exception('DHCP lease was not found for this client.');
     }
 
+    final comment = _leaseCommentWithDisplayName(
+      lease['comment'],
+      normalizedName,
+    );
+
     await _talk([
       '/ip/dhcp-server/lease/set',
       '=.id=$leaseId',
-      '=comment=$normalizedName',
-    ], timeout: const Duration(seconds: 4));
+      '=comment=$comment',
+    ], timeout: const Duration(seconds: 8));
     return normalizedName;
   }
 
@@ -1489,6 +1184,7 @@ class MikroTikService {
       try {
         final dhcpLeases = await _talk([
           '/ip/dhcp-server/lease/print',
+          '?status=bound',
           _proplist([
             '.id',
             'address',
@@ -1503,11 +1199,9 @@ class MikroTikService {
         ]);
         dhcpLeasesSnapshot = dhcpLeases;
         for (var lease in dhcpLeases) {
-          if (lease['status']?.toLowerCase() == 'bound') {
-            final mac = lease['mac-address']?.toUpperCase();
-            if (mac != null) {
-              dhcpLeasesDict[mac] = lease;
-            }
+          final mac = lease['mac-address']?.toUpperCase();
+          if (mac != null) {
+            dhcpLeasesDict[mac] = lease;
           }
         }
       } catch (e) {
@@ -1517,7 +1211,10 @@ class MikroTikService {
       // دریافت ARP table برای تکمیل اطلاعات IP
       final arpTable = <String, Map<String, String>>{};
       try {
-        final arpEntries = await _client!.talk(['/ip/arp/print']);
+        final arpEntries = await _talk([
+          '/ip/arp/print',
+          _proplist(['address', 'mac-address']),
+        ]);
         for (var arp in arpEntries) {
           final mac = arp['mac-address']?.toUpperCase();
           if (mac != null) {
@@ -1822,43 +1519,83 @@ class MikroTikService {
     }
 
     try {
-      final macToUse =
+      var macToUse =
           _normalizeMac(macAddress) ?? await _findMacForIp(ipAddress);
       final rawRules = await _rawRulesFor(
         ipAddress: ipAddress,
         macAddress: macToUse,
       );
-      var removedManagedRawRule = false;
+      final rulesToRemove = <String, Map<String, String>>{};
+      final matchedGroupKeys = <String>{};
 
       for (final rule in rawRules) {
         final id = rule['.id'];
         if (id == null || !_isManagedBanComment(rule['comment'])) {
           continue;
         }
+        rulesToRemove[id] = rule;
+        final groupKey = _managedBanCommentGroupKey(rule['comment']);
+        if (groupKey.isNotEmpty) {
+          matchedGroupKeys.add(groupKey);
+        }
+        macToUse ??= _normalizeMac(rule['src-mac-address']);
+      }
+
+      if (matchedGroupKeys.isNotEmpty) {
+        final allRawRules = await _talk([
+          '/ip/firewall/raw/print',
+          _proplist([
+            '.id',
+            'chain',
+            'action',
+            'src-address',
+            'src-mac-address',
+            'comment',
+          ]),
+        ]);
+
+        for (final rule in allRawRules) {
+          final id = rule['.id'];
+          if (id == null || !_isManagedBanComment(rule['comment'])) {
+            continue;
+          }
+          final groupKey = _managedBanCommentGroupKey(rule['comment']);
+          if (groupKey.isNotEmpty && matchedGroupKeys.contains(groupKey)) {
+            rulesToRemove[id] = rule;
+            macToUse ??= _normalizeMac(rule['src-mac-address']);
+          }
+        }
+      }
+
+      var removedManagedRawRule = false;
+      for (final rule in rulesToRemove.values) {
+        final id = rule['.id'];
         try {
           await _talk(['/ip/firewall/raw/remove', '=.id=$id']);
           removedManagedRawRule = true;
         } catch (_) {}
       }
 
+      var dhcpUnblocked = false;
+      var wirelessUnblocked = false;
       if (macToUse != null) {
         try {
-          await _setDhcpBlockForMac(
+          dhcpUnblocked = await _setDhcpBlockForMac(
             macToUse,
             block: false,
-            allowLegacyUnblock: removedManagedRawRule,
+            allowLegacyUnblock: true,
           );
         } catch (_) {}
 
         try {
-          await _removeManagedAccessRules(
+          wirelessUnblocked = await _removeManagedAccessRules(
             macToUse,
-            includeLegacyEmptyDeny: removedManagedRawRule,
+            includeLegacyEmptyDeny: true,
           );
         } catch (_) {}
       }
 
-      return removedManagedRawRule || macToUse != null || ipAddress.isNotEmpty;
+      return removedManagedRawRule || dhcpUnblocked || wirelessUnblocked;
     } catch (e) {
       throw Exception('Unban failed: $e');
     }
@@ -2096,33 +1833,30 @@ class MikroTikService {
       return null;
     }
 
-    final queueInfo = await _getSimpleQueueSpeed(targetIp);
-    if (queueInfo != null) {
-      return queueInfo;
+    List<Map<String, String>> leases = const [];
+    try {
+      leases = await _talk([
+        '/ip/dhcp-server/lease/print',
+        '?=address=$targetIp',
+        _proplist(['.id', 'address', 'mac-address', 'rate-limit']),
+      ], timeout: const Duration(seconds: 8));
+    } catch (_) {
+      leases = const [];
     }
 
-    final leases = await _talk([
-      '/ip/dhcp-server/lease/print',
-      '?=address=$targetIp',
-      _proplist(['.id', 'address', 'mac-address', 'rate-limit']),
-    ], timeout: const Duration(seconds: 4));
-    if (leases.isEmpty) {
-      return null;
+    if (leases.isNotEmpty) {
+      final rateLimit = leases.first['rate-limit']?.trim() ?? '';
+      if (_hasUsableMaxLimit(rateLimit)) {
+        return {
+          'max_limit': _formatRatePair(rateLimit),
+          'rate_limit': _formatRatePair(rateLimit),
+          'lease_id': leases.first['.id'] ?? '',
+          'source': 'dhcp_lease',
+        };
+      }
     }
 
-    final rateLimit = leases.first['rate-limit']?.trim() ?? '';
-    if (!_hasUsableMaxLimit(rateLimit)) {
-      return null;
-    }
-
-    return {
-      'max_limit': _formatRatePair(rateLimit),
-      'rate_limit': _formatRatePair(rateLimit),
-      'lease_id': leases.first['.id'] ?? '',
-      'source': 'dhcp_lease',
-      'policy_label': 'DHCP',
-      'policy_kind': 'dhcp',
-    };
+    return null;
   }
 
   Future<bool> legacySetClientSpeed(String target, String maxLimit) {
@@ -2143,6 +1877,53 @@ class MikroTikService {
     }
 
     try {
+      final interfaces = await NetworkInterface.list(
+        type: InternetAddressType.IPv4,
+        includeLinkLocal: false,
+      );
+      final routerIp = _connection?.host.trim();
+      final routerParts = routerIp?.split('.');
+      final subnetPrefix = routerParts != null && routerParts.length == 4
+          ? '${routerParts[0]}.${routerParts[1]}.${routerParts[2]}.'
+          : null;
+
+      String? fallbackIp;
+      for (final interface in interfaces) {
+        for (final addr in interface.addresses) {
+          if (addr.isLoopback || addr.type != InternetAddressType.IPv4) {
+            continue;
+          }
+
+          final ip = addr.address.trim();
+          final parts = ip.split('.');
+          if (parts.length != 4) {
+            continue;
+          }
+
+          final firstOctet = int.tryParse(parts[0]);
+          final secondOctet = int.tryParse(parts[1]);
+          final isPrivate =
+              (firstOctet == 192 && secondOctet == 168) ||
+              firstOctet == 10 ||
+              (firstOctet == 172 &&
+                  secondOctet != null &&
+                  secondOctet >= 16 &&
+                  secondOctet <= 31);
+          if (!isPrivate) {
+            continue;
+          }
+
+          fallbackIp ??= ip;
+          if (subnetPrefix != null && ip.startsWith(subnetPrefix)) {
+            return ip;
+          }
+        }
+      }
+
+      if (fallbackIp != null) {
+        return fallbackIp;
+      }
+
       // روش 1: استفاده از NetworkInterface برای دریافت IP محلی دستگاه
       String? localDeviceIp;
       try {
@@ -2180,42 +1961,41 @@ class MikroTikService {
       }
 
       // اگر IP محلی پیدا شد، بررسی می‌کنیم که آیا در روتر هم وجود دارد
-      if (localDeviceIp != null) {
-        try {
-          // بررسی در ARP table
-          final arpEntries = await _client!.talk(['/ip/arp/print']);
-          for (var arp in arpEntries) {
-            if (arp['address']?.toString() == localDeviceIp) {
-              return localDeviceIp;
-            }
-          }
+      if (localDeviceIp == null || localDeviceIp.isEmpty) {
+        return null;
+      }
 
-          // بررسی در DHCP leases
-          final dhcpLeases = await _client!.talk([
-            '/ip/dhcp-server/lease/print',
-          ]);
-          for (var lease in dhcpLeases) {
-            if (lease['address']?.toString() == localDeviceIp) {
-              return localDeviceIp;
-            }
+      try {
+        // بررسی در ARP table
+        final arpEntries = await _client!.talk(['/ip/arp/print']);
+        for (var arp in arpEntries) {
+          if (arp['address']?.toString() == localDeviceIp) {
+            return localDeviceIp;
           }
-        } catch (e) {
-          // ignore
         }
+
+        // بررسی در DHCP leases
+        final dhcpLeases = await _client!.talk(['/ip/dhcp-server/lease/print']);
+        for (var lease in dhcpLeases) {
+          if (lease['address']?.toString() == localDeviceIp) {
+            return localDeviceIp;
+          }
+        }
+      } catch (e) {
+        // ignore
       }
 
       // روش 2: استفاده از IP روتر برای پیدا کردن subnet و سپس پیدا کردن IP دستگاه
-      String? routerIp = _connection?.host;
-      if (routerIp != null) {
+      String? legacyRouterIp = _connection?.host;
+      if (legacyRouterIp != null) {
         try {
-          final routerParts = routerIp.split('.');
+          final routerParts = legacyRouterIp.split('.');
           if (routerParts.length == 4) {
             final subnetPrefix =
                 '${routerParts[0]}.${routerParts[1]}.${routerParts[2]}.';
 
             // اگر IP محلی در همان subnet است، از آن استفاده می‌کنیم
-            if (localDeviceIp != null &&
-                localDeviceIp.startsWith(subnetPrefix)) {
+            if (localDeviceIp.startsWith(subnetPrefix)) {
               return localDeviceIp;
             }
 
@@ -2225,7 +2005,7 @@ class MikroTikService {
               final arpIp = arp['address']?.toString();
               if (arpIp != null &&
                   arpIp.startsWith(subnetPrefix) &&
-                  arpIp != routerIp &&
+                  arpIp != legacyRouterIp &&
                   arp['dynamic']?.toString().toLowerCase() == 'true') {
                 // بررسی در DHCP lease
                 try {
@@ -2235,14 +2015,14 @@ class MikroTikService {
                   for (var lease in dhcpLeases) {
                     if (lease['address']?.toString() == arpIp &&
                         lease['status']?.toString().toLowerCase() == 'bound') {
-                      return arpIp;
+                      return localDeviceIp;
                     }
                   }
                 } catch (e) {
                   // ignore
                 }
 
-                return arpIp;
+                return localDeviceIp;
               }
             }
           }
@@ -2259,7 +2039,7 @@ class MikroTikService {
           final leaseIp = lease['address']?.toString();
           if (leaseIp != null &&
               lease['status']?.toString().toLowerCase() == 'bound') {
-            return leaseIp;
+            return localDeviceIp;
           }
         }
       } catch (e) {
@@ -2276,12 +2056,12 @@ class MikroTikService {
             if (arpIp != null &&
                 arpIp != routerIp &&
                 arp['dynamic']?.toString().toLowerCase() == 'true') {
-              return arpIp;
+              return localDeviceIp;
             }
           }
 
           // اگر dynamic پیدا نشد، اولین IP را برمی‌گردانیم
-          return arpEntries.first['address'];
+          return localDeviceIp;
         }
       } catch (e) {
         // ignore
@@ -2309,6 +2089,16 @@ class MikroTikService {
       final fingerprintService = DeviceFingerprintService();
       final bannedFingerprints = await fingerprintService
           .getBannedFingerprints();
+      String? currentDeviceIp;
+
+      try {
+        currentDeviceIp = await getDeviceIp().timeout(
+          const Duration(seconds: 5),
+          onTimeout: () => null,
+        );
+      } catch (_) {
+        currentDeviceIp = null;
+      }
 
       if (bannedFingerprints.isEmpty) {
         return [];
@@ -2350,6 +2140,12 @@ class MikroTikService {
 
       // بررسی هر دستگاه متصل
       for (var client in connectedClients) {
+        if (currentDeviceIp != null &&
+            currentDeviceIp.isNotEmpty &&
+            client.ipAddress == currentDeviceIp) {
+          continue;
+        }
+
         // ایجاد Device Fingerprint از ClientInfo
         final clientFingerprint = DeviceFingerprint.fromClientInfo(
           client.ipAddress,

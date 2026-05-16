@@ -88,7 +88,7 @@ class MikroTikServiceManager {
   /// دریافت کلاینت‌های متصل
   Future<Map<String, dynamic>> getConnectedClients() async {
     if (_service == null || !isConnected) {
-      throw Exception('اتصال برقرار نشده');
+      throw Exception('Connection is not established');
     }
     return await _service!.getConnectedClients();
   }
@@ -169,5 +169,28 @@ class MikroTikServiceManager {
       macAddress: macAddress,
       displayName: displayName,
     );
+  }
+
+  Future<Map<String, String>?> getClientSpeedIsolated(String target) async {
+    final connection = _currentConnection;
+    if (connection == null) {
+      throw Exception('Connection is not established');
+    }
+
+    final speedService = MikroTikService();
+    try {
+      final connected = await speedService
+          .connect(connection)
+          .timeout(const Duration(seconds: 8), onTimeout: () => false);
+      if (!connected) {
+        return null;
+      }
+
+      return await speedService
+          .getClientSpeed(target)
+          .timeout(const Duration(seconds: 20), onTimeout: () => null);
+    } finally {
+      speedService.disconnect();
+    }
   }
 }

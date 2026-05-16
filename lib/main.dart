@@ -1,3 +1,5 @@
+import 'dart:async';
+
 /// Internet Management Application
 ///
 /// Developer: Mersad Karimi
@@ -25,6 +27,9 @@ Function(Locale)? onLanguageChanged;
 
 // 全局回调函数，用于从子组件通知主应用更改主题
 Function(ThemeMode)? onThemeChanged;
+
+final RouteObserver<PageRoute<dynamic>> routeObserver =
+    RouteObserver<PageRoute<dynamic>>();
 
 void main() {
   runApp(const MyApp());
@@ -273,6 +278,7 @@ class _MyAppState extends State<MyApp> {
           Locale('en', 'US'), // انگلیسی
         ],
         locale: _locale,
+        navigatorObservers: [routeObserver],
         initialRoute: '/',
         routes: {
           '/': (context) => const LoginScreen(),
@@ -389,9 +395,18 @@ class _MainScaffoldState extends State<MainScaffold> {
   }
 
   void _onTabTapped(int index) {
+    if (_currentIndex == index) {
+      return;
+    }
+
     setState(() {
       _currentIndex = index;
     });
+
+    if (index == 0) {
+      final provider = Provider.of<ClientsProvider>(context, listen: false);
+      unawaited(provider.refresh());
+    }
   }
 
   @override
@@ -492,9 +507,10 @@ class HomePage extends StatefulWidget {
   State<HomePage> createState() => _HomePageState();
 }
 
-class _HomePageState extends State<HomePage> {
+class _HomePageState extends State<HomePage> with RouteAware {
   final MikroTikServiceManager _serviceManager = MikroTikServiceManager();
   int _selectedTab = 0; // 0: متصل, 1: مسدود
+  bool _routeObserverSubscribed = false;
 
   @override
   void initState() {
@@ -504,6 +520,66 @@ class _HomePageState extends State<HomePage> {
       final provider = Provider.of<ClientsProvider>(context, listen: false);
       provider.initialize();
     });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_routeObserverSubscribed) {
+      return;
+    }
+
+    final route = ModalRoute.of(context);
+    if (route is PageRoute<dynamic>) {
+      routeObserver.subscribe(this, route);
+      _routeObserverSubscribed = true;
+    }
+  }
+
+  @override
+  void dispose() {
+    if (_routeObserverSubscribed) {
+      routeObserver.unsubscribe(this);
+    }
+    super.dispose();
+  }
+
+  @override
+  void didPopNext() {
+    unawaited(_refreshActiveTabData());
+  }
+
+  Future<void> _refreshActiveTabData() async {
+    if (!mounted) {
+      return;
+    }
+
+    final provider = Provider.of<ClientsProvider>(context, listen: false);
+    await provider.refresh();
+  }
+
+  Widget _buildPullToRefresh({
+    required Widget child,
+    required Future<void> Function() onRefresh,
+  }) {
+    return RefreshIndicator.adaptive(
+      color: const Color(0xFF428B7C),
+      onRefresh: onRefresh,
+      child: child,
+    );
+  }
+
+  void _switchHomeTab(int index) {
+    if (_selectedTab == index) {
+      return;
+    }
+
+    setState(() {
+      _selectedTab = index;
+    });
+
+    final provider = Provider.of<ClientsProvider>(context, listen: false);
+    unawaited(provider.refresh());
   }
 
   @override
@@ -814,11 +890,7 @@ class _HomePageState extends State<HomePage> {
                                         count: provider.clients.length,
                                         icon: Icons.devices,
                                         isActive: _selectedTab == 0,
-                                        onTap: () {
-                                          setState(() {
-                                            _selectedTab = 0;
-                                          });
-                                        },
+                                        onTap: () => _switchHomeTab(0),
                                       );
                                     },
                                   ),
@@ -835,12 +907,7 @@ class _HomePageState extends State<HomePage> {
                                         count: provider.bannedClients.length,
                                         icon: Icons.block,
                                         isActive: _selectedTab == 1,
-                                        onTap: () {
-                                          setState(() {
-                                            _selectedTab = 1;
-                                          });
-                                          provider.loadBannedClients();
-                                        },
+                                        onTap: () => _switchHomeTab(1),
                                       );
                                     },
                                   ),
@@ -972,7 +1039,7 @@ class _HomePageState extends State<HomePage> {
     // اگر در حال progressive loading هستیم و لیست خالی نیست، لیست فعلی را نمایش بده
     // (progressive loading در پس‌زمینه ادامه می‌دهد)
 
-    if (provider.errorMessage != null) {
+    if (provider.errorMessage != null && provider.clients.isEmpty) {
       return Builder(
         builder: (context) {
           final theme = Theme.of(context);
@@ -1007,7 +1074,7 @@ class _HomePageState extends State<HomePage> {
                     builder: (context) {
                       final l10n = AppLocalizations.of(context);
                       return ElevatedButton.icon(
-                        onPressed: () => provider.loadClients(),
+                        onPressed: () => provider.initialize(),
                         icon: const Icon(Icons.refresh),
                         label: Text(l10n?.retry ?? 'Retry'),
                         style: ElevatedButton.styleFrom(
@@ -1031,31 +1098,45 @@ class _HomePageState extends State<HomePage> {
           final theme = Theme.of(context);
           final colorScheme = theme.colorScheme;
 
-          return Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
+          return _buildPullToRefresh(
+            onRefresh: provider.refresh,
+            child: ListView(
+              physics: const BouncingScrollPhysics(
+                parent: AlwaysScrollableScrollPhysics(),
+              ),
               children: [
-                Icon(
-                  Icons.people_outline,
-                  size: 64,
-                  color: theme.brightness == Brightness.dark
-                      ? colorScheme.onSurface.withOpacity(0.4)
-                      : Colors.grey.shade400,
-                ),
-                const SizedBox(height: 16),
-                Builder(
-                  builder: (context) {
-                    final l10n = AppLocalizations.of(context);
-                    return Text(
-                      l10n?.noConnectedDevices ?? 'No connected devices found',
-                      style: TextStyle(
-                        color: theme.brightness == Brightness.dark
-                            ? colorScheme.onSurface.withOpacity(0.6)
-                            : Colors.grey.shade600,
-                        fontSize: 18,
-                      ),
-                    );
-                  },
+                SizedBox(
+                  height: MediaQuery.of(context).size.height * 0.5,
+                  child: Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.people_outline,
+                          size: 64,
+                          color: theme.brightness == Brightness.dark
+                              ? colorScheme.onSurface.withOpacity(0.4)
+                              : Colors.grey.shade400,
+                        ),
+                        const SizedBox(height: 16),
+                        Builder(
+                          builder: (context) {
+                            final l10n = AppLocalizations.of(context);
+                            return Text(
+                              l10n?.noConnectedDevices ??
+                                  'No connected devices found',
+                              style: TextStyle(
+                                color: theme.brightness == Brightness.dark
+                                    ? colorScheme.onSurface.withOpacity(0.6)
+                                    : Colors.grey.shade600,
+                                fontSize: 18,
+                              ),
+                            );
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
               ],
             ),
@@ -1064,41 +1145,14 @@ class _HomePageState extends State<HomePage> {
       );
     }
 
-    return RefreshIndicator(
-      onRefresh: () => provider.refresh(),
-      color: const Color(0xFF428B7C),
+    return _buildPullToRefresh(
+      onRefresh: provider.refresh,
       child: ListView.builder(
+        physics: const BouncingScrollPhysics(
+          parent: AlwaysScrollableScrollPhysics(),
+        ),
         itemCount: provider.clients.length,
-        // اضافه کردن یک item برای نشان دادن progressive loading
         itemBuilder: (context, index) {
-          // اگر آخرین آیتم است و هنوز در حال loading هستیم، یک indicator نمایش بده
-          if (index == provider.clients.length - 1 &&
-              !provider.isDataComplete &&
-              !provider.isLoading) {
-            return Column(
-              children: [
-                _buildClientCard(
-                  context,
-                  provider.clients[index],
-                  provider.deviceIp,
-                  provider,
-                ),
-                const Padding(
-                  padding: EdgeInsets.all(16.0),
-                  child: Center(
-                    child: SizedBox(
-                      width: 24,
-                      height: 24,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Color(0xFF428B7C),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            );
-          }
           final client = provider.clients[index];
           return _buildClientCard(context, client, provider.deviceIp, provider);
         },
@@ -1180,26 +1234,48 @@ class _HomePageState extends State<HomePage> {
 
   Widget _buildBannedDevicesTab(ClientsProvider provider) {
     if (provider.bannedClients.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+      return _buildPullToRefresh(
+        onRefresh: provider.refresh,
+        child: ListView(
+          physics: const BouncingScrollPhysics(
+            parent: AlwaysScrollableScrollPhysics(),
+          ),
           children: [
-            Icon(Icons.block_outlined, size: 64, color: Colors.grey.shade400),
-            const SizedBox(height: 16),
-            Text(
-              AppLocalizations.of(context)?.noBannedDevices ??
-                  'No banned devices found',
-              style: TextStyle(color: Colors.grey.shade600, fontSize: 18),
+            SizedBox(
+              height: MediaQuery.of(context).size.height * 0.5,
+              child: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.block_outlined,
+                      size: 64,
+                      color: Colors.grey.shade400,
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      AppLocalizations.of(context)?.noBannedDevices ??
+                          'No banned devices found',
+                      style: TextStyle(
+                        color: Colors.grey.shade600,
+                        fontSize: 18,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
           ],
         ),
       );
     }
 
-    return RefreshIndicator(
-      onRefresh: () => provider.loadBannedClients(),
-      color: const Color(0xFF428B7C),
+    return _buildPullToRefresh(
+      onRefresh: provider.refresh,
       child: ListView.builder(
+        physics: const BouncingScrollPhysics(
+          parent: AlwaysScrollableScrollPhysics(),
+        ),
         itemCount: provider.bannedClients.length,
         itemBuilder: (context, index) {
           final banned = provider.bannedClients[index];
@@ -1331,51 +1407,6 @@ class _HomePageState extends State<HomePage> {
                                   : Colors.grey.shade500,
                             ),
                           ),
-                        // نمایش نوع مسدودیت (Auto-banned یا Manual)
-                        if (banned['comment'] != null)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 4),
-                            child: Row(
-                              children: [
-                                Icon(
-                                  banned['comment'].toString().contains(
-                                        'Auto-banned:',
-                                      )
-                                      ? Icons.auto_fix_high
-                                      : Icons.block,
-                                  size: 14,
-                                  color:
-                                      banned['comment'].toString().contains(
-                                        'Auto-banned:',
-                                      )
-                                      ? Colors.orange
-                                      : Colors.red,
-                                ),
-                                const SizedBox(width: 4),
-                                Builder(
-                                  builder: (context) {
-                                    final l10n = AppLocalizations.of(context);
-                                    final isAutoBanned = banned['comment']
-                                        .toString()
-                                        .contains('Auto-banned:');
-                                    return Text(
-                                      isAutoBanned
-                                          ? (l10n?.autoBanned ?? 'Auto Ban')
-                                          : (l10n?.manualBanned ??
-                                                'Manual Ban'),
-                                      style: TextStyle(
-                                        fontSize: 11,
-                                        color: isAutoBanned
-                                            ? Colors.orange.shade700
-                                            : Colors.red.shade700,
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                    );
-                                  },
-                                ),
-                              ],
-                            ),
-                          ),
                       ],
                     ),
                   ),
@@ -1464,22 +1495,7 @@ class _HomePageState extends State<HomePage> {
                                       duration: Duration(seconds: 3),
                                     ),
                                   );
-                                  // به‌روزرسانی لیست
-                                  provider.loadBannedClients();
-                                  // هدایت به صفحه اصلی
-                                  Future.delayed(
-                                    const Duration(milliseconds: 300),
-                                    () {
-                                      if (mounted) {
-                                        Navigator.of(
-                                          context,
-                                        ).pushNamedAndRemoveUntil(
-                                          '/home',
-                                          (route) => false,
-                                        );
-                                      }
-                                    },
-                                  );
+                                  await provider.refresh();
                                 } else {
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     SnackBar(
@@ -1582,12 +1598,18 @@ class _HomePageState extends State<HomePage> {
     );
     final isApprovalBusy = provider.isApprovalActionInProgress(client);
 
-    void openDeviceDetail() {
-      Navigator.pushNamed(
+    Future<void> openDeviceDetail() async {
+      final refreshRequested = await Navigator.pushNamed(
         context,
         '/device-detail',
         arguments: {'device': client, 'isCurrentDevice': isCurrentDevice},
       );
+
+      if (!mounted || refreshRequested != true) {
+        return;
+      }
+
+      await provider.refresh();
     }
 
     Future<void> runPendingAction({required bool approve}) async {
@@ -1695,7 +1717,7 @@ class _HomePageState extends State<HomePage> {
     return Material(
       color: colorScheme.surface,
       child: InkWell(
-        onTap: openDeviceDetail,
+        onTap: isPendingApproval ? null : openDeviceDetail,
         splashColor: const Color(0xFF428B7C).withOpacity(0.1),
         highlightColor: const Color(0xFF428B7C).withOpacity(0.05),
         child: Container(
@@ -1898,13 +1920,15 @@ class _HomePageState extends State<HomePage> {
                       ),
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  Icon(
-                    Icons.chevron_right,
-                    color: theme.brightness == Brightness.dark
-                        ? colorScheme.onSurface.withOpacity(0.4)
-                        : Colors.grey,
-                  ),
+                  if (!isPendingApproval) ...[
+                    const SizedBox(width: 8),
+                    Icon(
+                      Icons.chevron_right,
+                      color: theme.brightness == Brightness.dark
+                          ? colorScheme.onSurface.withOpacity(0.4)
+                          : Colors.grey,
+                    ),
+                  ],
                 ],
               ),
             ],
