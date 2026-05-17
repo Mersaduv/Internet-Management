@@ -302,6 +302,9 @@ class _InternetServiceScreenState extends State<InternetServiceScreen> {
                 });
               },
               onReceivedError: (controller, request, error) {
+                if (request.isForMainFrame == false) {
+                  return;
+                }
                 setState(() {
                   _isLoading = false;
                   _showError = true;
@@ -309,12 +312,16 @@ class _InternetServiceScreenState extends State<InternetServiceScreen> {
                 });
               },
               onReceivedHttpError: (controller, request, response) {
+                if (request.isForMainFrame == false) {
+                  return;
+                }
                 final statusCode = response.statusCode;
                 if (statusCode != null && statusCode >= 400) {
                   setState(() {
                     _isLoading = false;
                     _showError = true;
-                    _errorMessage = 'خطای HTTP $statusCode: ${response.reasonPhrase ?? "خطای ناشناخته"}';
+                    _errorMessage =
+                        'خطای HTTP $statusCode: ${response.reasonPhrase ?? "خطای ناشناخته"}';
                   });
                 }
               },

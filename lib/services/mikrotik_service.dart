@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import '../models/mikrotik_connection.dart';
 import '../models/client_info.dart';
 import '../models/device_fingerprint.dart';
@@ -2907,5 +2908,117 @@ class MikroTikService {
     } catch (e) {
       throw Exception('خطا در بررسی IP: $e');
     }
+  }
+
+  /// Reads wireless interfaces and settings for one interface.
+  Future<Map<String, dynamic>> getWifiSettings({String? interfaceId}) async {
+    debugPrint('[WIFI_SETTINGS] getWifiSettings(interfaceId=$interfaceId)');
+    await ensureConnected();
+
+    final interfaces = await _talk([
+      '/interface/wireless/print',
+      _proplist([
+        '.id',
+        'name',
+        'ssid',
+        'hide-ssid',
+        'security-profile',
+        'disabled',
+      ]),
+    ]).timeout(_apiTimeout);
+
+    if (interfaces.isEmpty) {
+      throw Exception('هیچ رابط وایرلسی یافت نشد');
+    }
+
+    Map<String, String> iface;
+    if (interfaceId != null && interfaceId.isNotEmpty) {
+      iface = interfaces.firstWhere(
+        (i) => i['.id'] == interfaceId,
+        orElse: () => interfaces.first,
+      );
+    } else {
+      iface = interfaces.firstWhere(
+        (i) => i['disabled'] != 'true',
+        orElse: () => interfaces.first,
+      );
+    }
+
+    final profileName = iface['security-profile'] ?? 'default';
+    final profiles = await _talk([
+      '/interface/wireless/security-profiles/print',
+      '?=name=$profileName',
+      _proplist([
+        '.id',
+        'name',
+        'wpa2-pre-shared-key',
+        'wpa-pre-shared-key',
+        'authentication-types',
+      ]),
+    ]).timeout(_apiTimeout);
+
+    final profile = profiles.isNotEmpty ? profiles.first : <String, String>{};
+    final sharedProfileCount = interfaces
+        .where((i) => (i['security-profile'] ?? 'default') == profileName)
+        .length;
+
+    return {
+      'interface_id': iface['.id'] ?? '',
+      'interface_name': iface['name'] ?? 'wlan1',
+      'ssid': iface['ssid'] ?? '',
+      'hide_ssid': iface['hide-ssid'] == 'true',
+      'security_profile_name': profileName,
+      'security_profile_id': profile['.id'] ?? '',
+      'password':
+          profile['wpa2-pre-shared-key'] ??
+          profile['wpa-pre-shared-key'] ??
+          '',
+      'authentication_types':
+          profile['authentication-types'] ?? 'wpa2-psk',
+      'interfaces': interfaces
+          .map(
+            (i) => <String, dynamic>{
+              'id': i['.id'] ?? '',
+              'name': i['name'] ?? '',
+              'disabled': i['disabled'] == 'true',
+              'security_profile': i['security-profile'] ?? 'default',
+            },
+          )
+          .toList(),
+      'shared_profile_count': sharedProfileCount,
+    };
+  }
+
+  /// Updates WiFi SSID and hide-ssid on a wireless interface.
+  Future<void> setWifiSsid({
+    required String interfaceId,
+    required String ssid,
+    required bool hideSsid,
+  }) async {
+    debugPrint(
+      '[WIFI_SETTINGS] setWifiSsid(id=$interfaceId, hideSsid=$hideSsid)',
+    );
+    await ensureConnected();
+    await _talk([
+      '/interface/wireless/set',
+      '=.id=$interfaceId',
+      '=ssid=$ssid',
+      '=hide-ssid=${hideSsid ? 'yes' : 'no'}',
+    ]).timeout(_apiTimeout);
+  }
+
+  /// Updates WPA password on a wireless security profile.
+  Future<void> setWifiPassword({
+    required String securityProfileId,
+    required String password,
+  }) async {
+    debugPrint('[WIFI_SETTINGS] setWifiPassword(profileId=$securityProfileId)');
+    await ensureConnected();
+    await _talk([
+      '/interface/wireless/security-profiles/set',
+      '=.id=$securityProfileId',
+      '=wpa2-pre-shared-key=$password',
+      '=wpa-pre-shared-key=$password',
+    ]).timeout(_apiTimeout);
   }
 }

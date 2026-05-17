@@ -342,6 +342,41 @@ class MikroTikServiceManager {
     );
   }
 
+  Future<Map<String, dynamic>> getWifiSettings({String? interfaceId}) async {
+    if (_service == null || !isConnected) {
+      throw Exception('اتصال برقرار نشده');
+    }
+    return _service!.getWifiSettings(interfaceId: interfaceId);
+  }
+
+  Future<void> setWifiSsid({
+    required String interfaceId,
+    required String ssid,
+    required bool hideSsid,
+  }) async {
+    if (_service == null || !isConnected) {
+      throw Exception('اتصال برقرار نشده');
+    }
+    return _service!.setWifiSsid(
+      interfaceId: interfaceId,
+      ssid: ssid,
+      hideSsid: hideSsid,
+    );
+  }
+
+  Future<void> setWifiPassword({
+    required String securityProfileId,
+    required String password,
+  }) async {
+    if (_service == null || !isConnected) {
+      throw Exception('اتصال برقرار نشده');
+    }
+    return _service!.setWifiPassword(
+      securityProfileId: securityProfileId,
+      password: password,
+    );
+  }
+
   Future<Map<String, String>?> getClientSpeedIsolated(String target) async {
     final connection = _currentConnection;
     if (connection == null) {

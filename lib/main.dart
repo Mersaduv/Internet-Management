@@ -15,12 +15,14 @@ import 'screens/connection_test_screen.dart';
 import 'screens/device_detail_screen.dart';
 import 'screens/internet_service_screen.dart';
 import 'screens/app_settings_screen.dart';
+import 'screens/wifi_settings_screen.dart';
 import 'services/mikrotik_service_manager.dart';
 import 'services/settings_service.dart';
 import 'services/network_info_service.dart';
 import 'models/client_info.dart';
 import 'providers/clients_provider.dart';
 import 'utils/app_localizations.dart';
+import 'utils/wifi_panel_url_resolver.dart';
 
 // 全局回调函数，用于从子组件通知主应用更改语言
 Function(Locale)? onLanguageChanged;
@@ -295,6 +297,12 @@ class _MyAppState extends State<MyApp> {
               isBanned: args['isBanned'] as bool? ?? false,
             );
           },
+          '/wifi-settings': (context) => const WifiSettingsRouter(),
+          '/wifi-webview': (context) => const InternetServiceScreen(
+            fixedUrl: WifiPanelUrlResolver.cpeWifiPanelUrl,
+            defaultTitle: 'اطلاعات Wifi',
+            allowUrlChange: false,
+          ),
         },
         builder: (context, child) {
           return MediaQuery(

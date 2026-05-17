@@ -104,6 +104,52 @@ class AppLocalizations {
   String get wifiInfoSubtitle => locale.languageCode == 'en'
       ? 'View WiFi info and change WiFi name and password'
       : 'نمایش اطلاعات وایفای و تغییر نام و رمز وایفای';
+  String get wifiSettings =>
+      locale.languageCode == 'en' ? 'WiFi Settings' : 'تنظیمات وایفای';
+  String get wifiSettingsSubtitle => locale.languageCode == 'en'
+      ? 'Change network name and password'
+      : 'تغییر نام و رمز شبکه';
+  String get wifiNameLabel => locale.languageCode == 'en'
+      ? 'Network Name (SSID)'
+      : 'نام شبکه (SSID)';
+  String get wifiPasswordLabel =>
+      locale.languageCode == 'en' ? 'Password' : 'رمز عبور';
+  String get wifiPasswordHint => locale.languageCode == 'en'
+      ? 'Leave empty to keep current password'
+      : 'برای حفظ رمز فعلی خالی بگذارید';
+  String get wifiHideSsid => locale.languageCode == 'en'
+      ? 'Hide Network Name'
+      : 'مخفی کردن نام شبکه';
+  String get wifiHideSsidSubtitle => locale.languageCode == 'en'
+      ? 'Devices will not see the network name'
+      : 'دستگاه‌ها نام شبکه را نمی‌بینند';
+  String get wifiSave =>
+      locale.languageCode == 'en' ? 'Save Changes' : 'ذخیره تغییرات';
+  String get wifiSaveConfirmTitle => locale.languageCode == 'en'
+      ? 'Save WiFi Settings'
+      : 'ذخیره تنظیمات وایفای';
+  String get wifiSaveConfirmBody => locale.languageCode == 'en'
+      ? 'WiFi connection may drop briefly. Continue?'
+      : 'ممکن است اتصال وایفای چند ثانیه قطع شود. ادامه می‌دهید؟';
+  String get wifiSaveSuccess => locale.languageCode == 'en'
+      ? 'WiFi settings saved successfully'
+      : 'تنظیمات وایفای با موفقیت ذخیره شد';
+  String get wifiNoInterface => locale.languageCode == 'en'
+      ? 'No wireless interface found'
+      : 'رابط وایرلس یافت نشد';
+  String get wifiLoading => locale.languageCode == 'en'
+      ? 'Loading WiFi settings...'
+      : 'در حال خواندن تنظیمات وایفای...';
+  String get wifiSharedProfileWarning => locale.languageCode == 'en'
+      ? 'Password changes apply to the shared security profile and may affect other wireless interfaces.'
+      : 'تغییر رمز عبور روی پروفایل امنیتی مشترک اعمال می‌شود و ممکن است روی سایر رابط‌های وایرلس هم تأثیر بگذارد.';
+  String get wifiConnectionLost => locale.languageCode == 'en'
+      ? 'Connection to router was lost'
+      : 'اتصال به روتر قطع شده است';
+  String get wifiReconnect =>
+      locale.languageCode == 'en' ? 'Reconnect' : 'اتصال مجدد';
+  String get wifiInterfaceLabel =>
+      locale.languageCode == 'en' ? 'Wireless interface' : 'رابط وایرلس';
   String get connectedDevices =>
       locale.languageCode == 'en' ? 'Connected Devices' : 'دستگاه‌های متصل';
   String get bannedDevices =>
