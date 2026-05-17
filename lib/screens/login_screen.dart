@@ -120,20 +120,21 @@ class _LoginScreenState extends State<LoginScreen> {
         _isConnecting = false;
       });
 
-      if (success) {
-        // ذخیره زمان لاگین
+      if (success && serviceManager.isConnected) {
         await _settingsService.setLoginTimestamp();
-
         await _settingsService.saveCredentials(
           username: _usernameController.text.trim(),
           password: _passwordController.text,
         );
 
-        // اتصال موفق - مقداردهی اولیه Provider و انتقال به صفحه اصلی
         if (mounted) {
-          // Provider در initState صفحه اصلی initialize می‌شود
           Navigator.of(context).pushReplacementNamed('/home');
         }
+      } else if (success && !serviceManager.isConnected) {
+        setState(() {
+          _errorMessage =
+              'اتصال برقرار شد اما session قطع شد. لطفاً دوباره تلاش کنید.';
+        });
       } else {
         final l10n = AppLocalizations.of(context);
         setState(() {

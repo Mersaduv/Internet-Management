@@ -17,7 +17,10 @@ class MikroTikServiceManager {
   MikroTikService? _service;
   MikroTikConnection? _currentConnection;
   Map<String, dynamic>? _routerInfo;
+  DateTime? _routerInfoCacheTime;
   ConnectionHeartbeat? _heartbeat;
+
+  static const Duration _routerInfoCacheTtl = Duration(minutes: 5);
 
   /// دریافت سرویس فعلی
   MikroTikService? get service => _service;
@@ -85,15 +88,8 @@ class MikroTikServiceManager {
         _service = null;
         _currentConnection = null;
         _routerInfo = null;
+        _routerInfoCacheTime = null;
       } else {
-        // دریافت اطلاعات روتر بعد از اتصال موفق
-        try {
-          _routerInfo = await _service!.getRouterInfo();
-        } catch (e) {
-          // ignore errors - router info optional است
-          _routerInfo = null;
-        }
-
         _heartbeat?.stop();
         _heartbeat = ConnectionHeartbeat(
           healthCheck: () async {
@@ -129,18 +125,98 @@ class MikroTikServiceManager {
     _service = null;
     _currentConnection = null;
     _routerInfo = null;
+    _routerInfoCacheTime = null;
+  }
+
+  void beginProgressiveLoad() {
+    _service?.beginProgressiveLoad();
+  }
+
+  void endProgressiveLoad() {
+    _service?.endProgressiveLoad();
+  }
+
+  /// Ensures the API session is usable (reconnects if the socket was dropped).
+  Future<bool> ensureSession() async {
+    final service = _service;
+    if (service == null) {
+      return false;
+    }
+    if (service.isConnected) {
+      return true;
+    }
+    return service.ensureConnected(forceHealthCheck: true);
+  }
+
+  /// Router info cache is fresh if younger than 5 minutes.
+  bool hasValidCachedRouterInfo() {
+    if (_routerInfo == null || _routerInfoCacheTime == null) {
+      return false;
+    }
+    return DateTime.now().difference(_routerInfoCacheTime!) <
+        _routerInfoCacheTtl;
   }
 
   /// دریافت اطلاعات روتر (با refresh)
-  Future<Map<String, dynamic>?> getRouterInfo() async {
+  Future<Map<String, dynamic>?> getRouterInfo({bool forceRefresh = false}) async {
     if (_service == null || !isConnected) {
       return null;
     }
+    if (!forceRefresh && hasValidCachedRouterInfo()) {
+      return _routerInfo;
+    }
     try {
       _routerInfo = await _service!.getRouterInfo();
+      _routerInfoCacheTime = DateTime.now();
       return _routerInfo;
     } catch (e) {
       return _routerInfo; // برگرداندن اطلاعات قبلی در صورت خطا
+    }
+  }
+
+  /// Phase 3 — device IP, router info, lock status on isolated connection.
+  /// Never throws; returns partial map on failure.
+  Future<Map<String, dynamic>> loadSecondaryDataIsolated() async {
+    final connection = _currentConnection;
+    if (connection == null) {
+      return {};
+    }
+
+    final isolated = MikroTikService();
+    try {
+      final connected = await isolated
+          .connect(connection)
+          .timeout(const Duration(seconds: 8), onTimeout: () => false);
+      if (!connected) {
+        return {};
+      }
+
+      final routerInfoFuture = hasValidCachedRouterInfo()
+          ? Future<Map<String, dynamic>?>.value(_routerInfo)
+          : isolated.getRouterInfoSecondary();
+
+      final results = await Future.wait<dynamic>([
+        isolated.getDeviceIp(),
+        routerInfoFuture,
+        isolated.isNewConnectionsLocked(),
+      ]);
+
+      final routerInfo = results[1] as Map<String, dynamic>?;
+      if (routerInfo != null && !hasValidCachedRouterInfo()) {
+        _routerInfo = routerInfo;
+        _routerInfoCacheTime = DateTime.now();
+      }
+
+      return {
+        'deviceIp': results[0] as String?,
+        'routerInfo': routerInfo ?? _routerInfo,
+        'isNewConnectionsLocked': results[2] as bool? ?? false,
+      };
+    } catch (e) {
+      debugPrint('[PROGRESSIVE_LOAD] isolated secondary failed: $e');
+      return {};
+    } finally {
+      isolated.disconnect();
     }
   }
 
@@ -150,6 +226,34 @@ class MikroTikServiceManager {
       throw Exception('اتصال برقرار نشده');
     }
     return await _service!.getAllClients();
+  }
+
+  Future<List<Map<String, String>>> getPhase1BoundDhcpLeases() async {
+    if (_service == null || !isConnected) {
+      throw Exception('Connection is not established');
+    }
+    return _service!.getPhase1BoundDhcpLeases();
+  }
+
+  Future<List<Map<String, String>>> getPhase2ManagedBanRawRules() async {
+    if (_service == null || !isConnected) {
+      throw Exception('Connection is not established');
+    }
+    return _service!.getPhase2ManagedBanRawRules();
+  }
+
+  Future<List<Map<String, String>>> getPhase2ArpTable() async {
+    if (_service == null || !isConnected) {
+      throw Exception('Connection is not established');
+    }
+    return _service!.getPhase2ArpTable();
+  }
+
+  Future<List<Map<String, String>>> getPhase2WirelessRegistrations() async {
+    if (_service == null || !isConnected) {
+      throw Exception('Connection is not established');
+    }
+    return _service!.getPhase2WirelessRegistrations();
   }
 
   /// دریافت کلاینت‌های متصل

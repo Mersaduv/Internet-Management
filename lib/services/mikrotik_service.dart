@@ -15,8 +15,10 @@ class MikroTikService {
   Map<String, dynamic>? _routerInfoCache;
   bool? _wirelessFeaturesEnabled;
   bool _reconnectInProgress = false;
+  int _progressiveLoadDepth = 0;
 
   static const Duration _apiTimeout = Duration(seconds: 10);
+  static const Duration _phaseTalkTimeout = Duration(seconds: 15);
   static const String _appPrefix = 'Ariyabod';
   static const String _banMarker = '[$_appPrefix BAN]';
   static const String _staticOnlyPool = 'static-only';
@@ -71,9 +73,29 @@ class MikroTikService {
     }
   }
 
+  bool get _inProgressiveLoad => _progressiveLoadDepth > 0;
+
+  /// While home progressive load runs, avoid extra health-check API calls on the queue.
+  void beginProgressiveLoad() {
+    _progressiveLoadDepth++;
+    print('[PROGRESSIVE_LOAD] begin (depth=$_progressiveLoadDepth)');
+  }
+
+  void endProgressiveLoad() {
+    if (_progressiveLoadDepth > 0) {
+      _progressiveLoadDepth--;
+    }
+    print('[PROGRESSIVE_LOAD] end (depth=$_progressiveLoadDepth)');
+  }
+
   Future<bool> _supportsWirelessFeatures() async {
     if (_wirelessFeaturesEnabled != null) {
       return _wirelessFeaturesEnabled!;
+    }
+
+    // During progressive load, do not pull full router info — try wireless and catch errors.
+    if (_inProgressiveLoad) {
+      return true;
     }
 
     final routerInfo = await _ensureRouterInfoCache();
@@ -214,14 +236,14 @@ class MikroTikService {
         .join(' ');
   }
 
-  Future<void> _requireConnection() async {
-    if (!await ensureConnected()) {
+  Future<void> _requireConnection({bool forceHealthCheck = false}) async {
+    if (!await ensureConnected(forceHealthCheck: forceHealthCheck)) {
       throw Exception('Cannot connect to router');
     }
   }
 
   /// Verifies the API socket is alive; reconnects using saved credentials if needed.
-  Future<bool> ensureConnected() async {
+  Future<bool> ensureConnected({bool forceHealthCheck = false}) async {
     if (_lastConnection == null) {
       print('[SERVICE] ensureConnected: no saved connection');
       return false;
@@ -231,6 +253,10 @@ class MikroTikService {
     if (client == null || !client.isConnected) {
       print('[SERVICE] ensureConnected: client missing, reconnecting');
       return _tryReconnect();
+    }
+
+    if (_inProgressiveLoad && !forceHealthCheck) {
+      return true;
     }
 
     try {
@@ -581,31 +607,245 @@ class MikroTikService {
     return removed;
   }
 
-  Future<bool> _setDhcpBlockForMac(
-    String macAddress, {
+  Future<List<Map<String, String>>> _collectDhcpLeasesForTarget({
+    String? ipAddress,
+    String? macAddress,
+  }) async {
+    final leasesById = <String, Map<String, String>>{};
+    final leaseProps = _proplist([
+      '.id',
+      'address',
+      'mac-address',
+      'block-access',
+      'comment',
+      'status',
+      'dynamic',
+    ]);
+
+    Future<void> mergeLeases(List<Map<String, String>> leases) async {
+      for (final lease in leases) {
+        final id = lease['.id'];
+        if (id != null && id.isNotEmpty) {
+          leasesById[id] = lease;
+        }
+      }
+    }
+
+    final ip = ipAddress?.trim();
+    if (ip != null && ip.isNotEmpty) {
+      try {
+        await mergeLeases(
+          await _talk([
+            '/ip/dhcp-server/lease/print',
+            '?=address=$ip',
+            leaseProps,
+          ]),
+        );
+      } catch (_) {}
+    }
+
+    final mac = _normalizeMac(macAddress);
+    if (mac != null) {
+      try {
+        await mergeLeases(
+          await _talk([
+            '/ip/dhcp-server/lease/print',
+            '?=mac-address=$mac',
+            leaseProps,
+          ]),
+        );
+      } catch (_) {}
+    }
+
+    if (leasesById.isEmpty && ((ip != null && ip.isNotEmpty) || mac != null)) {
+      try {
+        final allLeases = await _talk([
+          '/ip/dhcp-server/lease/print',
+          leaseProps,
+        ]);
+        for (final lease in allLeases) {
+          final leaseIp = lease['address']?.trim();
+          final leaseMac = _normalizeMac(lease['mac-address']);
+          final matchesIp = ip != null && ip.isNotEmpty && leaseIp == ip;
+          final matchesMac = mac != null && leaseMac == mac;
+          if (matchesIp || matchesMac) {
+            final id = lease['.id'];
+            if (id != null && id.isNotEmpty) {
+              leasesById[id] = lease;
+            }
+          }
+        }
+      } catch (_) {}
+    }
+
+    return leasesById.values.toList();
+  }
+
+  Future<String?> _resolveMacForTarget({
+    String? ipAddress,
+    String? macAddress,
+  }) async {
+    var mac = _normalizeMac(macAddress);
+    if (mac != null) {
+      return mac;
+    }
+
+    final ip = ipAddress?.trim();
+    if (ip == null || ip.isEmpty) {
+      return null;
+    }
+
+    mac = await _findMacForIp(ip);
+    if (mac != null) {
+      return mac;
+    }
+
+    try {
+      final leases = await _collectDhcpLeasesForTarget(ipAddress: ip);
+      for (final lease in leases) {
+        final leaseMac = _normalizeMac(lease['mac-address']);
+        if (leaseMac != null) {
+          return leaseMac;
+        }
+      }
+    } catch (_) {}
+
+    return null;
+  }
+
+  bool _isDropRuleForTarget(
+    Map<String, String> rule, {
+    required String ipAddress,
+    String? macAddress,
+  }) {
+    if (rule['chain'] != 'prerouting' || rule['action'] != 'drop') {
+      return false;
+    }
+
+    final ruleIp = rule['src-address']?.trim();
+    final ruleMac = _normalizeMac(rule['src-mac-address']);
+    if (ruleIp != null && ruleIp.isNotEmpty && ruleIp == ipAddress) {
+      return true;
+    }
+    if (macAddress != null &&
+        ruleMac != null &&
+        ruleMac == macAddress) {
+      return true;
+    }
+    return false;
+  }
+
+  Future<int> _removeRawBanRulesForTarget({
+    required String ipAddress,
+    String? macAddress,
+  }) async {
+    final rulesToRemove = <String, Map<String, String>>{};
+    final matchedGroupKeys = <String>{};
+
+    for (final rule in await _rawRulesFor(
+      ipAddress: ipAddress,
+      macAddress: macAddress,
+    )) {
+      final id = rule['.id'];
+      if (id == null) {
+        continue;
+      }
+      if (_isManagedBanComment(rule['comment']) ||
+          _isDropRuleForTarget(
+            rule,
+            ipAddress: ipAddress,
+            macAddress: macAddress,
+          )) {
+        rulesToRemove[id] = rule;
+        final groupKey = _managedBanCommentGroupKey(rule['comment']);
+        if (groupKey.isNotEmpty) {
+          matchedGroupKeys.add(groupKey);
+        }
+      }
+    }
+
+    if (matchedGroupKeys.isNotEmpty) {
+      final allRawRules = await _talk([
+        '/ip/firewall/raw/print',
+        _proplist([
+          '.id',
+          'chain',
+          'action',
+          'src-address',
+          'src-mac-address',
+          'comment',
+        ]),
+      ]);
+      for (final rule in allRawRules) {
+        final id = rule['.id'];
+        if (id == null || !_isManagedBanComment(rule['comment'])) {
+          continue;
+        }
+        final groupKey = _managedBanCommentGroupKey(rule['comment']);
+        if (groupKey.isNotEmpty && matchedGroupKeys.contains(groupKey)) {
+          rulesToRemove[id] = rule;
+        }
+      }
+    }
+
+    if (rulesToRemove.isEmpty) {
+      final allRawRules = await _talk([
+        '/ip/firewall/raw/print',
+        _proplist([
+          '.id',
+          'chain',
+          'action',
+          'src-address',
+          'src-mac-address',
+          'comment',
+        ]),
+      ]);
+      for (final rule in allRawRules) {
+        final id = rule['.id'];
+        if (id == null) {
+          continue;
+        }
+        if (_isDropRuleForTarget(
+          rule,
+          ipAddress: ipAddress,
+          macAddress: macAddress,
+        )) {
+          rulesToRemove[id] = rule;
+        }
+      }
+    }
+
+    var removed = 0;
+    for (final rule in rulesToRemove.values) {
+      final id = rule['.id'];
+      if (id == null) {
+        continue;
+      }
+      try {
+        await _talk(['/ip/firewall/raw/remove', '=.id=$id']);
+        removed++;
+      } catch (e) {
+        print('[UNBAN] failed to remove raw rule $id: $e');
+      }
+    }
+    return removed;
+  }
+
+  Future<bool> _setDhcpBlockForTarget({
+    String? ipAddress,
+    String? macAddress,
     required bool block,
     bool allowLegacyUnblock = false,
   }) async {
-    final mac = _normalizeMac(macAddress);
-    if (mac == null) {
+    final leases = await _collectDhcpLeasesForTarget(
+      ipAddress: ipAddress,
+      macAddress: macAddress,
+    );
+    if (leases.isEmpty) {
       return false;
     }
 
     var changed = false;
-    final leases = await _talk([
-      '/ip/dhcp-server/lease/print',
-      '?=mac-address=$mac',
-      _proplist([
-        '.id',
-        'address',
-        'mac-address',
-        'block-access',
-        'comment',
-        'status',
-        'dynamic',
-      ]),
-    ]);
-
     for (final lease in leases) {
       final id = lease['.id'];
       if (id == null) {
@@ -627,7 +867,7 @@ class MikroTikService {
           '=comment=${_withMarker(comment, _banMarker)}',
         ]);
         changed = true;
-      } else if (hasMarker || allowLegacyUnblock) {
+      } else if (allowLegacyUnblock || hasMarker || isBlocked) {
         final restoredComment = _withoutMarker(comment, _banMarker);
         await _talk([
           '/ip/dhcp-server/lease/set',
@@ -640,6 +880,62 @@ class MikroTikService {
     }
 
     return changed;
+  }
+
+  Future<bool> _setDhcpBlockForMac(
+    String macAddress, {
+    required bool block,
+    bool allowLegacyUnblock = false,
+  }) async {
+    return _setDhcpBlockForTarget(
+      macAddress: macAddress,
+      block: block,
+      allowLegacyUnblock: allowLegacyUnblock,
+    );
+  }
+
+  Future<bool> _isTargetStillBanned({
+    required String ipAddress,
+    String? macAddress,
+  }) async {
+    for (final rule in await _rawRulesFor(
+      ipAddress: ipAddress,
+      macAddress: macAddress,
+    )) {
+      if (_isDropRuleForTarget(
+        rule,
+        ipAddress: ipAddress,
+        macAddress: macAddress,
+      )) {
+        return true;
+      }
+    }
+
+    final leases = await _collectDhcpLeasesForTarget(
+      ipAddress: ipAddress,
+      macAddress: macAddress,
+    );
+    for (final lease in leases) {
+      if (_isTruthy(lease['block-access'])) {
+        return true;
+      }
+    }
+
+    final mac = _normalizeMac(macAddress);
+    if (mac != null && await _supportsWirelessFeatures()) {
+      final rules = await _accessListForMac(mac);
+      for (final rule in rules) {
+        final comment = rule['comment'];
+        final managedDeny =
+            _isManagedBanComment(comment) ||
+            ((comment == null || comment.isEmpty) && _isDenyLikeAccessRule(rule));
+        if (_isDenyLikeAccessRule(rule) && managedDeny) {
+          return true;
+        }
+      }
+    }
+
+    return false;
   }
 
   int? _ipv4ToInt(String address) {
@@ -999,7 +1295,7 @@ class MikroTikService {
       user: connection.username,
       password: connection.password,
       useSsl: connection.useSsl,
-      port: connection.port,
+      port: connection.actualPort,
     );
 
     final success = await _client!.login();
@@ -1449,6 +1745,193 @@ class MikroTikService {
     }
   }
 
+  static const List<String> _phase1LeaseProplist = [
+    '.id',
+    'address',
+    'mac-address',
+    'host-name',
+    'comment',
+    'dynamic',
+    'block-access',
+    'status',
+  ];
+
+  /// Phase 1 — bound DHCP leases only (minimal payload).
+  Future<List<Map<String, String>>> getPhase1BoundDhcpLeases() async {
+    await _requireConnection();
+
+    const proplist = _phase1LeaseProplist;
+
+    try {
+      final bound = await _talk([
+        '/ip/dhcp-server/lease/print',
+        '?status=bound',
+        _proplist(proplist),
+      ], timeout: _phaseTalkTimeout);
+      if (bound.isNotEmpty) {
+        return bound;
+      }
+    } catch (e) {
+      print('[PROGRESSIVE_LOAD] phase1 ?status=bound failed: $e');
+    }
+
+    try {
+      final leases = await _talk([
+        '/ip/dhcp-server/lease/print',
+        _proplist(proplist),
+      ], timeout: const Duration(seconds: 18));
+      return leases
+          .where((lease) => lease['status']?.toLowerCase() == 'bound')
+          .toList();
+    } catch (e) {
+      print('[PROGRESSIVE_LOAD] phase1 lease print failed: $e');
+      rethrow;
+    }
+  }
+
+  /// Phase 2a — managed ban raw rules.
+  Future<List<Map<String, String>>> getPhase2ManagedBanRawRules() async {
+    await _requireConnection();
+    try {
+      final rules = await _talk([
+        '/ip/firewall/raw/print',
+        '?action=drop',
+        _proplist([
+          '.id',
+          'action',
+          'src-address',
+          'src-mac-address',
+          'comment',
+        ]),
+      ], timeout: _phaseTalkTimeout);
+      return rules.where((rule) => _isManagedBanComment(rule['comment'])).toList();
+    } catch (e) {
+      print('[PROGRESSIVE_LOAD] phase2a drop filter failed: $e');
+      final rules = await _talk([
+        '/ip/firewall/raw/print',
+        _proplist([
+          '.id',
+          'action',
+          'src-address',
+          'src-mac-address',
+          'comment',
+        ]),
+      ], timeout: _phaseTalkTimeout);
+      return rules
+          .where(
+            (rule) =>
+                rule['action']?.toLowerCase() == 'drop' &&
+                _isManagedBanComment(rule['comment']),
+          )
+          .toList();
+    }
+  }
+
+  /// Phase 2b — ARP table (compact).
+  Future<List<Map<String, String>>> getPhase2ArpTable() async {
+    await _requireConnection();
+    return _talk([
+      '/ip/arp/print',
+      _proplist(['address', 'mac-address', 'interface']),
+    ], timeout: _phaseTalkTimeout);
+  }
+
+  /// Phase 2c — wireless registration (skipped on unsupported boards).
+  Future<List<Map<String, String>>> getPhase2WirelessRegistrations() async {
+    if (!await _supportsWirelessFeatures()) {
+      return [];
+    }
+
+    await _requireConnection();
+    try {
+      return await _talk([
+        '/interface/wireless/registration-table/print',
+        _proplist([
+          'mac-address',
+          'interface',
+          'signal-strength',
+          'ssid',
+          'last-ip',
+        ]),
+      ], timeout: _phaseTalkTimeout);
+    } catch (e) {
+      print('[PROGRESSIVE_LOAD] phase2c wireless skipped: $e');
+      return [];
+    }
+  }
+
+  /// Router info for secondary/isolated load (proplist-optimized).
+  Future<Map<String, dynamic>> getRouterInfoSecondary() async {
+    await _requireConnection();
+
+    try {
+      final resource = await _talk([
+        '/system/resource/print',
+        _proplist([
+          'uptime',
+          'version',
+          'build-time',
+          'board-name',
+          'platform',
+          'cpu-load',
+          'free-memory',
+          'total-memory',
+        ]),
+      ], timeout: const Duration(seconds: 6));
+
+      if (resource.isEmpty) {
+        throw Exception('اطلاعات روتر یافت نشد');
+      }
+
+      final resourceData = resource.first;
+      String? boardName;
+      String? model;
+      try {
+        final routerboard = await _talk([
+          '/system/routerboard/print',
+          _proplist(['board-name', 'model']),
+        ], timeout: const Duration(seconds: 4));
+        if (routerboard.isNotEmpty) {
+          boardName = routerboard.first['board-name'];
+          model = routerboard.first['model'];
+        }
+      } catch (_) {}
+
+      String? identity;
+      try {
+        final identityData = await _talk([
+          '/system/identity/print',
+          _proplist(['name']),
+        ], timeout: const Duration(seconds: 4));
+        if (identityData.isNotEmpty) {
+          identity = identityData.first['name'];
+        }
+      } catch (_) {}
+
+      final routerInfo = <String, dynamic>{
+        'uptime': resourceData['uptime'] ?? 'Unknown',
+        'version': resourceData['version'] ?? 'Unknown',
+        'build-time': resourceData['build-time'] ?? 'Unknown',
+        'board-name':
+            boardName ?? resourceData['board-name'] ?? 'Unknown',
+        'model': model ?? 'Unknown',
+        'platform': resourceData['platform'] ?? 'Unknown',
+        'cpu-load': resourceData['cpu-load'] ?? '0',
+        'free-memory': resourceData['free-memory'] ?? '0',
+        'total-memory': resourceData['total-memory'] ?? '0',
+        'identity': identity ?? 'Unknown',
+      };
+
+      final wirelessFeaturesEnabled = !_isWirelessUnsupportedRouter(routerInfo);
+      routerInfo['wireless-features-enabled'] = wirelessFeaturesEnabled;
+      _routerInfoCache = routerInfo;
+      _wirelessFeaturesEnabled = wirelessFeaturesEnabled;
+      return routerInfo;
+    } catch (e) {
+      throw Exception('خطا در دریافت اطلاعات روتر: $e');
+    }
+  }
+
   /// مسدود کردن کلاینت با استفاده از Device Fingerprint
   /// این تابع Device Fingerprint را محاسبه می‌کند و ذخیره می‌کند
   /// تا حتی با تغییر IP/MAC، دستگاه شناسایی شود
@@ -1528,7 +2011,6 @@ class MikroTikService {
     String? hostname,
     String? ssid,
   }) async {
-    // ایجاد Device Fingerprint
     final fingerprint = DeviceFingerprint.fromClientInfo(
       ipAddress,
       macAddress,
@@ -1536,132 +2018,70 @@ class MikroTikService {
       ssid,
     );
 
-    // ابتدا حذف همه rule های firewall مربوط به این Device Fingerprint
-    // این اطمینان می‌دهد که rule ها قبل از حذف Device Fingerprint حذف می‌شوند
-    try {
-      if (_client != null && isConnected) {
-        final fingerprintId = fingerprint.fingerprintId;
-
-        // حذف همه rule های firewall که comment آن‌ها شامل fingerprintId است
-        final rawRules = await _client!.talk(['/ip/firewall/raw/print']);
-        for (var rule in rawRules) {
-          final ruleComment = rule['comment']?.toString() ?? '';
-          if (ruleComment.contains('Auto-banned:') &&
-              ruleComment.contains(fingerprintId)) {
-            final ruleId = rule['.id']?.toString();
-            if (ruleId != null) {
-              try {
-                await _client!.talk([
-                  '/ip/firewall/raw/remove',
-                  '=.id=$ruleId',
-                ]);
-              } catch (e) {
-                // ignore
-              }
-            }
-          }
-        }
-      }
-    } catch (e) {
-      // ignore
-    }
-
-    // حذف Device Fingerprint
     final fingerprintService = DeviceFingerprintService();
     await fingerprintService.removeBannedFingerprint(fingerprint);
 
-    // رفع مسدودیت با استفاده از unbanClient اصلی
-    final success = await unbanClient(ipAddress, macAddress: macAddress);
-
-    // قفل اتصال جدید حذف شده - نیازی به بررسی نیست
-    // این بخش حذف شده - قفل اتصال جدید حذف شده
-
-    return success;
+    return unbanClient(ipAddress, macAddress: macAddress);
   }
 
-  /// رفع مسدودیت کلاینت
-  /// مشابه POST /api/clients/unban
+  /// رفع مسدودیت کلاینت — raw + DHCP block-access + wireless access-list
   Future<bool> unbanClient(String ipAddress, {String? macAddress}) async {
     await _requireConnection();
 
+    final normalizedIp = ipAddress.trim();
+    if (normalizedIp.isEmpty) {
+      return false;
+    }
+
     try {
-      var macToUse =
-          _normalizeMac(macAddress) ?? await _findMacForIp(ipAddress);
-      final rawRules = await _rawRulesFor(
-        ipAddress: ipAddress,
+      final macToUse = await _resolveMacForTarget(
+        ipAddress: normalizedIp,
+        macAddress: macAddress,
+      );
+
+      print(
+        '[UNBAN] target ip=$normalizedIp mac=${macToUse ?? macAddress ?? "unknown"}',
+      );
+
+      final rawRemoved = await _removeRawBanRulesForTarget(
+        ipAddress: normalizedIp,
         macAddress: macToUse,
       );
-      final rulesToRemove = <String, Map<String, String>>{};
-      final matchedGroupKeys = <String>{};
-
-      for (final rule in rawRules) {
-        final id = rule['.id'];
-        if (id == null || !_isManagedBanComment(rule['comment'])) {
-          continue;
-        }
-        rulesToRemove[id] = rule;
-        final groupKey = _managedBanCommentGroupKey(rule['comment']);
-        if (groupKey.isNotEmpty) {
-          matchedGroupKeys.add(groupKey);
-        }
-        macToUse ??= _normalizeMac(rule['src-mac-address']);
-      }
-
-      if (matchedGroupKeys.isNotEmpty) {
-        final allRawRules = await _talk([
-          '/ip/firewall/raw/print',
-          _proplist([
-            '.id',
-            'chain',
-            'action',
-            'src-address',
-            'src-mac-address',
-            'comment',
-          ]),
-        ]);
-
-        for (final rule in allRawRules) {
-          final id = rule['.id'];
-          if (id == null || !_isManagedBanComment(rule['comment'])) {
-            continue;
-          }
-          final groupKey = _managedBanCommentGroupKey(rule['comment']);
-          if (groupKey.isNotEmpty && matchedGroupKeys.contains(groupKey)) {
-            rulesToRemove[id] = rule;
-            macToUse ??= _normalizeMac(rule['src-mac-address']);
-          }
-        }
-      }
-
-      var removedManagedRawRule = false;
-      for (final rule in rulesToRemove.values) {
-        final id = rule['.id'];
-        try {
-          await _talk(['/ip/firewall/raw/remove', '=.id=$id']);
-          removedManagedRawRule = true;
-        } catch (_) {}
-      }
+      print('[UNBAN] raw rules removed: $rawRemoved');
 
       var dhcpUnblocked = false;
+      try {
+        dhcpUnblocked = await _setDhcpBlockForTarget(
+          ipAddress: normalizedIp,
+          macAddress: macToUse,
+          block: false,
+          allowLegacyUnblock: true,
+        );
+      } catch (e) {
+        print('[UNBAN] dhcp unblock error: $e');
+      }
+      print('[UNBAN] dhcp unblocked: $dhcpUnblocked');
+
       var wirelessUnblocked = false;
       if (macToUse != null) {
-        try {
-          dhcpUnblocked = await _setDhcpBlockForMac(
-            macToUse,
-            block: false,
-            allowLegacyUnblock: true,
-          );
-        } catch (_) {}
-
         try {
           wirelessUnblocked = await _removeManagedAccessRules(
             macToUse,
             includeLegacyEmptyDeny: true,
           );
-        } catch (_) {}
+        } catch (e) {
+          print('[UNBAN] wireless unblock error: $e');
+        }
       }
+      print('[UNBAN] wireless unblocked: $wirelessUnblocked');
 
-      return removedManagedRawRule || dhcpUnblocked || wirelessUnblocked;
+      final stillBanned = await _isTargetStillBanned(
+        ipAddress: normalizedIp,
+        macAddress: macToUse,
+      );
+      print('[UNBAN] still banned after cleanup: $stillBanned');
+
+      return !stillBanned;
     } catch (e) {
       throw Exception('Unban failed: $e');
     }
@@ -2344,8 +2764,29 @@ class MikroTikService {
     await _requireConnection();
 
     try {
-      // دریافت اطلاعات از /system/resource/print (همه اطلاعات در یک جا)
-      final resource = await _client!.talk(['/system/resource/print']);
+      final resource = await _talk([
+        '/system/resource/print',
+        _proplist([
+          'uptime',
+          'version',
+          'build-time',
+          'factory-software',
+          'free-memory',
+          'total-memory',
+          'cpu',
+          'cpu-count',
+          'cpu-frequency',
+          'cpu-load',
+          'free-hdd-space',
+          'total-hdd-space',
+          'write-sect-since-reboot',
+          'write-sect-total',
+          'bad-blocks',
+          'architecture-name',
+          'board-name',
+          'platform',
+        ]),
+      ]);
 
       if (resource.isEmpty) {
         throw Exception('اطلاعات روتر یافت نشد');
@@ -2357,7 +2798,10 @@ class MikroTikService {
       String? boardName;
       String? model;
       try {
-        final routerboard = await _client!.talk(['/system/routerboard/print']);
+        final routerboard = await _talk([
+          '/system/routerboard/print',
+          _proplist(['board-name', 'model']),
+        ], timeout: const Duration(seconds: 4));
         if (routerboard.isNotEmpty) {
           boardName = routerboard[0]['board-name']?.toString();
           model = routerboard[0]['model']?.toString();
@@ -2369,7 +2813,10 @@ class MikroTikService {
       // دریافت identity از /system/identity/print
       String? identity;
       try {
-        final identityData = await _client!.talk(['/system/identity/print']);
+        final identityData = await _talk([
+          '/system/identity/print',
+          _proplist(['name']),
+        ], timeout: const Duration(seconds: 4));
         if (identityData.isNotEmpty) {
           identity = identityData[0]['name']?.toString();
         }

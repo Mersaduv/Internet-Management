@@ -1727,8 +1727,8 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
 
     try {
       final provider = Provider.of<ClientsProvider>(context, listen: false);
-      final success = await provider.banClient(
-        widget.device.ipAddress!,
+      final success = await provider.banClientFast(
+        ipAddress: widget.device.ipAddress!,
         macAddress: widget.device.macAddress,
         hostname: _displayHostName ?? widget.device.hostName,
         ssid: widget.device.ssid,
@@ -1737,7 +1737,7 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
       if (_isDisposed || !mounted) return;
 
       if (success) {
-        Navigator.pop(context, true);
+        Navigator.pop(context, const {'action': 'banned'});
         return;
       }
 

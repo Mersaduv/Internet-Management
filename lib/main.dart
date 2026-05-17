@@ -338,9 +338,12 @@ class _SplashScreenState extends State<SplashScreen> {
       return;
     }
 
-    if (success) {
+    if (success && manager.isConnected) {
       Navigator.of(context).pushReplacementNamed('/home');
     } else {
+      if (success && !manager.isConnected) {
+        debugPrint('[AUTO_LOGIN] connect returned true but session is dead');
+      }
       Navigator.of(context).pushReplacementNamed('/login');
     }
   }
@@ -442,6 +445,12 @@ class _MainScaffoldState extends State<MainScaffold> {
 
   /// بررسی انقضای لاگین
   Future<void> _checkLoginExpiration() async {
+    final timestamp = await _settingsService.getLoginTimestamp();
+    if (timestamp == null && _serviceManager.isConnected) {
+      await _settingsService.setLoginTimestamp();
+      return;
+    }
+
     final isExpired = await _settingsService.isLoginExpired();
     if (isExpired && mounted) {
       // اگر لاگین منقضی شده باشد، به صفحه ورود هدایت کن
@@ -578,9 +587,12 @@ class _HomePageState extends State<HomePage> with RouteAware {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      // مقداردهی اولیه Provider
       final provider = Provider.of<ClientsProvider>(context, listen: false);
-      provider.initialize();
+      if (!provider.phase1Complete &&
+          !provider.isLoading &&
+          provider.clients.isEmpty) {
+        provider.initialize();
+      }
     });
   }
 
@@ -617,7 +629,11 @@ class _HomePageState extends State<HomePage> with RouteAware {
     }
 
     final provider = Provider.of<ClientsProvider>(context, listen: false);
-    await provider.refresh();
+    if (_selectedTab == 1) {
+      await provider.ensureBannedListLoaded(force: true);
+    } else {
+      await provider.refresh();
+    }
   }
 
   Widget _buildPullToRefresh({
@@ -640,8 +656,10 @@ class _HomePageState extends State<HomePage> with RouteAware {
       _selectedTab = index;
     });
 
-    final provider = Provider.of<ClientsProvider>(context, listen: false);
-    unawaited(provider.refresh());
+    if (index == 1) {
+      final provider = Provider.of<ClientsProvider>(context, listen: false);
+      unawaited(provider.ensureBannedListLoaded());
+    }
   }
 
   @override
@@ -708,7 +726,9 @@ class _HomePageState extends State<HomePage> with RouteAware {
                     width: double.infinity,
                     padding: const EdgeInsets.all(16),
                     color: colorScheme.surface,
-                    child: Column(
+                    child: !provider.phase3Complete
+                        ? _buildConnectionHeaderSkeleton(context)
+                        : Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Row(
@@ -838,7 +858,8 @@ class _HomePageState extends State<HomePage> with RouteAware {
                             Expanded(
                               child: ElevatedButton.icon(
                                 onPressed:
-                                    provider.isLoading ||
+                                    (!provider.phase1Complete &&
+                                            provider.isLoading) ||
                                         provider.isLockUpdating
                                     ? null
                                     : () async {
@@ -1081,9 +1102,35 @@ class _HomePageState extends State<HomePage> with RouteAware {
     );
   }
 
+  Widget _buildConnectionHeaderSkeleton(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const _SkeletonBox(width: 20, height: 20),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: const [
+                  _SkeletonBox(width: 160, height: 16),
+                  SizedBox(height: 6),
+                  _SkeletonBox(width: 100, height: 12),
+                ],
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        const _SkeletonBox(width: 140, height: 12),
+      ],
+    );
+  }
+
   Widget _buildConnectedDevicesTab(ClientsProvider provider) {
     // نمایش skeleton فقط در حالت initial loading
-    if (provider.isLoading && provider.clients.isEmpty) {
+    if (provider.isLoading && !provider.phase1Complete && provider.clients.isEmpty) {
       return Column(
         children: [
           Expanded(
@@ -1295,9 +1342,16 @@ class _HomePageState extends State<HomePage> with RouteAware {
   }
 
   Widget _buildBannedDevicesTab(ClientsProvider provider) {
+    if (provider.isBannedListLoading && provider.bannedClients.isEmpty) {
+      return ListView.builder(
+        itemCount: 4,
+        itemBuilder: (context, index) => _buildSkeletonCard(),
+      );
+    }
+
     if (provider.bannedClients.isEmpty) {
       return _buildPullToRefresh(
-        onRefresh: provider.refresh,
+        onRefresh: () => provider.ensureBannedListLoaded(force: true),
         child: ListView(
           physics: const BouncingScrollPhysics(
             parent: AlwaysScrollableScrollPhysics(),
@@ -1333,7 +1387,7 @@ class _HomePageState extends State<HomePage> with RouteAware {
     }
 
     return _buildPullToRefresh(
-      onRefresh: provider.refresh,
+      onRefresh: () => provider.ensureBannedListLoaded(force: true),
       child: ListView.builder(
         physics: const BouncingScrollPhysics(
           parent: AlwaysScrollableScrollPhysics(),
@@ -1535,6 +1589,10 @@ class _HomePageState extends State<HomePage> with RouteAware {
                               if (mounted) {
                                 final l10n = AppLocalizations.of(context);
                                 if (success) {
+                                  provider.reconcileHomeListsAfterBanOrUnban();
+                                  setState(() {
+                                    _selectedTab = 0;
+                                  });
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     SnackBar(
                                       content: Row(
@@ -1557,7 +1615,11 @@ class _HomePageState extends State<HomePage> with RouteAware {
                                       duration: Duration(seconds: 3),
                                     ),
                                   );
-                                  await provider.refresh();
+                                  unawaited(
+                                    provider.ensureBannedListLoaded(
+                                      force: true,
+                                    ),
+                                  );
                                 } else {
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     SnackBar(
@@ -1623,6 +1685,7 @@ class _HomePageState extends State<HomePage> with RouteAware {
     String typeLabel;
     final bool isCurrentDevice =
         deviceIp != null && client.ipAddress == deviceIp;
+    final showPhase2Skeleton = !provider.phase2Complete;
 
     switch (client.type) {
       case 'wireless':
@@ -1661,17 +1724,43 @@ class _HomePageState extends State<HomePage> with RouteAware {
     final isApprovalBusy = provider.isApprovalActionInProgress(client);
 
     Future<void> openDeviceDetail() async {
-      final refreshRequested = await Navigator.pushNamed(
+      final result = await Navigator.pushNamed(
         context,
         '/device-detail',
         arguments: {'device': client, 'isCurrentDevice': isCurrentDevice},
       );
 
-      if (!mounted || refreshRequested != true) {
+      if (!mounted) {
         return;
       }
 
-      await provider.refresh();
+      if (result is Map && result['action'] == 'banned') {
+        provider.reconcileHomeListsAfterBanOrUnban();
+        setState(() {
+          _selectedTab = 1;
+        });
+        final l10n = AppLocalizations.of(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              l10n?.deviceBannedSuccess ?? 'Device banned successfully',
+            ),
+            backgroundColor: const Color(0xFF428B7C),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        unawaited(provider.ensureBannedListLoaded(force: true));
+        return;
+      }
+
+      if (result == true) {
+        provider.reconcileHomeListsAfterBanOrUnban();
+        setState(() {
+          _selectedTab = 0;
+        });
+        unawaited(provider.loadClients(showLoading: false));
+        return;
+      }
     }
 
     Future<void> runPendingAction({required bool approve}) async {
@@ -1681,6 +1770,13 @@ class _HomePageState extends State<HomePage> with RouteAware {
           ? await provider.approveDevice(client)
           : await provider.rejectDevice(client);
       if (!mounted) return;
+
+      if (!approve && success) {
+        setState(() {
+          _selectedTab = 1;
+        });
+        unawaited(provider.ensureBannedListLoaded(force: true));
+      }
 
       messenger.showSnackBar(
         SnackBar(
@@ -1800,6 +1896,9 @@ class _HomePageState extends State<HomePage> with RouteAware {
             children: [
               Stack(
                 children: [
+                  if (showPhase2Skeleton)
+                    const _SkeletonBox(width: 48, height: 48, borderRadius: 24)
+                  else
                   CircleAvatar(
                     backgroundColor: isCurrentDevice
                         ? const Color(0xFF428B7C).withOpacity(0.2)
@@ -1956,6 +2055,33 @@ class _HomePageState extends State<HomePage> with RouteAware {
                               : Colors.grey.shade500,
                         ),
                       ),
+                    if (showPhase2Skeleton) ...[
+                      const SizedBox(height: 6),
+                      Row(
+                        children: const [
+                          _SkeletonBox(width: 14, height: 10),
+                          SizedBox(width: 3),
+                          _SkeletonBox(width: 14, height: 10),
+                          SizedBox(width: 3),
+                          _SkeletonBox(width: 14, height: 10),
+                          SizedBox(width: 8),
+                          _SkeletonBox(width: 48, height: 10),
+                        ],
+                      ),
+                    ] else if (client.signalStrength != null &&
+                        client.signalStrength!.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        '${client.signalStrength} dBm'
+                            '${client.ssid != null && client.ssid!.isNotEmpty ? ' · ${client.ssid}' : ''}',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: theme.brightness == Brightness.dark
+                              ? colorScheme.onSurface.withOpacity(0.55)
+                              : Colors.grey.shade500,
+                        ),
+                      ),
+                    ],
                     if (isPendingApproval) pendingApprovalPanel(),
                   ],
                 ),
@@ -2039,5 +2165,69 @@ class _HomePageState extends State<HomePage> with RouteAware {
       return '${AppLocalizations.of(context)?.device ?? 'Device'} ${client.macAddress}';
     }
     return AppLocalizations.of(context)?.unknownDevice ?? 'Unknown Device';
+  }
+}
+
+class _SkeletonBox extends StatefulWidget {
+  const _SkeletonBox({
+    required this.width,
+    required this.height,
+    this.borderRadius = 4,
+  });
+
+  final double width;
+  final double height;
+  final double borderRadius;
+
+  @override
+  State<_SkeletonBox> createState() => _SkeletonBoxState();
+}
+
+class _SkeletonBoxState extends State<_SkeletonBox>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  late final Animation<double> _opacity;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 800),
+    )..repeat(reverse: true);
+    _opacity = Tween<double>(begin: 0.3, end: 0.7).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final baseColor = Theme.of(context).brightness == Brightness.dark
+        ? Colors.grey.shade700
+        : Colors.grey.shade300;
+
+    return AnimatedBuilder(
+      animation: _opacity,
+      builder: (context, child) {
+        return Opacity(
+          opacity: _opacity.value,
+          child: child,
+        );
+      },
+      child: Container(
+        width: widget.width,
+        height: widget.height,
+        decoration: BoxDecoration(
+          color: baseColor,
+          borderRadius: BorderRadius.circular(widget.borderRadius),
+        ),
+      ),
+    );
   }
 }
