@@ -1,6 +1,11 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
+
+import '../models/mikrotik_connection.dart';
 import 'connection_heartbeat.dart';
 import 'mikrotik_service.dart';
-import '../models/mikrotik_connection.dart';
+import 'settings_service.dart';
 
 /// مدیر سرویس MikroTik - Singleton برای نگه‌داری اتصال در کل برنامه
 class MikroTikServiceManager {
@@ -25,6 +30,45 @@ class MikroTikServiceManager {
 
   /// دریافت اطلاعات روتر (کامل - شامل uptime, version, board-name, platform و ...)
   Map<String, dynamic>? get routerInfo => _routerInfo;
+
+  /// تلاش برای auto-login با اعتبارنامه و تنظیمات ذخیره‌شده.
+  /// هرگز throw نمی‌کند.
+  Future<bool> autoConnect() async {
+    try {
+      final settingsService = SettingsService();
+
+      if (!await settingsService.hasValidSession()) {
+        await settingsService.clearCredentials();
+        await settingsService.clearLoginTimestamp();
+        return false;
+      }
+
+      final credentials = await settingsService.getSavedCredentials();
+      if (credentials == null) {
+        return false;
+      }
+
+      final settings = await settingsService.getAllSettings();
+      final connection = MikroTikConnection(
+        host: settings['host'] as String? ?? '192.168.88.1',
+        port: settings['port'] as int? ?? 8728,
+        username: credentials['username']!,
+        password: credentials['password']!,
+        useSsl: settings['useSsl'] as bool? ?? false,
+      );
+
+      final success = await connect(connection).timeout(
+        const Duration(seconds: 10),
+        onTimeout: () {
+          throw TimeoutException('Auto-login timeout');
+        },
+      );
+      return success;
+    } catch (e) {
+      debugPrint('[AUTO_LOGIN] Failed: $e');
+      return false;
+    }
+  }
 
   /// اتصال به MikroTik
   Future<bool> connect(MikroTikConnection connection) async {

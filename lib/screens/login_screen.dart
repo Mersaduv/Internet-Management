@@ -123,7 +123,12 @@ class _LoginScreenState extends State<LoginScreen> {
       if (success) {
         // ذخیره زمان لاگین
         await _settingsService.setLoginTimestamp();
-        
+
+        await _settingsService.saveCredentials(
+          username: _usernameController.text.trim(),
+          password: _passwordController.text,
+        );
+
         // اتصال موفق - مقداردهی اولیه Provider و انتقال به صفحه اصلی
         if (mounted) {
           // Provider در initState صفحه اصلی initialize می‌شود

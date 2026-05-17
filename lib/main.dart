@@ -281,7 +281,8 @@ class _MyAppState extends State<MyApp> {
         navigatorObservers: [routeObserver],
         initialRoute: '/',
         routes: {
-          '/': (context) => const LoginScreen(),
+          '/': (context) => const SplashScreen(),
+          '/login': (context) => const LoginScreen(),
           '/home': (context) => const MainScaffold(),
           '/test': (context) => const ConnectionTestScreen(),
           '/device-detail': (context) {
@@ -303,6 +304,66 @@ class _MyAppState extends State<MyApp> {
             child: child!,
           );
         },
+      ),
+    );
+  }
+}
+
+/// صفحه splash — تلاش auto-login قبل از Login یا Home
+class SplashScreen extends StatefulWidget {
+  const SplashScreen({super.key});
+
+  @override
+  State<SplashScreen> createState() => _SplashScreenState();
+}
+
+class _SplashScreenState extends State<SplashScreen> {
+  @override
+  void initState() {
+    super.initState();
+    _attemptAutoLogin();
+  }
+
+  Future<void> _attemptAutoLogin() async {
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+
+    if (!mounted) {
+      return;
+    }
+
+    final manager = MikroTikServiceManager();
+    final success = await manager.autoConnect();
+
+    if (!mounted) {
+      return;
+    }
+
+    if (success) {
+      Navigator.of(context).pushReplacementNamed('/home');
+    } else {
+      Navigator.of(context).pushReplacementNamed('/login');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Scaffold(
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Image.asset(
+              isDark
+                  ? 'assets/images/logos/logo_dark.png'
+                  : 'assets/images/logos/logo.png',
+              width: 120,
+              height: 120,
+            ),
+            const SizedBox(height: 24),
+            const CircularProgressIndicator(color: Color(0xFF428B7C)),
+          ],
+        ),
       ),
     );
   }
@@ -387,9 +448,10 @@ class _MainScaffoldState extends State<MainScaffold> {
       final provider = Provider.of<ClientsProvider>(context, listen: false);
       provider.clear();
       _serviceManager.disconnect();
+      await _settingsService.clearCredentials();
       await _settingsService.clearLoginTimestamp();
       if (mounted) {
-        Navigator.of(context).pushReplacementNamed('/');
+        Navigator.of(context).pushReplacementNamed('/login');
       }
     }
   }

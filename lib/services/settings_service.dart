@@ -1,5 +1,6 @@
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// سرویس برای مدیریت تنظیمات اتصال MikroTik
 class SettingsService {
@@ -14,6 +15,14 @@ class SettingsService {
   static const String _keyLoginTimestamp = 'login_timestamp';
   static const String _keyLanguage = 'app_language';
   static const String _keyThemeMode = 'app_theme_mode';
+
+  static const _secureStorage = FlutterSecureStorage(
+    aOptions: AndroidOptions(encryptedSharedPreferences: true),
+    iOptions: IOSOptions(accessibility: KeychainAccessibility.first_unlock),
+  );
+
+  static const _keyUsername = 'secure_username';
+  static const _keyPassword = 'secure_password';
 
   // مقادیر پیش‌فرض
   static const String _defaultHost = '192.168.88.1';
@@ -196,6 +205,41 @@ class SettingsService {
     } catch (e) {
       // اگر shared_preferences کار نکرد، نادیده بگیر
     }
+  }
+
+  /// ذخیره اعتبارنامه پس از ورود موفق (Keychain / Keystore)
+  Future<void> saveCredentials({
+    required String username,
+    required String password,
+  }) async {
+    await _secureStorage.write(key: _keyUsername, value: username);
+    await _secureStorage.write(key: _keyPassword, value: password);
+  }
+
+  /// بازیابی اعتبارنامه ذخیره‌شده
+  Future<Map<String, String>?> getSavedCredentials() async {
+    final username = await _secureStorage.read(key: _keyUsername);
+    final password = await _secureStorage.read(key: _keyPassword);
+    if (username == null || password == null) {
+      return null;
+    }
+    return {'username': username, 'password': password};
+  }
+
+  /// پاک کردن اعتبارنامه (خروج یا انقضای session)
+  Future<void> clearCredentials() async {
+    await _secureStorage.delete(key: _keyUsername);
+    await _secureStorage.delete(key: _keyPassword);
+  }
+
+  /// session معتبر: login_timestamp وجود دارد و کمتر از ۱۴ روز گذشته
+  Future<bool> hasValidSession() async {
+    final timestamp = await getLoginTimestamp();
+    if (timestamp == null) {
+      return false;
+    }
+    final loginTime = DateTime.fromMillisecondsSinceEpoch(timestamp);
+    return DateTime.now().difference(loginTime).inDays < 14;
   }
 
   /// دریافت زبان برنامه

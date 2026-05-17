@@ -541,12 +541,12 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
       provider.clear();
       _serviceManager.disconnect();
       
-      // 清除登录时间戳
       final settingsService = SettingsService();
+      await settingsService.clearCredentials();
       await settingsService.clearLoginTimestamp();
-      
+
       if (mounted) {
-        Navigator.of(context).pushReplacementNamed('/');
+        Navigator.of(context).pushReplacementNamed('/login');
       }
     }
   }

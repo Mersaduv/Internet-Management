@@ -49,6 +49,9 @@ dependencies:
   
   # Shared Preferences برای ذخیره تنظیمات
   shared_preferences: ^2.2.2
+
+  # ذخیره امن اعتبارنامه برای auto-login
+  flutter_secure_storage: ^9.2.2
   
   # Provider برای مدیریت state
   provider: ^6.1.1
