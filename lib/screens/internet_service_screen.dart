@@ -2,9 +2,19 @@ import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import '../services/settings_service.dart';
 
-/// صفحه سرویس انترنت با WebView کامل
+/// صفحه WebView برای سرویس انترنت یا پنل‌های ثابت (مثل اطلاعات وای‌فای)
 class InternetServiceScreen extends StatefulWidget {
-  const InternetServiceScreen({super.key});
+  const InternetServiceScreen({
+    super.key,
+    this.fixedUrl,
+    this.defaultTitle,
+    this.allowUrlChange = true,
+  });
+
+  /// در صورت تنظیم، این آدرس به‌جای URL ذخیره‌شده در تنظیمات بارگذاری می‌شود.
+  final String? fixedUrl;
+  final String? defaultTitle;
+  final bool allowUrlChange;
 
   @override
   State<InternetServiceScreen> createState() => _InternetServiceScreenState();
@@ -33,7 +43,7 @@ class _InternetServiceScreenState extends State<InternetServiceScreen> {
 
   Future<void> _loadUrl() async {
     try {
-      final url = await _settingsService.getServiceUrl();
+      final url = widget.fixedUrl ?? await _settingsService.getServiceUrl();
       if (mounted) {
         setState(() {
           _currentUrl = url;
@@ -80,6 +90,8 @@ class _InternetServiceScreenState extends State<InternetServiceScreen> {
   }
 
   Future<void> _showUrlInputDialog() async {
+    if (!widget.allowUrlChange) return;
+
     final urlController = TextEditingController(text: _currentUrl);
     
     final result = await showDialog<String>(
@@ -158,7 +170,7 @@ class _InternetServiceScreenState extends State<InternetServiceScreen> {
               ),
               child: AppBar(
                 title: Text(
-                  _pageTitle ?? 'سرویس انترنت',
+                  _pageTitle ?? widget.defaultTitle ?? 'سرویس انترنت',
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     color: theme.brightness == Brightness.dark
@@ -192,12 +204,12 @@ class _InternetServiceScreenState extends State<InternetServiceScreen> {
                     onPressed: _reload,
                     tooltip: 'بارگذاری مجدد',
                   ),
-                  // دکمه تنظیمات URL
-                  IconButton(
-                    icon: const Icon(Icons.link),
-                    onPressed: _showUrlInputDialog,
-                    tooltip: 'تغییر آدرس',
-                  ),
+                  if (widget.allowUrlChange)
+                    IconButton(
+                      icon: const Icon(Icons.link),
+                      onPressed: _showUrlInputDialog,
+                      tooltip: 'تغییر آدرس',
+                    ),
                 ],
               ),
             ),
@@ -356,20 +368,22 @@ class _InternetServiceScreenState extends State<InternetServiceScreen> {
                         ),
                       ),
                     ),
-                    const SizedBox(height: 12),
-                    OutlinedButton.icon(
-                      onPressed: _showUrlInputDialog,
-                      icon: const Icon(Icons.link),
-                      label: const Text('تغییر آدرس'),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: _primaryColor,
-                        side: BorderSide(color: _primaryColor),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 24,
-                          vertical: 12,
+                    if (widget.allowUrlChange) ...[
+                      const SizedBox(height: 12),
+                      OutlinedButton.icon(
+                        onPressed: _showUrlInputDialog,
+                        icon: const Icon(Icons.link),
+                        label: const Text('تغییر آدرس'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: _primaryColor,
+                          side: BorderSide(color: _primaryColor),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 24,
+                            vertical: 12,
+                          ),
                         ),
                       ),
-                    ),
+                    ],
                   ],
                 ),
               ),

@@ -5,6 +5,7 @@ import '../providers/clients_provider.dart';
 import 'package:provider/provider.dart';
 import '../main.dart';
 import '../utils/app_localizations.dart';
+import 'internet_service_screen.dart';
 
 /// 应用设置页面
 class AppSettingsScreen extends StatefulWidget {
@@ -368,6 +369,46 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
               ),
               child: Column(
                 children: [
+                  ListTile(
+                    leading: Icon(
+                      Icons.wifi,
+                      color: _primaryColor,
+                    ),
+                    title: Text(
+                      l10n?.wifiInfo ?? 'اطلاعات Wifi',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                    ),
+                    subtitle: Text(
+                      l10n?.wifiInfoSubtitle ??
+                          'نمایش اطلاعات وایفای و تغییر نام و رمز وایفای',
+                      style: TextStyle(
+                        color: Colors.grey.shade600,
+                        fontSize: 14,
+                      ),
+                    ),
+                    trailing: const Icon(
+                      Icons.arrow_forward_ios,
+                      size: 16,
+                      color: _primaryColor,
+                    ),
+                    onTap: () {
+                      final wifiTitle = l10n?.wifiInfo ?? 'اطلاعات Wifi';
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => InternetServiceScreen(
+                            fixedUrl: 'http://10.10.10.2/',
+                            defaultTitle: wifiTitle,
+                            allowUrlChange: false,
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                  const Divider(height: 1),
                   // 语言选择
                   ListTile(
                     leading: Icon(

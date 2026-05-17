@@ -99,6 +99,11 @@ class AppLocalizations {
   String get home => locale.languageCode == 'en' ? 'Home' : 'خانه';
   String get internetService =>
       locale.languageCode == 'en' ? 'Internet Service' : 'سرویس انترنت';
+  String get wifiInfo =>
+      locale.languageCode == 'en' ? 'WiFi Information' : 'اطلاعات Wifi';
+  String get wifiInfoSubtitle => locale.languageCode == 'en'
+      ? 'View WiFi info and change WiFi name and password'
+      : 'نمایش اطلاعات وایفای و تغییر نام و رمز وایفای';
   String get connectedDevices =>
       locale.languageCode == 'en' ? 'Connected Devices' : 'دستگاه‌های متصل';
   String get bannedDevices =>
