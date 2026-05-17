@@ -11,10 +11,12 @@ import 'routeros_client_v2.dart' show RouterOSClientV2;
 class MikroTikService {
   RouterOSClientV2? _client;
   MikroTikConnection? _connection;
+  MikroTikConnection? _lastConnection;
   Map<String, dynamic>? _routerInfoCache;
   bool? _wirelessFeaturesEnabled;
+  bool _reconnectInProgress = false;
 
-  static const Duration _apiTimeout = Duration(seconds: 5);
+  static const Duration _apiTimeout = Duration(seconds: 10);
   static const String _appPrefix = 'Ariyabod';
   static const String _banMarker = '[$_appPrefix BAN]';
   static const String _staticOnlyPool = 'static-only';
@@ -212,15 +214,89 @@ class MikroTikService {
         .join(' ');
   }
 
+  Future<void> _requireConnection() async {
+    if (!await ensureConnected()) {
+      throw Exception('Cannot connect to router');
+    }
+  }
+
+  /// Verifies the API socket is alive; reconnects using saved credentials if needed.
+  Future<bool> ensureConnected() async {
+    if (_lastConnection == null) {
+      print('[SERVICE] ensureConnected: no saved connection');
+      return false;
+    }
+
+    final client = _client;
+    if (client == null || !client.isConnected) {
+      print('[SERVICE] ensureConnected: client missing, reconnecting');
+      return _tryReconnect();
+    }
+
+    try {
+      final alive = await client.isAlive(
+        timeout: const Duration(seconds: 3),
+      );
+      if (!alive) {
+        print('[SERVICE] ensureConnected: isAlive=false, reconnecting');
+        return _tryReconnect();
+      }
+      return true;
+    } catch (e) {
+      print('[SERVICE] ensureConnected: isAlive error: $e');
+      return _tryReconnect();
+    }
+  }
+
+  Future<bool> _tryReconnect() async {
+    if (_lastConnection == null) {
+      return false;
+    }
+    if (_reconnectInProgress) {
+      print('[SERVICE] reconnect already in progress');
+      return _client?.isConnected ?? false;
+    }
+
+    _reconnectInProgress = true;
+    try {
+      for (var attempt = 1; attempt <= 3; attempt++) {
+        if (attempt > 1) {
+          final delayMs = 500 * attempt;
+          print('[SERVICE] reconnect backoff ${delayMs}ms before attempt $attempt');
+          await Future<void>.delayed(Duration(milliseconds: delayMs));
+        }
+        print('[SERVICE] reconnect attempt $attempt/3');
+        try {
+          final ok = await _connectInternal(_lastConnection!);
+          if (ok) {
+            print('[SERVICE] reconnect succeeded on attempt $attempt');
+            return true;
+          }
+        } catch (e) {
+          print('[SERVICE] reconnect attempt $attempt failed: $e');
+        }
+      }
+      print('[SERVICE] reconnect failed after 3 attempts');
+      return false;
+    } finally {
+      _reconnectInProgress = false;
+    }
+  }
+
   Future<List<Map<String, String>>> _talk(
     List<String> command, {
     Duration timeout = _apiTimeout,
   }) async {
+    if (!await ensureConnected()) {
+      throw Exception('Cannot connect to router');
+    }
+
     final summary = _commandSummary(command);
 
     try {
       return await _client!.talk(command).timeout(timeout);
     } on TimeoutException catch (e) {
+      _client?.invalidateConnection();
       throw Exception('Timeout در اجرای دستور MikroTik: $summary | $e');
     } catch (e) {
       throw Exception('خطا در اجرای دستور MikroTik: $summary | $e');
@@ -734,9 +810,7 @@ class MikroTikService {
   }
 
   Future<bool> makeClientStatic({String? ipAddress, String? macAddress}) async {
-    if (_client == null || !isConnected) {
-      throw Exception('Connection is not established');
-    }
+    await _requireConnection();
 
     final ip = ipAddress?.trim();
     final mac = _normalizeMac(macAddress);
@@ -816,9 +890,7 @@ class MikroTikService {
   }
 
   Future<bool> lockNewConnections() async {
-    if (_client == null || !isConnected) {
-      throw Exception('Connection is not established');
-    }
+    await _requireConnection();
 
     final server = await _getPrimaryDhcpServer();
     final id = server['.id'];
@@ -835,9 +907,7 @@ class MikroTikService {
   }
 
   Future<bool> unlockNewConnections() async {
-    if (_client == null || !isConnected) {
-      throw Exception('Connection is not established');
-    }
+    await _requireConnection();
 
     final server = await _getPrimaryDhcpServer();
     final id = server['.id'];
@@ -855,7 +925,7 @@ class MikroTikService {
   }
 
   Future<bool> isNewConnectionsLocked() async {
-    if (_client == null || !isConnected) {
+    if (!await ensureConnected()) {
       return false;
     }
 
@@ -873,9 +943,7 @@ class MikroTikService {
     String? macAddress,
     required String displayName,
   }) async {
-    if (_client == null || !isConnected) {
-      throw Exception('Connection is not established');
-    }
+    await _requireConnection();
 
     final normalizedName = displayName.trim();
     if (normalizedName.isEmpty) {
@@ -912,23 +980,8 @@ class MikroTikService {
     try {
       _routerInfoCache = null;
       _wirelessFeaturesEnabled = null;
-      _connection = connection;
-      _client = RouterOSClientV2(
-        address: connection.host,
-        user: connection.username,
-        password: connection.password,
-        useSsl: connection.useSsl,
-        port: connection.port,
-      );
-
-      final success = await _client!.login();
-      if (!success) {
-        _client = null;
-        _connection = null;
-        _routerInfoCache = null;
-        _wirelessFeaturesEnabled = null;
-      }
-      return success;
+      _lastConnection = connection;
+      return await _connectInternal(connection);
     } catch (e) {
       _client = null;
       _connection = null;
@@ -938,14 +991,39 @@ class MikroTikService {
     }
   }
 
+  Future<bool> _connectInternal(MikroTikConnection connection) async {
+    _client?.close();
+    _connection = connection;
+    _client = RouterOSClientV2(
+      address: connection.host,
+      user: connection.username,
+      password: connection.password,
+      useSsl: connection.useSsl,
+      port: connection.port,
+    );
+
+    final success = await _client!.login();
+    if (!success) {
+      _client = null;
+      _connection = null;
+      _routerInfoCache = null;
+      _wirelessFeaturesEnabled = null;
+    } else {
+      print('[SERVICE] connected to ${connection.host}:${connection.port}');
+    }
+    return success;
+  }
+
   /// بررسی اتصال
   bool get isConnected => _client?.isConnected ?? false;
 
   /// بستن اتصال
   void disconnect() {
+    print('[SERVICE] disconnect');
     _client?.close();
     _client = null;
     _connection = null;
+    _lastConnection = null;
     _routerInfoCache = null;
     _wirelessFeaturesEnabled = null;
   }
@@ -953,9 +1031,7 @@ class MikroTikService {
   /// دریافت همه کاربران و دستگاه‌های متصل
   /// مشابه POST /api/clients/all
   Future<Map<String, dynamic>> getAllClients() async {
-    if (_client == null || !isConnected) {
-      throw Exception('اتصال برقرار نشده');
-    }
+    await _requireConnection();
 
     try {
       final allClients = <ClientInfo>[];
@@ -1088,9 +1164,7 @@ class MikroTikService {
   /// دریافت جزئیات کامل همه کاربران
   /// مشابه POST /api/clients/detailed
   Future<Map<String, dynamic>> getClientsDetailed() async {
-    if (_client == null || !isConnected) {
-      throw Exception('اتصال برقرار نشده');
-    }
+    await _requireConnection();
 
     try {
       // دریافت ARP table
@@ -1170,9 +1244,7 @@ class MikroTikService {
   /// دریافت لیست کاربران متصل
   /// مشابه POST /api/clients/connected
   Future<Map<String, dynamic>> getConnectedClients() async {
-    if (_client == null || !isConnected) {
-      throw Exception('اتصال برقرار نشده');
-    }
+    await _requireConnection();
 
     try {
       final connectedClients = <ClientInfo>[];
@@ -1386,9 +1458,7 @@ class MikroTikService {
     String? hostname,
     String? ssid,
   }) async {
-    if (_client == null || !isConnected) {
-      throw Exception('Connection is not established');
-    }
+    await _requireConnection();
 
     final fingerprint = DeviceFingerprint.fromClientInfo(
       ipAddress,
@@ -1412,9 +1482,7 @@ class MikroTikService {
     String? macAddress,
     String? comment,
   }) async {
-    if (_client == null || !isConnected) {
-      throw Exception('Connection is not established');
-    }
+    await _requireConnection();
 
     try {
       final macToUse =
@@ -1514,9 +1582,7 @@ class MikroTikService {
   /// رفع مسدودیت کلاینت
   /// مشابه POST /api/clients/unban
   Future<bool> unbanClient(String ipAddress, {String? macAddress}) async {
-    if (_client == null || !isConnected) {
-      throw Exception('Connection is not established');
-    }
+    await _requireConnection();
 
     try {
       var macToUse =
@@ -1602,9 +1668,7 @@ class MikroTikService {
   }
 
   Future<List<Map<String, dynamic>>> getBannedClients() async {
-    if (_client == null || !isConnected) {
-      throw Exception('Connection is not established');
-    }
+    await _requireConnection();
 
     try {
       final wirelessFeaturesEnabled = await _supportsWirelessFeatures();
@@ -1798,9 +1862,7 @@ class MikroTikService {
   }
 
   Future<bool> setClientSpeed(String target, String maxLimit) async {
-    if (_client == null || !isConnected) {
-      throw Exception('????? ?????? ????');
-    }
+    await _requireConnection();
 
     final targetIp = await _resolveTargetIp(target);
     if (targetIp == null) {
@@ -1811,9 +1873,7 @@ class MikroTikService {
   }
 
   Future<bool> removeClientSpeed(String target) async {
-    if (_client == null || !isConnected) {
-      throw Exception('????? ?????? ????');
-    }
+    await _requireConnection();
 
     final targetIp = await _resolveTargetIp(target);
     if (targetIp == null) {
@@ -1824,9 +1884,7 @@ class MikroTikService {
   }
 
   Future<Map<String, String>?> getClientSpeed(String target) async {
-    if (_client == null || !isConnected) {
-      throw Exception('????? ?????? ????');
-    }
+    await _requireConnection();
 
     final targetIp = await _resolveTargetIp(target);
     if (targetIp == null) {
@@ -1872,7 +1930,7 @@ class MikroTikService {
   }
 
   Future<String?> getDeviceIp() async {
-    if (_client == null || !isConnected) {
+    if (!await ensureConnected()) {
       return null;
     }
 
@@ -2081,9 +2139,7 @@ class MikroTikService {
   /// این برای حالتی است که دستگاه با IP/MAC جدید متصل شده اما hostname
   /// یا سایر ویژگی‌های آن تغییر نکرده است.
   Future<List<Map<String, dynamic>>> checkAndBanBannedDevices() async {
-    if (_client == null || !isConnected) {
-      throw Exception('اتصال برقرار نشده');
-    }
+    await _requireConnection();
 
     try {
       final fingerprintService = DeviceFingerprintService();
@@ -2231,7 +2287,7 @@ class MikroTikService {
   /// دریافت Default Gateway از route table RouterOS
   /// این متد route با destination 0.0.0.0/0 را پیدا می‌کند و gateway آن را برمی‌گرداند
   Future<String?> getDefaultGateway() async {
-    if (_client == null || !isConnected) {
+    if (!await ensureConnected()) {
       return null;
     }
 
@@ -2285,9 +2341,7 @@ class MikroTikService {
   /// مشابه POST /api/connect/test در پروژه Python
   /// این اطلاعات شامل uptime, version, board-name, platform, CPU, Memory و ... است
   Future<Map<String, dynamic>> getRouterInfo() async {
-    if (_client == null || !isConnected) {
-      throw Exception('اتصال برقرار نشده');
-    }
+    await _requireConnection();
 
     try {
       // دریافت اطلاعات از /system/resource/print (همه اطلاعات در یک جا)
@@ -2366,9 +2420,7 @@ class MikroTikService {
   /// این تابع از ابتدا مانع اتصال دستگاه‌های جدید می‌شود اما دستگاه‌های قبلاً متصل شده کار می‌کنند
   ///
   Future<Map<String, dynamic>> checkIp(String ipAddress) async {
-    if (_client == null || !isConnected) {
-      throw Exception('اتصال برقرار نشده');
-    }
+    await _requireConnection();
 
     try {
       final result = <String, dynamic>{'ip': ipAddress, 'found': false};

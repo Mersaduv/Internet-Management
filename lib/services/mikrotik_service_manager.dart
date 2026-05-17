@@ -1,3 +1,4 @@
+import 'connection_heartbeat.dart';
 import 'mikrotik_service.dart';
 import '../models/mikrotik_connection.dart';
 
@@ -11,6 +12,7 @@ class MikroTikServiceManager {
   MikroTikService? _service;
   MikroTikConnection? _currentConnection;
   Map<String, dynamic>? _routerInfo;
+  ConnectionHeartbeat? _heartbeat;
 
   /// دریافت سرویس فعلی
   MikroTikService? get service => _service;
@@ -47,6 +49,25 @@ class MikroTikServiceManager {
           // ignore errors - router info optional است
           _routerInfo = null;
         }
+
+        _heartbeat?.stop();
+        _heartbeat = ConnectionHeartbeat(
+          healthCheck: () async {
+            final service = _service;
+            if (service == null) {
+              return false;
+            }
+            return service.ensureConnected();
+          },
+          reconnect: () async {
+            final service = _service;
+            if (service == null) {
+              return false;
+            }
+            return service.ensureConnected();
+          },
+        );
+        _heartbeat!.start();
       }
       return success;
     } catch (e) {
@@ -58,6 +79,8 @@ class MikroTikServiceManager {
 
   /// بستن اتصال
   void disconnect() {
+    _heartbeat?.stop();
+    _heartbeat = null;
     _service?.disconnect();
     _service = null;
     _currentConnection = null;

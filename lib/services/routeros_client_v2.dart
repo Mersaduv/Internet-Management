@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:router_os_client/router_os_client.dart';
 
@@ -11,9 +12,8 @@ class RouterOSClientV2 {
   final int port;
 
   RouterOSClient? _client;
-  bool _isConnected = false;
-  bool _isAuthenticated = false;
-  Future<void> _commandQueue = Future.value();
+  bool _loggedIn = false;
+  Future<void> _commandQueue = Future<void>.value();
 
   RouterOSClientV2({
     required this.address,
@@ -35,20 +35,49 @@ class RouterOSClientV2 {
 
       final ok = await _client!.login();
       if (ok) {
-        _isConnected = true;
-        _isAuthenticated = true;
-        _commandQueue = Future.value();
+        _loggedIn = true;
+        _commandQueue = Future<void>.value();
+        print('[ROUTEROS_QUEUE] login ok ($address:$port)');
       }
       return ok;
     } catch (e) {
-      _isConnected = false;
-      _isAuthenticated = false;
+      _resetState();
       throw Exception('خطا در اتصال: $e');
     }
   }
 
+  /// Drops the current socket and clears the command queue.
+  void invalidateConnection() => _resetState();
+
+  /// Sends `/system/identity/print` to verify the API socket is still usable.
+  Future<bool> isAlive({Duration timeout = const Duration(seconds: 3)}) async {
+    if (_client == null || !_loggedIn) {
+      return false;
+    }
+
+    final completer = Completer<bool>();
+    _commandQueue = _commandQueue.catchError((_) {}).then((_) async {
+      try {
+        if (_client == null || !_loggedIn) {
+          completer.complete(false);
+          return;
+        }
+        await _client!
+            .talk(['/system/identity/print'])
+            .timeout(timeout);
+        completer.complete(true);
+      } catch (e) {
+        print('[ROUTEROS_QUEUE] isAlive failed: $e');
+        _resetState();
+        completer.complete(false);
+      }
+    });
+    _commandQueue = _commandQueue.catchError((_) {});
+    return completer.future;
+  }
+
   Future<List<Map<String, String>>> talk(List<String> command) {
-    if (_client == null || !_isConnected || !_isAuthenticated) {
+    if (_client == null || !_loggedIn) {
       throw Exception('اتصال برقرار نشده یا احراز هویت انجام نشده');
     }
 
@@ -59,11 +88,11 @@ class RouterOSClientV2 {
     _commandQueue = _commandQueue.catchError((_) {}).then((_) async {
       final stopwatch = Stopwatch()..start();
       if (shouldLog) {
-        print('🔁 [ROUTEROS_QUEUE] start: $summary');
+        print('[ROUTEROS_QUEUE] start: $summary');
       }
 
       try {
-        if (_client == null || !_isConnected || !_isAuthenticated) {
+        if (_client == null || !_loggedIn) {
           throw Exception('اتصال برقرار نشده یا احراز هویت انجام نشده');
         }
 
@@ -83,15 +112,27 @@ class RouterOSClientV2 {
 
         if (shouldLog) {
           print(
-            '✅ [ROUTEROS_QUEUE] done in ${stopwatch.elapsedMilliseconds}ms: $summary',
+            '[ROUTEROS_QUEUE] done in ${stopwatch.elapsedMilliseconds}ms: $summary',
           );
         }
         completer.complete(convertedResult);
+      } on TimeoutException catch (e, stackTrace) {
+        print(
+          '[ROUTEROS_QUEUE] timeout after ${stopwatch.elapsedMilliseconds}ms: $summary | $e',
+        );
+        _resetState();
+        completer.completeError(
+          Exception('خطا در اجرای دستور: $e'),
+          stackTrace,
+        );
       } catch (e, stackTrace) {
-        if (shouldLog) {
+        if (shouldLog || _isSocketError(e)) {
           print(
-            '❌ [ROUTEROS_QUEUE] failed after ${stopwatch.elapsedMilliseconds}ms: $summary | $e',
+            '[ROUTEROS_QUEUE] failed after ${stopwatch.elapsedMilliseconds}ms: $summary | $e',
           );
+        }
+        if (_isSocketError(e)) {
+          _resetState();
         }
         completer.completeError(
           Exception('خطا در اجرای دستور: $e'),
@@ -105,14 +146,38 @@ class RouterOSClientV2 {
   }
 
   void close() {
-    _client?.close();
-    _client = null;
-    _isConnected = false;
-    _isAuthenticated = false;
-    _commandQueue = Future.value();
+    _resetState();
   }
 
-  bool get isConnected => _isConnected && _isAuthenticated;
+  bool get isConnected => _loggedIn && _client != null;
+
+  void _resetState() {
+    print('[ROUTEROS_QUEUE] resetting connection state');
+    _loggedIn = false;
+    try {
+      _client?.close();
+    } catch (_) {
+      // ignore close errors
+    }
+    _client = null;
+    _commandQueue = Future<void>.value();
+  }
+
+  bool _isSocketError(Object e) {
+    if (e is SocketException || e is IOException) {
+      return true;
+    }
+    if (e is StateError) {
+      return true;
+    }
+    final message = e.toString().toLowerCase();
+    return message.contains('socket') ||
+        message.contains('connection reset') ||
+        message.contains('connection refused') ||
+        message.contains('broken pipe') ||
+        message.contains('closed') ||
+        message.contains('not open');
+  }
 
   bool _isQueueCommand(List<String> command) {
     return command.isNotEmpty && command.first.startsWith('/queue/');
