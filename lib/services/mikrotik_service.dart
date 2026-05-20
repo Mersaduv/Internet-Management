@@ -94,9 +94,13 @@ class MikroTikService {
       return _wirelessFeaturesEnabled!;
     }
 
-    // During progressive load, do not pull full router info — try wireless and catch errors.
+    // During progressive load, skip wireless until router board is known (CPE = DHCP only).
     if (_inProgressiveLoad) {
-      return true;
+      if (_routerInfoCache != null) {
+        _wirelessFeaturesEnabled = !_isWirelessUnsupportedRouter(_routerInfoCache);
+        return _wirelessFeaturesEnabled!;
+      }
+      return false;
     }
 
     final routerInfo = await _ensureRouterInfoCache();
@@ -1616,6 +1620,9 @@ class MikroTikService {
 
             // اولویت: DHCP > ARP
             final ipAddress = dhcpInfo?['address'] ?? arpInfo?['address'];
+            if (ipAddress == null || ipAddress.trim().isEmpty) {
+              continue;
+            }
             final hostName = _displayNameFromLease(dhcpInfo);
 
             // تشخیص Static/Dynamic از DHCP lease

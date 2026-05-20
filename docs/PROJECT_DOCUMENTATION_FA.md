@@ -19,9 +19,10 @@
 8. [مدیریت State (Provider)](#8-مدیریت-state-provider)
 9. [رابط کاربری و صفحات](#9-رابط-کاربری-و-صفحات)
 10. [عملیات RouterOS و منطق کسب‌وکار](#10-عملیات-routeros-و-منطق-کسب‌وکار)
-11. [ذخیره‌سازی محلی](#11-ذخیره‌سازی-محلی)
-12. [وابستگی‌های خارجی](#12-وابستگی‌های-خارجی)
-13. [نکات پیاده‌سازی و محدودیت‌ها](#13-نکات-پیاده‌سازی-و-محدودیت‌ها)
+11. [تنظیمات وایفای (WiFi Settings)](#11-تنظیمات-وایفای-wifi-settings)
+12. [ذخیره‌سازی محلی](#12-ذخیره‌سازی-محلی)
+13. [وابستگی‌های خارجی](#13-وابستگی‌های-خارجی)
+14. [نکات پیاده‌سازی و محدودیت‌ها](#14-نکات-پیاده‌سازی-و-محدودیت‌ها)
 
 ---
 
@@ -34,13 +35,15 @@
 | قابلیت | توضیح |
 |--------|--------|
 | ورود به روتر | نام کاربری/رمز + host/port/ssl از تنظیمات |
-| لیست دستگاه‌های متصل | ادغام Wireless، DHCP، Hotspot |
+| لیست دستگاه‌های متصل | بارگذاری تدریجی (Progressive Load): Phase 1 فقط DHCP؛ روی برد CPE بدون ادغام wireless |
 | مسدود / رفع مسدود | Firewall Raw + DHCP block + Wireless access-list |
 | تأیید / رد دستگاه جدید | تبدیل lease به static یا ban |
 | محدودیت سرعت | `rate-limit` روی DHCP lease |
 | قفل اتصال جدید | DHCP pool → `static-only` |
 | نام نمایشی دستگاه | ویرایش `comment` روی lease |
-| پورتال ISP | WebView داخلی |
+| تنظیمات وایفای | فرم native API یا WebView پنل CPE بر اساس board/model |
+| پورتال ISP | WebView داخلی (تب سرویس انترنت) |
+| Auto-login | اعتبارنامه ذخیره‌شده + Splash |
 | دو زبانه | فارسی (پیش‌فرض) و انگلیسی |
 | تم | روشن / تاریک / سیستم |
 
@@ -71,11 +74,15 @@ internet_management/
 │   │   ├── login_screen.dart
 │   │   ├── device_detail_screen.dart
 │   │   ├── internet_service_screen.dart
+│   │   ├── wifi_settings_screen.dart       # WifiSettingsRouter + فرم native
 │   │   ├── app_settings_screen.dart
 │   │   ├── settings_screen.dart            # (در routes ثبت نشده)
 │   │   └── connection_test_screen.dart     # تست dev
 │   └── utils/
-│       └── app_localizations.dart
+│       ├── app_localizations.dart
+│       ├── wifi_webview_boards.dart        # کاتالوگ ۹ برد CPE → WebView
+│       ├── wifi_panel_url_resolver.dart    # URL ثابت پنل: http://10.10.10.2/
+│       └── client_display_policy.dart      # فیلتر لیست DHCP / بدون IP
 ├── assets/                       # فونت Vazir، لوگو
 ├── android/, ios/, windows/, linux/, macos/, web/
 └── pubspec.yaml
@@ -90,7 +97,7 @@ internet_management/
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │  UI Layer                                                    │
-│  LoginScreen | HomePage | DeviceDetail | WebView | Settings │
+│  LoginScreen | HomePage | DeviceDetail | WebView | WiFiSettings | Settings │
 └───────────────────────────┬─────────────────────────────────┘
                             │ Provider.of / Navigator
 ┌───────────────────────────▼─────────────────────────────────┐
@@ -120,10 +127,12 @@ internet_management/
 ```mermaid
 flowchart TB
   subgraph UI
+    Splash[SplashScreen]
     Login[LoginScreen]
     Home[HomePage]
     Detail[DeviceDetailScreen]
     Web[InternetServiceScreen]
+    WiFi[WifiSettingsRouter]
     AppSet[AppSettingsScreen]
   end
 
@@ -313,7 +322,7 @@ Socket RouterOS API ترتیبی است؛ دو `talk()` هم‌زمان پاسخ
 | `_heartbeat` | `ConnectionHeartbeat?` |
 
 **API عمومی (delegate به service):**  
-`connect`, `disconnect`, `getRouterInfo`, `getAllClients`, `getConnectedClients`, `getBannedClients`, `getDeviceIp`, `getDefaultGateway`, `makeClientStatic`, `lockNewConnections`, `unlockNewConnections`, `isNewConnectionsLocked`, `setDhcpLeaseDisplayName`, `getClientSpeedIsolated`
+`connect`, `disconnect`, `autoConnect`, `getRouterInfo`, `loadSecondaryDataIsolated`, `getAllClients`, `getConnectedClients`, `getBannedClients`, `getPhase1BoundDhcpLeases`, `getPhase2ManagedBanRawRules`, `getPhase2ArpTable`, `getPhase2WirelessRegistrations`, `getDeviceIp`, `getDefaultGateway`, `makeClientStatic`, `lockNewConnections`, `unlockNewConnections`, `isNewConnectionsLocked`, `setDhcpLeaseDisplayName`, `getClientSpeedIsolated`, `getWifiSettings`, `setWifiSsid`, `setWifiPassword`, `beginProgressiveLoad`, `endProgressiveLoad`, `ensureSession`
 
 ---
 
@@ -331,9 +340,26 @@ static const String _staticOnlyPool = 'static-only';
 static const Duration _apiTimeout = Duration(seconds: 10);
 ```
 
-#### روترهای بدون Wireless Access List
+#### روترهای بدون Wireless Access List (Ban/Unban)
 
-برای board-nameهایی مثل LHG5، SXT و... مجموعه `_wirelessUnsupportedBoardKeys` — wireless ban/unban از access-list صرف‌نظر می‌شود.
+برای board-nameهایی مثل LHG5، SXT و... مجموعه `_wirelessUnsupportedBoardKeys` — عملیات wireless ban/unban از access-list **صرف‌نظر** می‌شود. این لیست **مستقل** از لیست WebView وایفای است.
+
+#### تشخیص قابلیت Wireless در API
+
+`_supportsWirelessFeatures()`:
+- اگر `_routerInfoCache` موجود باشد → `wireless-features-enabled = !_isWirelessUnsupportedRouter(...)`
+- در **Progressive Load** و بدون cache روتر → **`false`** (wireless خوانده نمی‌شود تا board مشخص شود)
+- در `ensureConnected` هنگام progressive (بدون force health check) → health check رد می‌شود تا صف سبک بماند
+
+#### متدهای WiFi (فرم native)
+
+| متد | RouterOS |
+|-----|----------|
+| `getWifiSettings({interfaceId})` | `/interface/wireless/print` + `/interface/wireless/security-profiles/print` |
+| `setWifiSsid(...)` | `/interface/wireless/set` — `ssid`, `hide-ssid` |
+| `setWifiPassword(...)` | `/interface/wireless/security-profiles/set` — `wpa2-pre-shared-key` و `wpa-pre-shared-key` |
+
+رمز وایفای **هرگز** در SharedPreferences ذخیره نمی‌شود.
 
 #### متدهای عمومی (خلاصه)
 
@@ -344,8 +370,10 @@ static const Duration _apiTimeout = Duration(seconds: 10);
 | Ban/Unban | `banClient`, `unbanClient`, `banClientWithFingerprint`, `unbanClientWithFingerprint`, `getBannedClients` |
 | سرعت | `setClientSpeed`, `getClientSpeed`, `removeClientSpeed` (+ legacy aliases) |
 | DHCP | `makeClientStatic`, `setDhcpLeaseDisplayName`, `lockNewConnections`, `unlockNewConnections`, `isNewConnectionsLocked` |
-| شبکه/روتر | `getDeviceIp`, `getDefaultGateway`, `getDefaultGatewayOrRouterIp`, `getRouterInfo`, `checkIp` |
-| Fingerprint | `checkAndBanBannedDevices` (**پیاده شده، از UI فراخوانی نمی‌شود**) |
+| شبکه/روتر | `getDeviceIp`, `getDefaultGateway`, `getDefaultGatewayOrRouterIp`, `getRouterInfo`, `getRouterInfoSecondary`, `checkIp` |
+| Progressive | `getPhase1BoundDhcpLeases`, `getPhase2ManagedBanRawRules`, `getPhase2ArpTable`, `getPhase2WirelessRegistrations` |
+| WiFi | `getWifiSettings`, `setWifiSsid`, `setWifiPassword` |
+| Fingerprint | `checkAndBanBannedDevices` (از `_runBackgroundTasks` در Provider) |
 
 ---
 
@@ -395,6 +423,15 @@ static const Duration _apiTimeout = Duration(seconds: 10);
 ### 6.6 `ConnectionHeartbeat`
 
 جزئیات در [بخش 4.3](#43-نگهداری-اتصال-heartbeat).
+
+### 6.7 ابزارهای کمکی (`lib/utils/`)
+
+| فایل | نقش |
+|------|-----|
+| `app_localizations.dart` | i18n فارسی/انگلیسی |
+| `wifi_webview_boards.dart` | کاتالوگ دقیق ۹ برد CPE؛ `isWifiWebViewBoard()` |
+| `wifi_panel_url_resolver.dart` | ثابت `cpeWifiPanelUrl = http://10.10.10.2/` |
+| `client_display_policy.dart` | نمایش فقط DHCP+IP؛ skip wireless روی CPE؛ مسدود عملیات بدون IP |
 
 ---
 
@@ -486,11 +523,33 @@ static const Duration _apiTimeout = Duration(seconds: 10);
 | banned list | 10s |
 | connected clients | 12s |
 
+#### بارگذاری تدریجی — `_runProgressiveLoad()`
+
+| Phase | متد | محتوا |
+|-------|-----|--------|
+| **1** | `_loadPhase1DeviceList` | فقط DHCP leaseهای `bound` → لیست اولیه سریع |
+| **2** | `_loadPhase2StatusEnrichment` | قوانین ban، تکمیل IP از ARP، wireless (در صورت مجاز) |
+| **3** | `_loadPhase3SecondaryData` | IP دستگاه، `routerInfo`، وضعیت قفل DHCP (اتصال isolated) |
+| پس‌زمینه | `_runBackgroundTasks` | auto-static، `checkAndBanBannedDevices` |
+
+در Phase 2، `beginProgressiveLoad()` / `endProgressiveLoad()` روی سرویس فعال است تا health check اضافی صف را سنگین نکند.
+
+#### فیلتر نمایش لیست — `ClientDisplayPolicy`
+
+**فایل:** `lib/utils/client_display_policy.dart`
+
+| قانون | توضیح |
+|-------|--------|
+| `shouldShowInConnectedList` | فقط دستگاه با **IP معتبر** (نه `0.0.0.0` / خالی) |
+| `shouldSkipWirelessEnrichment` | روی برد CPE (کاتالوگ `wifi_webview_boards`) یا `wireless-features-enabled == false` |
+| `shouldAllowDeviceActions` | ban/سرعت/نام DHCP نیاز به IP دارد |
+
+دستگاه‌های wireless با **فقط MAC** (بدون IP) — معمول روی LHG/SXT — در لیست نمایش داده **نمی‌شوند**.
+
 #### `initialize()` / `refresh()`
 
-1. `loadClients()` — اولویت اول
-2. `_loadHomeSecondaryData()` — IP دستگاه، auto-static، banned، router info، lock status
-3. `refresh()` — dedupe با `_activeRefreshFuture`
+1. `_runProgressiveLoad()` — مسیر اصلی Home پس از login
+2. `refresh()` — dedupe با `_activeRefreshFuture`؛ می‌تواند `loadClients()` کامل (12s) را هم صدا بزند
 
 #### مرتب‌سازی نمایش
 
@@ -527,10 +586,13 @@ static const Duration _apiTimeout = Duration(seconds: 10);
 
 | Route | Widget |
 |-------|--------|
-| `/` | `LoginScreen` |
+| `/` | `SplashScreen` (auto-login) |
+| `/login` | `LoginScreen` |
 | `/home` | `MainScaffold` |
 | `/test` | `ConnectionTestScreen` |
 | `/device-detail` | `DeviceDetailScreen` (arguments) |
+| `/wifi-settings` | `WifiSettingsRouter` |
+| `/wifi-webview` | `InternetServiceScreen` — `fixedUrl: http://10.10.10.2/` |
 
 ### 9.2 `MyApp`
 
@@ -563,18 +625,38 @@ static const Duration _apiTimeout = Duration(seconds: 10);
 - محدودیت سرعت (sheet) + `getClientSpeedIsolated`
 - ban/unban (با fingerprint)
 - مسدود برای pending approval
+- اگر `ClientDisplayPolicy.shouldAllowDeviceActions(device) == false` (بدون IP): **بدون دکمه عملیاتی** — فقط اطلاعات
 
 ### 9.6 `InternetServiceScreen`
 
-- `InAppWebView` → URL از Settings
-- navigation، reload، تغییر URL
+دو حالت:
+1. **تب سرویس انترنت** — URL از `SettingsService.getServiceUrl()` (پیش‌فرض پورتال ISP)
+2. **پنل وایفای CPE** — route `/wifi-webview` با `fixedUrl` ثابت `http://10.10.10.2/`
 
-### 9.7 `LoginScreen`
+`InAppWebView` — navigation، reload؛ تغییر URL فقط وقتی `allowUrlChange: true`.
+
+### 9.7 `wifi_settings_screen.dart`
+
+| Widget | نقش |
+|--------|-----|
+| `WifiSettingsRouter` | تشخیص board از `ClientsProvider.routerInfo`؛ مسیریابی |
+| `_WifiLoadingPlaceholder` | انتظار تا `routerInfo` (حداکثر ۱۰ ثانیه) + `loadRouterInfo()` |
+| `WifiNativeSettingsScreen` | فرم SSID / رمز / Hide SSID برای روترهای غیر-CPE |
+| `_WifiWebViewRedirect` | `pushReplacementNamed('/wifi-webview')` |
+
+ورود از **AppSettingsScreen** → `Navigator.pushNamed('/wifi-settings')`.
+
+### 9.8 `AppSettingsScreen`
+
+- زبان، تم، خروج
+- آیتم **تنظیمات وایفای** → `/wifi-settings`
+
+### 9.9 `LoginScreen`
 
 - فقط username/password (host از Settings + auto gateway)
 - اتصال از طریق Manager
 
-### 9.8 صفحات کم‌استفاده / dev
+### 9.10 صفحات کم‌استفاده / dev
 
 - `SettingsScreen` — ویرایش host/port/ssl (**در routes نیست**)
 - `ConnectionTestScreen` — تست مستقیم `MikroTikService`
@@ -583,15 +665,26 @@ static const Duration _apiTimeout = Duration(seconds: 10);
 
 ## 10. عملیات RouterOS و منطق کسب‌وکار
 
-### 10.1 جمع‌آوری دستگاه‌های متصل — `getConnectedClients`
+### 10.1 جمع‌آوری دستگاه‌های متصل
+
+#### مسیر Progressive (Home — پیش‌فرض)
+
+```
+Phase 1: DHCP bound leases فقط
+Phase 2: ban flags + ARP IP fill + wireless (اگر shouldSkipWirelessEnrichment == false)
+Phase 3: routerInfo + deviceIp + lock
+→ فیلتر: banned + ClientDisplayPolicy (فقط با IP)
+```
+
+#### مسیر یک‌جا — `getConnectedClients()`
 
 ```
 1. DHCP leases (status=bound) → dictionary بر اساس MAC
 2. ARP table → تکمیل IP
-3. Wireless registration-table (اگر پشتیبانی شود)
+3. Wireless registration-table (فقط اگر _supportsWirelessFeatures)
+   → ردیف‌های بدون IP رد می‌شوند
 4. DHCP leases باقی‌مانده (غیر تکراری با wireless)
 5. Hotspot active (غیر تکراری)
-→ ادغام و برگرداندن List<ClientInfo>
 ```
 
 نام نمایشی: از `comment` lease (بدون markerهای BAN/STATIC) یا `host-name`.
@@ -694,7 +787,52 @@ Cache در `_routerInfoCache` تا reconnect بعدی.
 
 ---
 
-## 11. ذخیره‌سازی محلی
+## 11. تنظیمات وایفای (WiFi Settings)
+
+### 11.1 تصمیم WebView در مقابل فرم Native
+
+**فایل تشخیص:** `lib/utils/wifi_webview_boards.dart` — تابع `isWifiWebViewBoard(routerInfo)`
+
+فقط اگر **Model** (یا در نبود model، **Type/board-name**) با یکی از ۹ ردیف زیر تطبیق کند → WebView.  
+این لیست **جدا** از `_wirelessUnsupportedBoardKeys` (ban) است.
+
+| Type | Model |
+|------|-------|
+| LHG5 / RBLHG-5nD | RBLHG-5nD |
+| SXTsq lite5 | RBSXTsq5nD |
+| SXT Lite5 | SXT 5nD r2 |
+| LHG5 ac | RBLHGG-5acD |
+| QRT 5 | 911G-5HPnD |
+| QRT 5 ac | 911G-5HPacD |
+| LHG-5 XL | RBLHGG-5acD |
+| SEXTANT 5 | 911G-5HPnD |
+| SXT 6 | RBSXTG-6HPnD |
+
+> روی این بردها `board-name` API اغلب `LHG5` است و `model` برابر `RBLHG-5nD` — تطبیق بر اساس نرمال‌سازی alphanumeric انجام می‌شود.
+
+### 11.2 WebView — پنل CPE
+
+- **URL ثابت:** `http://10.10.10.2/` (`WifiPanelUrlResolver.cpeWifiPanelUrl`)
+- **بدون fallback** به IP روتر یا `10.10.10.1`
+- Route: `/wifi-webview` → `InternetServiceScreen(fixedUrl: ..., allowUrlChange: false)`
+
+### 11.3 فرم Native — سایر روترها
+
+`WifiNativeSettingsScreen`:
+
+1. **خواندن:** `getWifiSettings()` — اولین interface غیرغیرفعال (یا انتخاب از dropdown اگر چند wlan)
+2. **نمایش:** SSID، رمز (اختیاری — خالی = بدون تغییر)، Hide SSID
+3. **ذخیره:** دیالوگ تأیید (`showDialog`) سپس `setWifiSsid` / `setWifiPassword`
+4. Timeout هر فراخوانی: 10 ثانیه
+5. لاگ: پیشوند `[WIFI_SETTINGS]`
+
+### 11.4 کلیدهای i18n
+
+در `AppLocalizations`: `wifiSettings`, `wifiNameLabel`, `wifiPasswordLabel`, `wifiSave`, `wifiLoading`, `wifiNoInterface`, ...
+
+---
+
+## 12. ذخیره‌سازی محلی
 
 | محل | داده |
 |-----|------|
@@ -707,22 +845,23 @@ Cache در `_routerInfoCache` تا reconnect بعدی.
 
 ---
 
-## 12. وابستگی‌های خارجی
+## 13. وابستگی‌های خارجی
 
 | پکیج | نسخه | نقش |
 |------|------|-----|
 | `router_os_client` | ^2.0.0 | اتصال Binary API |
 | `provider` | ^6.1.1 | State management |
-| `shared_preferences` | ^2.2.2 | Persistence |
+| `shared_preferences` | ^2.2.2 | Persistence تنظیمات |
+| `flutter_secure_storage` | — | ذخیره امن username/password |
 | `flutter_inappwebview` | ^6.1.0+11 | WebView ISP |
 | `crypto` | ^3.0.5 | فقط legacy client |
 | `flutter_localizations` | SDK | i18n framework |
 
 ---
 
-## 13. نکات پیاده‌سازی و محدودیت‌ها
+## 14. نکات پیاده‌سازی و محدودیت‌ها
 
-### 13.1 نقاط قوت معماری
+### 14.1 نقاط قوت معماری
 
 - **یک session سراسری** از طریق Manager
 - **صف دستور** در v2 — پایداری API
@@ -731,32 +870,37 @@ Cache در `_routerInfoCache` تا reconnect بعدی.
 - **Markerهای comment** — تشخیص rule/leaseهای ایجادشده توسط اپ
 - **Fingerprint محلی** — ban پایدارتر از IP/MAC
 
-### 13.2 محدودیت‌ها و شکاف‌ها
+### 14.2 محدودیت‌ها و شکاف‌ها
 
 | موضوع | وضعیت |
 |-------|--------|
 | `SettingsScreen` | وجود دارد؛ در navigation ثبت نشده |
-| `checkAndBanBannedDevices` | پیاده‌سازی شده؛ UI/Provider فراخوانی نمی‌کند |
-| `getAllClients` | موجود؛ Home فقط `getConnectedClients` |
+| `getAllClients` | موجود؛ Home از Progressive Load + گاهی `getConnectedClients` |
 | `routeros_client.dart` | legacy؛ مسیر production از v2 |
 | Host/Port در UI | عمدتاً auto gateway + defaults؛ ویرایش دستی محدود |
 | Reconnect | فقط با credential ذخیره‌شده در service؛ بدون re-prompt |
-| Wireless ban | روی boardهای LHG/SXT و... غیرفعال |
+| Wireless ban | روی boardهای LHG/SXT و... غیرفعال (`_wirelessUnsupportedBoardKeys`) |
+| لیست متصل روی CPE | فقط DHCP با IP؛ wireless registration نمایش داده نمی‌شود |
+| پنل WebView CPE | فقط `http://10.10.10.2/` — نیاز به دسترسی شبکه به آن subnet |
 | Ban دستگاه فعلی | در Provider مسدود است |
+| رمز وایفای | فقط در حافظه موقت UI؛ persist نمی‌شود |
 
-### 13.3 پیش‌نیازهای روتر
+### 14.3 پیش‌نیازهای روتر
 
 - API RouterOS فعال (پورت 8728/8729)
 - کاربر با دسترسی مناسب (DHCP, firewall raw, wireless در صورت نیاز)
 - برای قفل اتصال: DHCP server با address-pool قابل تغییر
 
-### 13.4 لاگ‌های دیباگ
+### 14.4 لاگ‌های دیباگ
 
 پیشوندها در console:
 - `[ROUTEROS_QUEUE]` — صف دستور
 - `[SERVICE]` — connect/reconnect
 - `[HEARTBEAT]` — health tick
-- `[LOGIN]` / `[APP_STARTUP]` — شبکه و gateway
+- `[PROGRESSIVE_LOAD]` — Phase 1/2/3
+- `[CLIENT_LIST]` — فیلتر wireless / CPE
+- `[WIFI_SETTINGS]` — تشخیص board و API وایفای
+- `[LOGIN]` / `[APP_STARTUP]` / `[AUTO_LOGIN]` — شبکه و gateway
 
 ---
 
@@ -815,8 +959,13 @@ sequenceDiagram
 | `network_info_service.dart` | IP/gateway دستگاه |
 | `login_screen.dart` | احراز هویت RouterOS |
 | `device_detail_screen.dart` | عملیات per-device |
-| `internet_service_screen.dart` | WebView ISP |
+| `internet_service_screen.dart` | WebView ISP + پنل CPE |
+| `wifi_settings_screen.dart` | مسیریابی و فرم وایفای |
+| `wifi_webview_boards.dart` | کاتالوگ ۹ برد → WebView |
+| `wifi_panel_url_resolver.dart` | URL ثابت `10.10.10.2` |
+| `client_display_policy.dart` | فیلتر لیست و دکمه‌های detail |
+| `app_settings_screen.dart` | تنظیمات اپ + ورود وایفای |
 
 ---
 
-*این مستند بر اساس بررسی سورس‌کد پروژه در مسیر `lib/` تهیه شده است. برای به‌روزرسانی پس از تغییرات معماری، بخش‌های 4، 6 و 10 را اولویت دهید.*
+*این مستند بر اساس بررسی سورس‌کد پروژه در مسیر `lib/` تهیه شده است. برای به‌روزرسانی پس از تغییرات معماری، بخش‌های 4، 6، 8، 10 و 11 را اولویت دهید.*

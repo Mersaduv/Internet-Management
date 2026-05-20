@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import '../models/client_info.dart';
 import '../services/mikrotik_service_manager.dart';
 import '../services/network_info_service.dart';
+import '../utils/client_display_policy.dart';
 
 enum LoadingPhase { idle, phase1, phase2, phase3, complete }
 
@@ -245,6 +246,9 @@ class ClientsProvider extends ChangeNotifier {
       }
       return true;
     }).toList();
+    _clients = _clients
+        .where(ClientDisplayPolicy.shouldShowInConnectedList)
+        .toList();
   }
 
   /// هم‌تراز کردن شمارش تب‌های متصل/مسدود پس از ban یا unban (بدون refresh کامل).
@@ -435,6 +439,9 @@ class ClientsProvider extends ChangeNotifier {
       }
 
       final filteredClientsList = clientsList.where((client) {
+        if (!ClientDisplayPolicy.shouldShowInConnectedList(client)) {
+          return false;
+        }
         final mac = client.macAddress?.toUpperCase();
         final ip = client.ipAddress;
         return (mac == null || !bannedMacs.contains(mac)) &&
@@ -593,50 +600,69 @@ class ClientsProvider extends ChangeNotifier {
         notifyListeners();
       }
 
-      final wirelessClients = await _serviceManager
-          .getPhase2WirelessRegistrations()
-          .timeout(_phase2StepTimeout, onTimeout: () => <Map<String, String>>[]);
-
+      final routerInfoForWireless =
+          _routerInfo ?? _serviceManager.routerInfo;
       var wirelessChanged = false;
-      for (final wireless in wirelessClients) {
-        final mac = wireless['mac-address']?.toUpperCase();
-        if (mac == null || mac.isEmpty) {
-          continue;
-        }
 
-        final signal = wireless['signal-strength'];
-        final ssid = wireless['ssid'];
-        final lastIp = wireless['last-ip'];
-        final index = _clientIndexByMacOrIp(mac: mac);
+      if (!ClientDisplayPolicy.shouldSkipWirelessEnrichment(
+        routerInfoForWireless,
+      )) {
+        final wirelessClients = await _serviceManager
+            .getPhase2WirelessRegistrations()
+            .timeout(
+              _phase2StepTimeout,
+              onTimeout: () => <Map<String, String>>[],
+            );
 
-        if (index >= 0) {
-          final client = _clients[index];
-          final rawData = Map<String, dynamic>.from(client.rawData)
-            ..addAll(wireless);
-          _clients[index] = client.copyWith(
-            type: 'wireless',
-            ipAddress: client.ipAddress ?? lastIp,
-            signalStrength: signal ?? client.signalStrength,
-            ssid: ssid ?? client.ssid,
-            interface: wireless['interface'] ?? client.interface,
-            rawData: rawData,
-          );
-          wirelessChanged = true;
-        } else if (!_isTargetInBannedLists(ip: lastIp, mac: mac)) {
-          _clients.add(
-            ClientInfo(
+        for (final wireless in wirelessClients) {
+          final mac = wireless['mac-address']?.toUpperCase();
+          if (mac == null || mac.isEmpty) {
+            continue;
+          }
+
+          final signal = wireless['signal-strength'];
+          final ssid = wireless['ssid'];
+          final lastIp = wireless['last-ip'];
+          final index = _clientIndexByMacOrIp(mac: mac);
+
+          if (index >= 0) {
+            final client = _clients[index];
+            final mergedIp = client.ipAddress ?? lastIp;
+            if (!ClientDisplayPolicy.hasValidIp(mergedIp)) {
+              continue;
+            }
+            final rawData = Map<String, dynamic>.from(client.rawData)
+              ..addAll(wireless);
+            _clients[index] = client.copyWith(
               type: 'wireless',
-              source: 'wireless_registration',
-              macAddress: mac,
-              ipAddress: lastIp,
-              ssid: ssid,
-              signalStrength: signal,
-              interface: wireless['interface'],
-              rawData: Map<String, dynamic>.from(wireless),
-            ),
-          );
-          wirelessChanged = true;
+              ipAddress: mergedIp,
+              signalStrength: signal ?? client.signalStrength,
+              ssid: ssid ?? client.ssid,
+              interface: wireless['interface'] ?? client.interface,
+              rawData: rawData,
+            );
+            wirelessChanged = true;
+          } else if (ClientDisplayPolicy.hasValidIp(lastIp) &&
+              !_isTargetInBannedLists(ip: lastIp, mac: mac)) {
+            _clients.add(
+              ClientInfo(
+                type: 'wireless',
+                source: 'wireless_registration',
+                macAddress: mac,
+                ipAddress: lastIp,
+                ssid: ssid,
+                signalStrength: signal,
+                interface: wireless['interface'],
+                rawData: Map<String, dynamic>.from(wireless),
+              ),
+            );
+            wirelessChanged = true;
+          }
         }
+      } else {
+        debugPrint(
+          '[CLIENT_LIST] skipping wireless enrichment for CPE/DHCP-only board',
+        );
       }
 
       _filterBannedFromConnectedList();
@@ -674,6 +700,7 @@ class ClientsProvider extends ChangeNotifier {
       final routerInfo = isolated['routerInfo'] as Map<String, dynamic>?;
       if (routerInfo != null) {
         _routerInfo = routerInfo;
+        _filterBannedFromConnectedList();
       }
 
       if (isolated.containsKey('isNewConnectionsLocked')) {

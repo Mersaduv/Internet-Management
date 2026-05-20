@@ -6,6 +6,7 @@ import '../models/client_info.dart';
 import '../providers/clients_provider.dart';
 import '../services/mikrotik_service_manager.dart';
 import '../utils/app_localizations.dart';
+import '../utils/client_display_policy.dart';
 
 /// صفحه جزئیات دستگاه
 class DeviceDetailScreen extends StatefulWidget {
@@ -41,6 +42,9 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
   String? _displayHostName;
 
   static const Color _primaryColor = Color(0xFF428B7C);
+
+  bool get _allowDeviceActions =>
+      ClientDisplayPolicy.shouldAllowDeviceActions(widget.device);
 
   @override
   void initState() {
@@ -2120,10 +2124,34 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
                                 },
                               ),
                             // نمایش سرعت تنظیم شده (با نمایش بهتر)
-                            if (_hasSpeedDetails && !widget.isBanned)
+                            if (_hasSpeedDetails &&
+                                !widget.isBanned &&
+                                _allowDeviceActions)
                               _buildSpeedLimitRow(),
-                            if (!isPendingApproval && !widget.isBanned)
+                            if (!isPendingApproval &&
+                                !widget.isBanned &&
+                                _allowDeviceActions)
                               _buildLeaseNameEditor(),
+                            if (!_allowDeviceActions)
+                              Container(
+                                padding: const EdgeInsets.all(12),
+                                margin: const EdgeInsets.only(top: 8),
+                                decoration: BoxDecoration(
+                                  color: Colors.grey.withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(
+                                    color: Colors.grey.withOpacity(0.3),
+                                  ),
+                                ),
+                                child: Text(
+                                  AppLocalizations.of(context)?.unknownDevice ??
+                                      'این دستگاه فقط با MAC شناسایی شده و عملیات مدیریتی برای آن در دسترس نیست.',
+                                  style: TextStyle(
+                                    color: Colors.grey.shade700,
+                                    fontSize: 14,
+                                  ),
+                                ),
+                              ),
                             if (isPendingApproval)
                               Container(
                                 padding: const EdgeInsets.all(12),
@@ -2206,7 +2234,8 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
                   const SizedBox(height: 8),
 
                   // دکمه‌های عملیات (دستگاه فعلی: فقط سرعت؛ مسدودسازی ممنوع)
-                  Builder(
+                  if (_allowDeviceActions)
+                    Builder(
                       builder: (context) {
                         final theme = Theme.of(context);
                         final colorScheme = theme.colorScheme;
