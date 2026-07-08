@@ -26,11 +26,11 @@ class SettingsService {
 
   // مقادیر پیش‌فرض
   static const String _defaultHost = '192.168.88.1';
-  static const int _defaultPort = 8728;
+  static const int _defaultPort = 2752;
   static const bool _defaultUseSsl = false;
   static const String _defaultServiceUrl = 'http://user.ariyabod.af/users';
   static const String _defaultLanguage = 'fa'; // 默认语言：波斯语
-  static const String _defaultThemeMode = 'system'; // 默认主题：跟随系统
+  static const String _defaultThemeMode = 'light'; // 默认主题：跟随系统
 
   // Cache برای تنظیمات (برای جلوگیری از خطا در صورت مشکل shared_preferences)
   String? _cachedHost;
@@ -297,7 +297,7 @@ class SettingsService {
       case 'system':
         return ThemeMode.system;
       default:
-        return ThemeMode.system; // 默认跟随系统
+        return ThemeMode.light; // Default fallback: light
     }
   }
 

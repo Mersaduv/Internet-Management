@@ -118,7 +118,7 @@ internet_management/
 ┌───────────────────────────▼─────────────────────────────────┐
 │  Transport Layer                                             │
 │  RouterOSClientV2 → package:router_os_client                  │
-│  TCP 8728 / SSL 8729 — Binary API v6                         │
+│  TCP 2752 / SSL 8729 — Binary API v6                         │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -185,14 +185,14 @@ flowchart TB
 ```dart
 MikroTikConnection(
   host: '192.168.88.1',
-  port: 8728,              // پیش‌فرض
+  port: 2752,              // پیش‌فرض
   username: 'admin',
   password: '***',
   useSsl: false,
 )
 ```
 
-- اگر `useSsl == true` و `port == 8728` → پورت واقعی **8729** (`actualPort` getter).
+- اگر `useSsl == true` و `port == 2752` → پورت واقعی **8729** (`actualPort` getter).
 
 ### 4.2 فرآیند برقراری اتصال (Login)
 
@@ -385,7 +385,7 @@ static const Duration _apiTimeout = Duration(seconds: 10);
 | کلید | پیش‌فرض | کاربرد |
 |------|---------|--------|
 | `mikrotik_host` | `192.168.88.1` | IP روتر |
-| `mikrotik_port` | `8728` | پورت API |
+| `mikrotik_port` | `2752` | پورت API |
 | `mikrotik_use_ssl` | `false` | SSL |
 | `internet_service_url` | `http://user.ariyabod.af/users` | WebView |
 | `login_timestamp` | — | انقضای 14 روزه |
@@ -887,7 +887,7 @@ Cache در `_routerInfoCache` تا reconnect بعدی.
 
 ### 14.3 پیش‌نیازهای روتر
 
-- API RouterOS فعال (پورت 8728/8729)
+- API RouterOS فعال (پورت 2752/8729)
 - کاربر با دسترسی مناسب (DHCP, firewall raw, wireless در صورت نیاز)
 - برای قفل اتصال: DHCP server با address-pool قابل تغییر
 

@@ -20,7 +20,7 @@ class RouterOSClientV2 {
     required this.user,
     required this.password,
     this.useSsl = false,
-    this.port = 8728,
+    this.port = 2752,
   });
 
   Future<bool> login() async {

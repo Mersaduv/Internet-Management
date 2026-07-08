@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../services/settings_service.dart';
 import '../utils/app_localizations.dart';
+import '../utils/app_theme.dart';
 
 /// صفحه تنظیمات اتصال MikroTik
 class SettingsScreen extends StatefulWidget {
@@ -15,14 +16,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
   final _hostController = TextEditingController();
   final _portController = TextEditingController();
   final SettingsService _settingsService = SettingsService();
-  
+
   bool _useSsl = false;
   bool _isLoading = false;
   bool _isSaving = false;
   String? _successMessage;
   String? _errorMessage;
-
-  static const Color _primaryColor = Color(0xFF428B7C);
 
   @override
   void initState() {
@@ -46,7 +45,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     } catch (e) {
       final l10n = AppLocalizations.of(context);
       setState(() {
-        _errorMessage = '${l10n?.errorLoadingSettings ?? 'Error loading settings'}: $e';
+        _errorMessage =
+            '${l10n?.errorLoadingSettings ?? 'Error loading settings'}: $e';
         _isLoading = false;
       });
     }
@@ -86,7 +86,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       final l10n = AppLocalizations.of(context);
       setState(() {
         _isSaving = false;
-        _errorMessage = '${l10n?.settingsSaveError ?? 'Error saving settings'}: $e';
+        _errorMessage =
+            '${l10n?.settingsSaveError ?? 'Error saving settings'}: $e';
       });
     }
   }
@@ -97,7 +98,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: Text(l10n?.resetToDefaults ?? 'Reset to Defaults'),
-        content: Text(l10n?.resetSettingsConfirm ?? 'Are you sure you want to reset settings to default values?'),
+        content: Text(
+          l10n?.resetSettingsConfirm ??
+              'Are you sure you want to reset settings to default values?',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -116,7 +120,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
       await _loadSettings();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(l10n?.settingsReset ?? 'Settings reset to default')),
+          SnackBar(
+            content: Text(l10n?.settingsReset ?? 'Settings reset to default'),
+          ),
         );
       }
     }
@@ -134,15 +140,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final l10n = AppLocalizations.of(context);
-    
+    final primaryColor = AppTheme.primaryFor(theme.brightness);
+
     return Scaffold(
       appBar: PreferredSize(
         preferredSize: const Size.fromHeight(kToolbarHeight),
         child: Container(
           decoration: BoxDecoration(
-            color: theme.brightness == Brightness.dark
-                ? colorScheme.surface
-                : _primaryColor,
+            color: primaryColor,
             boxShadow: [
               BoxShadow(
                 color: theme.brightness == Brightness.dark
@@ -165,13 +170,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         : Colors.white,
                   ),
                 ),
-            backgroundColor: Colors.transparent,
-            foregroundColor: theme.brightness == Brightness.dark
-                ? colorScheme.onSurface
-                : Colors.white,
-            elevation: 0,
-            shadowColor: Colors.transparent,
-            surfaceTintColor: Colors.transparent,
+                backgroundColor: Colors.transparent,
+                foregroundColor: theme.brightness == Brightness.dark
+                    ? colorScheme.onSurface
+                    : Colors.white,
+                elevation: 0,
+                shadowColor: Colors.transparent,
+                surfaceTintColor: Colors.transparent,
               );
             },
           ),
@@ -197,10 +202,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           children: [
                             Row(
                               children: [
-                                Icon(Icons.router, color: _primaryColor),
+                                Icon(Icons.router, color: primaryColor),
                                 const SizedBox(width: 8),
                                 Text(
-                                  l10n?.mikrotikRouterOS ?? 'MikroTik RouterOS Settings',
+                                  l10n?.mikrotikRouterOS ??
+                                      'MikroTik RouterOS Settings',
                                   style: TextStyle(
                                     fontSize: 18,
                                     fontWeight: FontWeight.bold,
@@ -214,7 +220,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             TextFormField(
                               controller: _hostController,
                               decoration: InputDecoration(
-                                labelText: l10n?.ipAddressOrHostname ?? 'IP Address or Hostname',
+                                labelText:
+                                    l10n?.ipAddressOrHostname ??
+                                    'IP Address or Hostname',
                                 hintText: '192.168.88.1',
                                 prefixIcon: const Icon(Icons.router),
                                 border: OutlineInputBorder(
@@ -224,7 +232,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               textDirection: TextDirection.ltr,
                               validator: (value) {
                                 if (value == null || value.trim().isEmpty) {
-                                  return l10n?.pleaseEnterIP ?? 'Please enter IP address';
+                                  return l10n?.pleaseEnterIP ??
+                                      'Please enter IP address';
                                 }
                                 return null;
                               },
@@ -240,7 +249,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                     controller: _portController,
                                     decoration: InputDecoration(
                                       labelText: l10n?.port ?? 'Port',
-                                      hintText: '8728',
+                                      hintText: '2752',
                                       prefixIcon: const Icon(Icons.numbers),
                                       border: OutlineInputBorder(
                                         borderRadius: BorderRadius.circular(12),
@@ -249,12 +258,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                     keyboardType: TextInputType.number,
                                     textDirection: TextDirection.ltr,
                                     validator: (value) {
-                                      if (value == null || value.trim().isEmpty) {
-                                        return l10n?.pleaseEnterPort ?? 'Please enter port';
+                                      if (value == null ||
+                                          value.trim().isEmpty) {
+                                        return l10n?.pleaseEnterPort ??
+                                            'Please enter port';
                                       }
                                       final port = int.tryParse(value.trim());
-                                      if (port == null || port < 1 || port > 65535) {
-                                        return l10n?.portRangeError ?? 'Port must be a number between 1 and 65535';
+                                      if (port == null ||
+                                          port < 1 ||
+                                          port > 65535) {
+                                        return l10n?.portRangeError ??
+                                            'Port must be a number between 1 and 65535';
                                       }
                                       return null;
                                     },
@@ -268,14 +282,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                     onChanged: (value) {
                                       setState(() {
                                         _useSsl = value ?? false;
-                                        if (_useSsl && _portController.text == '8728') {
+                                        if (_useSsl &&
+                                            _portController.text == '2752') {
                                           _portController.text = '8729';
-                                        } else if (!_useSsl && _portController.text == '8729') {
-                                          _portController.text = '8728';
+                                        } else if (!_useSsl &&
+                                            _portController.text == '8729') {
+                                          _portController.text = '2752';
                                         }
                                       });
                                     },
-                                    controlAffinity: ListTileControlAffinity.leading,
+                                    controlAffinity:
+                                        ListTileControlAffinity.leading,
                                     contentPadding: EdgeInsets.zero,
                                   ),
                                 ),
@@ -294,32 +311,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         padding: const EdgeInsets.all(12),
                         margin: const EdgeInsets.only(bottom: 16),
                         decoration: BoxDecoration(
-                          color: theme.brightness == Brightness.dark
-                              ? Colors.green.shade900.withOpacity(0.3)
-                              : Colors.green.shade50,
+                          color: AppTheme.successSurfaceFor(theme.brightness),
                           borderRadius: BorderRadius.circular(8),
                           border: Border.all(
-                            color: theme.brightness == Brightness.dark
-                                ? Colors.green.shade700
-                                : Colors.green.shade200,
+                            color: AppTheme.successBorderFor(theme.brightness),
                           ),
                         ),
                         child: Row(
                           children: [
                             Icon(
                               Icons.check_circle,
-                              color: theme.brightness == Brightness.dark
-                                  ? Colors.green.shade300
-                                  : Colors.green.shade700,
+                              color: AppTheme.successForegroundFor(
+                                theme.brightness,
+                              ),
                             ),
                             const SizedBox(width: 8),
                             Expanded(
                               child: Text(
                                 _successMessage!,
                                 style: TextStyle(
-                                  color: theme.brightness == Brightness.dark
-                                      ? Colors.green.shade300
-                                      : Colors.green.shade700,
+                                  color: AppTheme.successForegroundFor(
+                                    theme.brightness,
+                                  ),
                                 ),
                               ),
                             ),
@@ -376,9 +389,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               child: CircularProgressIndicator(strokeWidth: 2),
                             )
                           : const Icon(Icons.save),
-                      label: Text(_isSaving ? (l10n?.saving ?? 'Saving...') : (l10n?.saveSettings ?? 'Save Settings')),
+                      label: Text(
+                        _isSaving
+                            ? (l10n?.saving ?? 'Saving...')
+                            : (l10n?.saveSettings ?? 'Save Settings'),
+                      ),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: _primaryColor,
+                        backgroundColor: primaryColor,
                         foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(vertical: 16),
                         shape: RoundedRectangleBorder(
@@ -395,9 +412,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       icon: const Icon(Icons.restore),
                       label: Text(l10n?.resetToDefaults ?? 'Reset to Defaults'),
                       style: OutlinedButton.styleFrom(
-                        foregroundColor: _primaryColor,
+                        foregroundColor: primaryColor,
                         padding: const EdgeInsets.symmetric(vertical: 16),
-                        side: BorderSide(color: _primaryColor),
+                        side: BorderSide(color: primaryColor),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
                         ),
@@ -410,4 +427,3 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 }
-

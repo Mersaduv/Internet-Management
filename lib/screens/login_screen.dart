@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import '../models/mikrotik_connection.dart';
 import '../services/mikrotik_service_manager.dart';
 import '../services/settings_service.dart';
 import '../services/network_info_service.dart';
 import '../utils/app_localizations.dart';
+import '../utils/app_theme.dart';
 
 /// صفحه ورود مدرن و حرفه‌ای
 class LoginScreen extends StatefulWidget {
@@ -18,16 +18,13 @@ class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
   final _usernameController = TextEditingController();
   final _passwordController = TextEditingController();
-  
+
   bool _isConnecting = false;
   bool _obscurePassword = true;
   String? _errorMessage;
   final FocusNode _usernameFocusNode = FocusNode();
   final FocusNode _passwordFocusNode = FocusNode();
   final SettingsService _settingsService = SettingsService();
-
-  // رنگ تم سبز
-  static const Color _primaryColor = Color(0xFF428B7C);
 
   @override
   void initState() {
@@ -40,28 +37,36 @@ class _LoginScreenState extends State<LoginScreen> {
   /// این متد Default Gateway را شناسایی می‌کند و در Router Host ذخیره می‌کند
   Future<void> _autoSetRouterHostFromGateway() async {
     try {
-      print('🔍 [LOGIN] در حال شناسایی Default Gateway برای تنظیم Router Host...');
-      
+      print(
+        '🔍 [LOGIN] در حال شناسایی Default Gateway برای تنظیم Router Host...',
+      );
+
       final networkInfo = NetworkInfoService();
       final gateway = await networkInfo.getDefaultGatewayOrRouterIp();
-      
+
       if (gateway != null) {
         // دریافت Router Host فعلی
         final currentHost = await _settingsService.getHost();
-        
+
         // همیشه Default Gateway را در Router Host ست کن
         // این باعث می‌شود که Router Host همیشه با Default Gateway هماهنگ باشد
         await _settingsService.setHost(gateway);
-        
+
         if (currentHost != gateway) {
-          print('✅ [LOGIN] Router Host به صورت خودکار از Default Gateway ست شد:');
+          print(
+            '✅ [LOGIN] Router Host به صورت خودکار از Default Gateway ست شد:',
+          );
           print('   └─ Router Host قبلی: $currentHost');
           print('   └─ Router Host جدید: $gateway (Default Gateway)');
         } else {
-          print('ℹ️ [LOGIN] Router Host از قبل با Default Gateway هماهنگ است: $gateway');
+          print(
+            'ℹ️ [LOGIN] Router Host از قبل با Default Gateway هماهنگ است: $gateway',
+          );
         }
       } else {
-        print('⚠️ [LOGIN] Default Gateway شناسایی نشد - Router Host تغییر نکرد');
+        print(
+          '⚠️ [LOGIN] Default Gateway شناسایی نشد - Router Host تغییر نکرد',
+        );
       }
     } catch (e) {
       print('❌ [LOGIN] خطا در تنظیم خودکار Router Host: $e');
@@ -102,7 +107,7 @@ class _LoginScreenState extends State<LoginScreen> {
     try {
       // دریافت تنظیمات از SettingsService
       final settings = await _settingsService.getAllSettings();
-      
+
       // ایجاد اتصال با اطلاعات وارد شده و تنظیمات ذخیره شده
       final connection = MikroTikConnection(
         host: settings['host'] as String,
@@ -138,14 +143,16 @@ class _LoginScreenState extends State<LoginScreen> {
       } else {
         final l10n = AppLocalizations.of(context);
         setState(() {
-          _errorMessage = l10n?.invalidUsernameOrPassword ?? 'Invalid username or password';
+          _errorMessage =
+              l10n?.invalidUsernameOrPassword ?? 'Invalid username or password';
         });
       }
     } catch (e) {
       setState(() {
         _isConnecting = false;
         final l10n = AppLocalizations.of(context);
-        _errorMessage = '${l10n?.error ?? 'Error'} connecting: ${e.toString().replaceAll('Exception: ', '')}';
+        _errorMessage =
+            '${l10n?.error ?? 'Error'} connecting: ${e.toString().replaceAll('Exception: ', '')}';
       });
     }
   }
@@ -155,13 +162,17 @@ class _LoginScreenState extends State<LoginScreen> {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final isDark = theme.brightness == Brightness.dark;
-    
+    final primaryColor = AppTheme.primaryFor(theme.brightness);
+
     return Scaffold(
       backgroundColor: colorScheme.surface,
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 32.0, vertical: 24.0),
+            padding: const EdgeInsets.symmetric(
+              horizontal: 32.0,
+              vertical: 24.0,
+            ),
             child: Form(
               key: _formKey,
               child: Column(
@@ -185,16 +196,14 @@ class _LoginScreenState extends State<LoginScreen> {
                           height: 230,
                           decoration: BoxDecoration(
                             color: isDark
-                                ? _darkenColor(_primaryColor, 0.2).withOpacity(0.1)
-                                : _primaryColor.withOpacity(0.1),
+                                ? primaryColor.withOpacity(0.14)
+                                : primaryColor.withOpacity(0.1),
                             shape: BoxShape.circle,
                           ),
                           child: Icon(
                             Icons.router,
                             size: 90,
-                            color: isDark
-                                ? _darkenColor(_primaryColor, 0.2)
-                                : _primaryColor,
+                            color: primaryColor,
                           ),
                         );
                       },
@@ -208,7 +217,8 @@ class _LoginScreenState extends State<LoginScreen> {
                     builder: (context) {
                       final l10n = AppLocalizations.of(context);
                       return Text(
-                        l10n?.pleaseEnterRouterInfo ?? 'Please enter your router information',
+                        l10n?.pleaseEnterRouterInfo ??
+                            'Please enter your router information',
                         style: TextStyle(
                           fontSize: 16,
                           color: isDark
@@ -231,64 +241,63 @@ class _LoginScreenState extends State<LoginScreen> {
                         decoration: InputDecoration(
                           labelText: l10n?.username ?? 'Username',
                           hintText: 'username',
-                      prefixIcon: Icon(
-                        Icons.person_outline,
-                        color: isDark
-                            ? _darkenColor(_primaryColor, 0.2)
-                            : _primaryColor,
-                      ),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide(
-                          color: isDark
-                              ? colorScheme.outline.withOpacity(0.2)
-                              : Colors.grey.shade300,
+                          prefixIcon: Icon(
+                            Icons.person_outline,
+                            color: primaryColor,
+                          ),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(
+                              color: isDark
+                                  ? colorScheme.outline.withOpacity(0.2)
+                                  : Colors.grey.shade300,
+                            ),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(
+                              color: isDark
+                                  ? colorScheme.outline.withOpacity(0.2)
+                                  : Colors.grey.shade300,
+                            ),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(
+                              color: primaryColor,
+                              width: 2,
+                            ),
+                          ),
+                          filled: true,
+                          fillColor: isDark
+                              ? colorScheme.surfaceContainerHighest
+                              : Colors.grey.shade50,
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 20,
+                            vertical: 18,
+                          ),
+                          labelStyle: TextStyle(
+                            color: isDark
+                                ? colorScheme.onSurface.withOpacity(0.7)
+                                : Colors.grey.shade700,
+                          ),
+                          hintStyle: TextStyle(
+                            color: isDark
+                                ? colorScheme.onSurface.withOpacity(0.5)
+                                : Colors.grey.shade400,
+                          ),
                         ),
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide(
-                          color: isDark
-                              ? colorScheme.outline.withOpacity(0.2)
-                              : Colors.grey.shade300,
-                        ),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide(
-                          color: isDark
-                              ? _darkenColor(_primaryColor, 0.2)
-                              : _primaryColor,
-                          width: 2,
-                        ),
-                      ),
-                      filled: true,
-                      fillColor: isDark
-                          ? colorScheme.surfaceContainerHighest
-                          : Colors.grey.shade50,
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 20,
-                        vertical: 18,
-                      ),
-                      labelStyle: TextStyle(
-                        color: isDark
-                            ? colorScheme.onSurface.withOpacity(0.7)
-                            : Colors.grey.shade700,
-                      ),
-                      hintStyle: TextStyle(
-                        color: isDark
-                            ? colorScheme.onSurface.withOpacity(0.5)
-                            : Colors.grey.shade400,
-                      ),
-                    ),
-                    textDirection: TextDirection.ltr,
-                    textInputAction: TextInputAction.next,
-                    onFieldSubmitted: (_) {
-                      FocusScope.of(context).requestFocus(_passwordFocusNode);
-                    },
+                        textDirection: TextDirection.ltr,
+                        textInputAction: TextInputAction.next,
+                        onFieldSubmitted: (_) {
+                          FocusScope.of(
+                            context,
+                          ).requestFocus(_passwordFocusNode);
+                        },
                         validator: (value) {
                           if (value == null || value.trim().isEmpty) {
-                            return l10n?.pleaseEnterUsername ?? 'Please enter username';
+                            return l10n?.pleaseEnterUsername ??
+                                'Please enter username';
                           }
                           return null;
                         },
@@ -306,80 +315,78 @@ class _LoginScreenState extends State<LoginScreen> {
                         focusNode: _passwordFocusNode,
                         decoration: InputDecoration(
                           labelText: l10n?.password ?? 'Password',
-                          hintText: l10n?.enterPassword ?? 'Enter your password',
-                      prefixIcon: Icon(
-                        Icons.lock_outline,
-                        color: isDark
-                            ? _darkenColor(_primaryColor, 0.2)
-                            : _primaryColor,
-                      ),
-                      suffixIcon: IconButton(
-                        icon: Icon(
-                          _obscurePassword
-                              ? Icons.visibility_outlined
-                              : Icons.visibility_off_outlined,
-                          color: isDark
-                              ? colorScheme.onSurface.withOpacity(0.6)
-                              : Colors.grey.shade600,
+                          hintText:
+                              l10n?.enterPassword ?? 'Enter your password',
+                          prefixIcon: Icon(
+                            Icons.lock_outline,
+                            color: primaryColor,
+                          ),
+                          suffixIcon: IconButton(
+                            icon: Icon(
+                              _obscurePassword
+                                  ? Icons.visibility_outlined
+                                  : Icons.visibility_off_outlined,
+                              color: isDark
+                                  ? colorScheme.onSurface.withOpacity(0.6)
+                                  : Colors.grey.shade600,
+                            ),
+                            onPressed: () {
+                              setState(() {
+                                _obscurePassword = !_obscurePassword;
+                              });
+                            },
+                          ),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(
+                              color: isDark
+                                  ? colorScheme.outline.withOpacity(0.2)
+                                  : Colors.grey.shade300,
+                            ),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(
+                              color: isDark
+                                  ? colorScheme.outline.withOpacity(0.2)
+                                  : Colors.grey.shade300,
+                            ),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(
+                              color: primaryColor,
+                              width: 2,
+                            ),
+                          ),
+                          filled: true,
+                          fillColor: isDark
+                              ? colorScheme.surfaceContainerHighest
+                              : Colors.grey.shade50,
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 20,
+                            vertical: 18,
+                          ),
+                          labelStyle: TextStyle(
+                            color: isDark
+                                ? colorScheme.onSurface.withOpacity(0.7)
+                                : Colors.grey.shade700,
+                          ),
+                          hintStyle: TextStyle(
+                            color: isDark
+                                ? colorScheme.onSurface.withOpacity(0.5)
+                                : Colors.grey.shade400,
+                          ),
                         ),
-                        onPressed: () {
-                          setState(() {
-                            _obscurePassword = !_obscurePassword;
-                          });
-                        },
-                      ),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide(
-                          color: isDark
-                              ? colorScheme.outline.withOpacity(0.2)
-                              : Colors.grey.shade300,
-                        ),
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide(
-                          color: isDark
-                              ? colorScheme.outline.withOpacity(0.2)
-                              : Colors.grey.shade300,
-                        ),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide(
-                          color: isDark
-                              ? _darkenColor(_primaryColor, 0.2)
-                              : _primaryColor,
-                          width: 2,
-                        ),
-                      ),
-                      filled: true,
-                      fillColor: isDark
-                          ? colorScheme.surfaceContainerHighest
-                          : Colors.grey.shade50,
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 20,
-                        vertical: 18,
-                      ),
-                      labelStyle: TextStyle(
-                        color: isDark
-                            ? colorScheme.onSurface.withOpacity(0.7)
-                            : Colors.grey.shade700,
-                      ),
-                      hintStyle: TextStyle(
-                        color: isDark
-                            ? colorScheme.onSurface.withOpacity(0.5)
-                            : Colors.grey.shade400,
-                      ),
-                    ),
-                    obscureText: _obscurePassword,
-                    textDirection: TextDirection.ltr,
-                    textInputAction: TextInputAction.done,
-                    onFieldSubmitted: (_) => _handleLogin(),
+                        obscureText: _obscurePassword,
+                        textDirection: TextDirection.ltr,
+                        textInputAction: TextInputAction.done,
+                        onFieldSubmitted: (_) => _handleLogin(),
                         validator: (value) {
                           final l10n = AppLocalizations.of(context);
                           if (value == null || value.isEmpty) {
-                            return l10n?.pleaseEnterPassword ?? 'Please enter password';
+                            return l10n?.pleaseEnterPassword ??
+                                'Please enter password';
                           }
                           return null;
                         },
@@ -395,7 +402,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       borderRadius: BorderRadius.circular(12),
                       boxShadow: [
                         BoxShadow(
-                          color: _primaryColor.withOpacity(0.3),
+                          color: primaryColor.withOpacity(0.3),
                           blurRadius: 12,
                           offset: const Offset(0, 6),
                         ),
@@ -404,9 +411,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     child: ElevatedButton(
                       onPressed: _isConnecting ? null : _handleLogin,
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: isDark
-                            ? _darkenColor(_primaryColor, 0.2)
-                            : _primaryColor,
+                        backgroundColor: primaryColor,
                         foregroundColor: Colors.white,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
@@ -490,7 +495,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                     ),
                   ],
-                  
+
                   const SizedBox(height: 40),
                 ],
               ),
@@ -499,13 +504,5 @@ class _LoginScreenState extends State<LoginScreen> {
         ),
       ),
     );
-  }
-
-  /// تیره کردن رنگ برای تم تاریک
-  Color _darkenColor(Color color, double amount) {
-    assert(amount >= 0 && amount <= 1);
-    final hsl = HSLColor.fromColor(color);
-    final lightness = (hsl.lightness * (1 - amount)).clamp(0.0, 1.0);
-    return hsl.withLightness(lightness).toColor();
   }
 }

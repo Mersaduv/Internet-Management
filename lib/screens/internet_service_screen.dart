@@ -1,6 +1,42 @@
+import 'dart:collection';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import '../services/settings_service.dart';
+import '../utils/app_theme.dart';
+
+/// بعد از بارگذاری، محدودیت viewport (مثل user-scalable=no) را شل می‌کند تا pinch روی اندروید و iOS جواب بدهد.
+const String _kUnrestrictViewportForPinchZoom = r'''
+(function() {
+  try {
+    function patch() {
+      var nodes = document.querySelectorAll('meta[name="viewport"],meta[name=viewport]');
+      var i, el, c;
+      for (i = 0; i < nodes.length; i++) {
+        el = nodes[i];
+        c = el.getAttribute('content') || '';
+        c = c.replace(/user-scalable\s*=\s*no/gi, 'user-scalable=yes');
+        c = c.replace(/user-scalable\s*=\s*0/gi, 'user-scalable=yes');
+        c = c.replace(/maximum-scale\s*=\s*1(?:\.\d+)?/gi, 'maximum-scale=10');
+        if (!/user-scalable/i.test(c)) c = (c ? c + ',' : '') + 'user-scalable=yes';
+        if (!/minimum-scale/i.test(c)) c += ',minimum-scale=0.25';
+        if (!/maximum-scale/i.test(c)) c += ',maximum-scale=10';
+        el.setAttribute('content', c);
+      }
+      if (nodes.length === 0 && document.head) {
+        var m = document.createElement('meta');
+        m.name = 'viewport';
+        m.content = 'width=device-width,initial-scale=1,minimum-scale=0.25,maximum-scale=10,user-scalable=yes';
+        document.head.insertBefore(m, document.head.firstChild);
+      }
+    }
+    patch();
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', patch);
+    }
+  } catch (e) {}
+})();
+''';
 
 /// صفحه WebView برای سرویس انترنت یا پنل‌های ثابت (مثل اطلاعات وای‌فای)
 class InternetServiceScreen extends StatefulWidget {
@@ -21,11 +57,9 @@ class InternetServiceScreen extends StatefulWidget {
 }
 
 class _InternetServiceScreenState extends State<InternetServiceScreen> {
-  static const Color _primaryColor = Color(0xFF428B7C);
-  
   InAppWebViewController? _webViewController;
   final SettingsService _settingsService = SettingsService();
-  
+
   bool _isLoading = true;
   double _progress = 0.0;
   String? _currentUrl;
@@ -89,11 +123,23 @@ class _InternetServiceScreenState extends State<InternetServiceScreen> {
     }
   }
 
+  Future<void> _patchViewportForPinchZoom(
+    InAppWebViewController controller,
+  ) async {
+    try {
+      await controller.evaluateJavascript(
+        source: _kUnrestrictViewportForPinchZoom,
+      );
+    } catch (e) {
+      debugPrint('viewport zoom patch: $e');
+    }
+  }
+
   Future<void> _showUrlInputDialog() async {
     if (!widget.allowUrlChange) return;
 
     final urlController = TextEditingController(text: _currentUrl);
-    
+
     final result = await showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
@@ -127,10 +173,10 @@ class _InternetServiceScreenState extends State<InternetServiceScreen> {
       if (!url.startsWith('http://') && !url.startsWith('https://')) {
         url = 'https://$url';
       }
-      
+
       // ذخیره URL در تنظیمات
       await _settingsService.setServiceUrl(url);
-      
+
       if (_webViewController != null) {
         await _webViewController!.loadUrl(
           urlRequest: URLRequest(url: WebUri(url)),
@@ -149,76 +195,83 @@ class _InternetServiceScreenState extends State<InternetServiceScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    
+    final primaryColor = AppTheme.primaryFor(theme.brightness);
+
     return Scaffold(
       appBar: PreferredSize(
-            preferredSize: const Size.fromHeight(kToolbarHeight),
-            child: Container(
-              decoration: BoxDecoration(
+        preferredSize: const Size.fromHeight(kToolbarHeight),
+        child: Container(
+          decoration: BoxDecoration(
+            color: primaryColor,
+            boxShadow: [
+              BoxShadow(
                 color: theme.brightness == Brightness.dark
-                    ? colorScheme.surface
-                    : _primaryColor,
-                boxShadow: [
-                  BoxShadow(
-                    color: theme.brightness == Brightness.dark
-                        ? Colors.black.withOpacity(0.3)
-                        : Colors.black.withOpacity(0.05),
-                    blurRadius: 10,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
+                    ? Colors.black.withOpacity(0.3)
+                    : Colors.black.withOpacity(0.05),
+                blurRadius: 10,
+                offset: const Offset(0, 2),
               ),
-              child: AppBar(
-                title: Text(
-                  _pageTitle ?? widget.defaultTitle ?? 'سرویس انترنت',
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: theme.brightness == Brightness.dark
-                        ? colorScheme.onSurface
-                        : Colors.white,
-                  ),
-                ),
-                backgroundColor: Colors.transparent,
-                foregroundColor: theme.brightness == Brightness.dark
+            ],
+          ),
+          child: AppBar(
+            title: Text(
+              _pageTitle ?? widget.defaultTitle ?? 'سرویس انترنت',
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: theme.brightness == Brightness.dark
                     ? colorScheme.onSurface
                     : Colors.white,
-                elevation: 0,
-                shadowColor: Colors.transparent,
-                surfaceTintColor: Colors.transparent,
-                actions: [
-                  // دکمه بازگشت
-                  IconButton(
-                    icon: const Icon(Icons.arrow_back),
-                    onPressed: _canGoBack ? _goBack : null,
-                    tooltip: 'بازگشت',
-                  ),
-                  // دکمه جلو
-                  IconButton(
-                    icon: const Icon(Icons.arrow_forward),
-                    onPressed: _canGoForward ? _goForward : null,
-                    tooltip: 'جلو',
-                  ),
-                  // دکمه رفرش
-                  IconButton(
-                    icon: const Icon(Icons.refresh),
-                    onPressed: _reload,
-                    tooltip: 'بارگذاری مجدد',
-                  ),
-                  if (widget.allowUrlChange)
-                    IconButton(
-                      icon: const Icon(Icons.link),
-                      onPressed: _showUrlInputDialog,
-                      tooltip: 'تغییر آدرس',
-                    ),
-                ],
               ),
             ),
+            backgroundColor: Colors.transparent,
+            foregroundColor: theme.brightness == Brightness.dark
+                ? colorScheme.onSurface
+                : Colors.white,
+            elevation: 0,
+            shadowColor: Colors.transparent,
+            surfaceTintColor: Colors.transparent,
+            actions: [
+              // دکمه بازگشت
+              IconButton(
+                icon: const Icon(Icons.arrow_back),
+                onPressed: _canGoBack ? _goBack : null,
+                tooltip: 'بازگشت',
+              ),
+              // دکمه جلو
+              IconButton(
+                icon: const Icon(Icons.arrow_forward),
+                onPressed: _canGoForward ? _goForward : null,
+                tooltip: 'جلو',
+              ),
+              // دکمه رفرش
+              IconButton(
+                icon: const Icon(Icons.refresh),
+                onPressed: _reload,
+                tooltip: 'بارگذاری مجدد',
+              ),
+              if (widget.allowUrlChange)
+                IconButton(
+                  icon: const Icon(Icons.link),
+                  onPressed: _showUrlInputDialog,
+                  tooltip: 'تغییر آدرس',
+                ),
+            ],
           ),
+        ),
+      ),
       body: Stack(
         children: [
           // WebView
           if (!_showError && _currentUrl != null)
             InAppWebView(
+              preventGestureDelay: true,
+              initialUserScripts: UnmodifiableListView<UserScript>([
+                UserScript(
+                  groupName: 'pinch_zoom_viewport',
+                  source: _kUnrestrictViewportForPinchZoom,
+                  injectionTime: UserScriptInjectionTime.AT_DOCUMENT_END,
+                ),
+              ]),
               initialUrlRequest: URLRequest(url: WebUri(_currentUrl!)),
               initialSettings: InAppWebViewSettings(
                 // فعال‌سازی JavaScript
@@ -240,11 +293,18 @@ class _InternetServiceScreenState extends State<InternetServiceScreen> {
                 // پشتیبانی از File Access
                 allowsBackForwardNavigationGestures: true,
                 // تنظیمات User Agent
-                userAgent: 'Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.120 Mobile Safari/537.36',
-                // پشتیبانی از فرم‌ها
+                userAgent:
+                    'Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.120 Mobile Safari/537.36',
+                // زوم با دو انگشت (pinch) — روی اندروید builtInZoomControls باید true باشد
                 supportZoom: true,
-                builtInZoomControls: false,
+                builtInZoomControls: true,
+                // دکمه‌های +/- سیستم را نشان نده؛ فقط pinch کافی است
                 displayZoomControls: false,
+                // iOS: پیش‌فرض کتابخانه min/max=1.0 است و pinch را عملاً غیرفعال می‌کند
+                minimumZoomScale: 0.25,
+                maximumZoomScale: 5.0,
+                // نادیده گرفتن user-scalable=no و محدودیت scale در صفحه
+                ignoresViewportScaleLimits: true,
               ),
               onWebViewCreated: (controller) {
                 _webViewController = controller;
@@ -262,7 +322,7 @@ class _InternetServiceScreenState extends State<InternetServiceScreen> {
                   _isLoading = false;
                   _currentUrl = url.toString();
                 });
-                
+
                 try {
                   // دریافت عنوان صفحه
                   final title = await controller.getTitle();
@@ -271,7 +331,7 @@ class _InternetServiceScreenState extends State<InternetServiceScreen> {
                       _pageTitle = title;
                     });
                   }
-                  
+
                   // بررسی قابلیت‌های ناوبری (با try-catch برای جلوگیری از خطا)
                   try {
                     final canGoBack = await controller.canGoBack();
@@ -291,6 +351,8 @@ class _InternetServiceScreenState extends State<InternetServiceScreen> {
                       });
                     }
                   }
+
+                  await _patchViewportForPinchZoom(controller);
                 } catch (e) {
                   // خطا در دریافت اطلاعات صفحه - نادیده بگیر
                   debugPrint('Error in onLoadStop: $e');
@@ -367,7 +429,7 @@ class _InternetServiceScreenState extends State<InternetServiceScreen> {
                       icon: const Icon(Icons.refresh),
                       label: const Text('تلاش مجدد'),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: _primaryColor,
+                        backgroundColor: primaryColor,
                         foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(
                           horizontal: 24,
@@ -382,8 +444,8 @@ class _InternetServiceScreenState extends State<InternetServiceScreen> {
                         icon: const Icon(Icons.link),
                         label: const Text('تغییر آدرس'),
                         style: OutlinedButton.styleFrom(
-                          foregroundColor: _primaryColor,
-                          side: BorderSide(color: _primaryColor),
+                          foregroundColor: primaryColor,
+                          side: BorderSide(color: primaryColor),
                           padding: const EdgeInsets.symmetric(
                             horizontal: 24,
                             vertical: 12,
@@ -397,10 +459,8 @@ class _InternetServiceScreenState extends State<InternetServiceScreen> {
             )
           else
             // صفحه بارگذاری اولیه
-            const Center(
-              child: CircularProgressIndicator(),
-            ),
-          
+            const Center(child: CircularProgressIndicator()),
+
           // نوار پیشرفت بارگذاری
           if (_isLoading && _progress > 0.0)
             Positioned(
@@ -410,7 +470,7 @@ class _InternetServiceScreenState extends State<InternetServiceScreen> {
               child: LinearProgressIndicator(
                 value: _progress,
                 backgroundColor: Colors.grey.shade200,
-                valueColor: AlwaysStoppedAnimation<Color>(_primaryColor),
+                valueColor: AlwaysStoppedAnimation<Color>(primaryColor),
                 minHeight: 3,
               ),
             ),

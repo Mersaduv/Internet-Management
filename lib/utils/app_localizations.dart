@@ -115,8 +115,8 @@ class AppLocalizations {
   String get wifiPasswordLabel =>
       locale.languageCode == 'en' ? 'Password' : 'رمز عبور';
   String get wifiPasswordHint => locale.languageCode == 'en'
-      ? 'Leave empty to keep current password'
-      : 'برای حفظ رمز فعلی خالی بگذارید';
+      ? 'New password'
+      : 'رمز عبور جدید';
   String get wifiHideSsid => locale.languageCode == 'en'
       ? 'Hide Network Name'
       : 'مخفی کردن نام شبکه';
@@ -134,6 +134,22 @@ class AppLocalizations {
   String get wifiSaveSuccess => locale.languageCode == 'en'
       ? 'WiFi settings saved successfully'
       : 'تنظیمات وایفای با موفقیت ذخیره شد';
+  String get wifiSaveSuccessTitle => locale.languageCode == 'en'
+      ? 'Saved successfully'
+      : 'اطلاعات با موفقیت ذخیره شد';
+  String get wifiSaveSuccessReconnectBody => locale.languageCode == 'en'
+      ? 'To use the app again, please close the application, '
+          'reconnect to your WiFi network, then open the app again.'
+      : 'برای استفاده مجدد لطفاً برنامه را بسته نمایید، '
+          'دوباره به وایفای خود متصل شوید، '
+          'مجدداً برنامه را باز کنید.';
+  String get wifiCloseApp =>
+      locale.languageCode == 'en' ? 'Close app' : 'بستن برنامه';
+  String get wifiBackWithoutClose => locale.languageCode == 'en'
+      ? 'Back without closing'
+      : 'بازگشت بدون بستن';
+  String get wifiSaveSuccessOk =>
+      locale.languageCode == 'en' ? 'Got it' : 'متوجه شدم';
   String get wifiNoInterface => locale.languageCode == 'en'
       ? 'No wireless interface found'
       : 'رابط وایرلس یافت نشد';

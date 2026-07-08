@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/mikrotik_connection.dart';
 import '../services/mikrotik_service.dart';
+import '../utils/app_theme.dart';
 
 /// صفحه تست اتصال به MikroTik RouterOS
 class ConnectionTestScreen extends StatefulWidget {
@@ -13,10 +14,10 @@ class ConnectionTestScreen extends StatefulWidget {
 class _ConnectionTestScreenState extends State<ConnectionTestScreen> {
   final _formKey = GlobalKey<FormState>();
   final _hostController = TextEditingController(text: '192.168.88.1');
-  final _portController = TextEditingController(text: '8728');
+  final _portController = TextEditingController(text: '2752');
   final _usernameController = TextEditingController(text: 'admin');
   final _passwordController = TextEditingController();
-  
+
   bool _useSsl = false;
   bool _isConnecting = false;
   String? _connectionResult;
@@ -54,7 +55,7 @@ class _ConnectionTestScreenState extends State<ConnectionTestScreen> {
       // ایجاد اتصال
       final connection = MikroTikConnection(
         host: _hostController.text.trim(),
-        port: int.tryParse(_portController.text.trim()) ?? 8728,
+        port: int.tryParse(_portController.text.trim()) ?? 2752,
         username: _usernameController.text.trim(),
         password: _passwordController.text,
         useSsl: _useSsl,
@@ -68,7 +69,8 @@ class _ConnectionTestScreenState extends State<ConnectionTestScreen> {
         if (success) {
           _connectionResult = 'اتصال با موفقیت برقرار شد! ✅';
         } else {
-          _connectionResult = 'اتصال برقرار نشد. لطفاً اطلاعات را بررسی کنید. ❌';
+          _connectionResult =
+              'اتصال برقرار نشد. لطفاً اطلاعات را بررسی کنید. ❌';
         }
       });
     } catch (e) {
@@ -94,7 +96,7 @@ class _ConnectionTestScreenState extends State<ConnectionTestScreen> {
       });
 
       final result = await _service!.getAllClients();
-      
+
       setState(() {
         _isConnecting = false;
       });
@@ -124,30 +126,27 @@ class _ConnectionTestScreenState extends State<ConnectionTestScreen> {
       setState(() {
         _isConnecting = false;
       });
-      
+
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('خطا: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('خطا: $e')));
       }
     }
   }
-
-  static const Color _primaryColor = Color(0xFF428B7C);
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    
+    final primaryColor = AppTheme.primaryFor(theme.brightness);
+
     return Scaffold(
       appBar: PreferredSize(
         preferredSize: const Size.fromHeight(kToolbarHeight),
         child: Container(
           decoration: BoxDecoration(
-            color: theme.brightness == Brightness.dark
-                ? colorScheme.surface
-                : _primaryColor,
+            color: primaryColor,
             boxShadow: [
               BoxShadow(
                 color: theme.brightness == Brightness.dark
@@ -209,7 +208,7 @@ class _ConnectionTestScreenState extends State<ConnectionTestScreen> {
                 controller: _portController,
                 decoration: const InputDecoration(
                   labelText: 'پورت',
-                  hintText: '8728',
+                  hintText: '2752',
                   border: OutlineInputBorder(),
                   prefixIcon: Icon(Icons.numbers),
                 ),
@@ -275,10 +274,10 @@ class _ConnectionTestScreenState extends State<ConnectionTestScreen> {
                 onChanged: (value) {
                   setState(() {
                     _useSsl = value ?? false;
-                    if (_useSsl && _portController.text == '8728') {
+                    if (_useSsl && _portController.text == '2752') {
                       _portController.text = '8729';
                     } else if (!_useSsl && _portController.text == '8729') {
-                      _portController.text = '8728';
+                      _portController.text = '2752';
                     }
                   });
                 },
@@ -316,12 +315,12 @@ class _ConnectionTestScreenState extends State<ConnectionTestScreen> {
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
                       : const Icon(Icons.people),
-                  label: Text(_isConnecting
-                      ? 'در حال دریافت...'
-                      : 'تست دریافت کلاینت‌ها'),
+                  label: Text(
+                    _isConnecting ? 'در حال دریافت...' : 'تست دریافت کلاینت‌ها',
+                  ),
                   style: ElevatedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 16),
-                    backgroundColor: Colors.green,
+                    backgroundColor: primaryColor,
                     foregroundColor: Colors.white,
                   ),
                 ),
@@ -333,11 +332,11 @@ class _ConnectionTestScreenState extends State<ConnectionTestScreen> {
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
                     color: _isConnected == true
-                        ? Colors.green.shade50
+                        ? AppTheme.successSurfaceFor(theme.brightness)
                         : Colors.red.shade50,
                     border: Border.all(
                       color: _isConnected == true
-                          ? Colors.green
+                          ? AppTheme.successBorderFor(theme.brightness)
                           : Colors.red,
                       width: 2,
                     ),
@@ -346,11 +345,9 @@ class _ConnectionTestScreenState extends State<ConnectionTestScreen> {
                   child: Row(
                     children: [
                       Icon(
-                        _isConnected == true
-                            ? Icons.check_circle
-                            : Icons.error,
+                        _isConnected == true ? Icons.check_circle : Icons.error,
                         color: _isConnected == true
-                            ? Colors.green
+                            ? AppTheme.successForegroundFor(theme.brightness)
                             : Colors.red,
                         size: 32,
                       ),
@@ -362,7 +359,9 @@ class _ConnectionTestScreenState extends State<ConnectionTestScreen> {
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
                             color: _isConnected == true
-                                ? Colors.green.shade900
+                                ? AppTheme.successForegroundFor(
+                                    theme.brightness,
+                                  )
                                 : Colors.red.shade900,
                           ),
                         ),
@@ -377,4 +376,3 @@ class _ConnectionTestScreenState extends State<ConnectionTestScreen> {
     );
   }
 }
-

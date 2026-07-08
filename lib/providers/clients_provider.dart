@@ -4,6 +4,7 @@ import '../models/client_info.dart';
 import '../services/mikrotik_service_manager.dart';
 import '../services/network_info_service.dart';
 import '../utils/client_display_policy.dart';
+import '../utils/routeros_duration_parser.dart';
 
 enum LoadingPhase { idle, phase1, phase2, phase3, complete }
 
@@ -16,6 +17,8 @@ class ClientsProvider extends ChangeNotifier {
   static const Duration _phase3Timeout = Duration(seconds: 15);
   static const Duration _lockStatusCacheTtl = Duration(seconds: 30);
   static const String _banMarker = '[Ariyabod BAN]';
+  static const int offlineThresholdSeconds = 300;
+  static const Duration statusRefreshInterval = Duration(seconds: 30);
 
   // State variables
   bool _isLoading = false;
@@ -39,6 +42,11 @@ class ClientsProvider extends ChangeNotifier {
   String? _lastAutoStaticIp;
   final Set<String> _approvalActionsInProgress = <String>{};
   Future<void>? _activeRefreshFuture;
+  Timer? _onlineStatusTimer;
+  bool _suppressNotifications = false;
+  int _pendingNotifications = 0;
+  bool _apiOperationInProgress = false;
+  String? _activeOperationDeviceMac;
 
   // Getters
   bool get isLoading => _isLoading;
@@ -50,14 +58,89 @@ class ClientsProvider extends ChangeNotifier {
   bool get bannedListLoaded => _bannedListLoaded;
   bool get isBannedListLoading => _isBannedListLoading;
   List<ClientInfo> get clients => _clients;
+
+  /// Devices shown in the connected tab (green-dot rule after phase 2).
+  List<ClientInfo> get clientsForDisplay {
+    if (!_phase2Complete) {
+      return _clients
+          .where(ClientDisplayPolicy.shouldShowInConnectedList)
+          .toList();
+    }
+    return _clients
+        .where(ClientDisplayPolicy.shouldShowInConnectedListUi)
+        .toList();
+  }
   List<Map<String, dynamic>> get bannedClients => _bannedClients;
   String? get errorMessage => _errorMessage;
   String? get deviceIp => _deviceIp;
   bool get isRefreshing => _isRefreshing;
   bool get isConnected => _serviceManager.isConnected;
   Map<String, dynamic>? get routerInfo => _routerInfo;
+
   bool get isNewConnectionsLocked => _isNewConnectionsLocked;
   bool get isLockUpdating => _isLockUpdating;
+  String? get activeOperationDeviceMac => _activeOperationDeviceMac;
+
+  @override
+  void notifyListeners() {
+    if (_suppressNotifications) {
+      _pendingNotifications++;
+      return;
+    }
+    super.notifyListeners();
+  }
+
+  void notifyListenersImmediate() => super.notifyListeners();
+
+  Future<T> _withBatchedNotifications<T>(Future<T> Function() action) async {
+    _suppressNotifications = true;
+    _pendingNotifications = 0;
+    try {
+      return await action();
+    } finally {
+      _suppressNotifications = false;
+      if (_pendingNotifications > 0) {
+        _pendingNotifications = 0;
+        super.notifyListeners();
+      }
+    }
+  }
+
+  Future<T> _runUserApiOperation<T>(Future<T> Function() action) async {
+    _apiOperationInProgress = true;
+    try {
+      return await _withBatchedNotifications(action);
+    } finally {
+      _apiOperationInProgress = false;
+    }
+  }
+
+  String? _operationKeyForClient({String? macAddress, String? ipAddress}) {
+    final mac = macAddress?.trim().toUpperCase();
+    if (mac != null && mac.isNotEmpty) {
+      return mac;
+    }
+    final ip = ipAddress?.trim();
+    if (ip != null && ip.isNotEmpty) {
+      return ip;
+    }
+    return null;
+  }
+
+  bool _isOperationTarget(ClientInfo client, String? operationKey) {
+    if (operationKey == null) {
+      return false;
+    }
+    final mac = client.macAddress?.trim().toUpperCase();
+    if (mac != null && mac.isNotEmpty && mac == operationKey) {
+      return true;
+    }
+    return client.ipAddress?.trim() == operationKey;
+  }
+
+  bool isDeviceUnderOperation(ClientInfo client) {
+    return _isOperationTarget(client, _activeOperationDeviceMac);
+  }
 
   bool _isCurrentDeviceTarget(String ipAddress, {String? macAddress}) {
     final normalizedIp = ipAddress.trim();
@@ -573,6 +656,15 @@ class ClientsProvider extends ChangeNotifier {
           .getPhase2ArpTable()
           .timeout(_phase2StepTimeout, onTimeout: () => <Map<String, String>>[]);
 
+      final arpCompleteIps = <String>{};
+      for (final entry in arpEntries) {
+        final ip = (entry['address'] ?? '').trim();
+        final isComplete = (entry['complete'] ?? 'false').toString() == 'true';
+        if (ip.isNotEmpty && isComplete) {
+          arpCompleteIps.add(ip);
+        }
+      }
+
       var arpChanged = false;
       for (final arp in arpEntries) {
         final mac = arp['mac-address']?.toUpperCase();
@@ -669,6 +761,8 @@ class ClientsProvider extends ChangeNotifier {
       _sortClientsForDisplay();
       _isDataComplete = true;
 
+      _applyOnlineStatus(arpCompleteIps: arpCompleteIps);
+
       if (wirelessChanged || arpChanged) {
         notifyListeners();
       }
@@ -715,8 +809,161 @@ class ClientsProvider extends ChangeNotifier {
 
       _phase3Complete = true;
       notifyListeners();
+      _startOnlineStatusTimer();
     } catch (e) {
       debugPrint('[PROGRESSIVE_LOAD] Phase 3 failed: $e');
+    }
+  }
+
+  void _applyOnlineStatus({
+    required Set<String> arpCompleteIps,
+    Map<String, int>? lastSeenByIp,
+  }) {
+    var anyChanged = false;
+
+    for (var i = 0; i < _clients.length; i++) {
+      final device = _clients[i];
+      final ip = (device.ipAddress ?? '').trim();
+
+      if (ip.isEmpty || ip == '0.0.0.0') {
+        if (device.isOnline != null) {
+          _clients[i].isOnline = null;
+          anyChanged = true;
+        }
+        continue;
+      }
+
+      final inArpComplete = arpCompleteIps.contains(ip);
+
+      final lastSeenSeconds = lastSeenByIp?[ip] ??
+          RouterOsDurationParser.toSeconds(
+            device.rawData['last-seen']?.toString(),
+          );
+
+      final bool? newStatus;
+      if (inArpComplete) {
+        newStatus = true;
+      } else if (lastSeenSeconds != null &&
+          lastSeenSeconds > offlineThresholdSeconds) {
+        newStatus = false;
+      } else {
+        newStatus = null;
+      }
+
+      if (newStatus != device.isOnline) {
+        _clients[i].isOnline = newStatus;
+        anyChanged = true;
+        final label = newStatus == true
+            ? '✅ ONLINE'
+            : newStatus == false
+                ? '❌ OFFLINE'
+                : '❓ UNKNOWN';
+        debugPrint(
+          '[ONLINE_STATUS] $label ${device.hostName ?? ip} '
+          '(last-seen: ${device.rawData['last-seen'] ?? 'n/a'}, arp: $inArpComplete)',
+        );
+      }
+    }
+
+    if (anyChanged) {
+      notifyListeners();
+    }
+  }
+
+  void _startOnlineStatusTimer() {
+    _onlineStatusTimer?.cancel();
+    _onlineStatusTimer = Timer.periodic(
+      statusRefreshInterval,
+      (_) => _refreshOnlineStatus(),
+    );
+  }
+
+  void _stopOnlineStatusTimer() {
+    _onlineStatusTimer?.cancel();
+    _onlineStatusTimer = null;
+  }
+
+  void startOnlineStatusTimer() => _startOnlineStatusTimer();
+
+  void stopOnlineStatusTimer() => _stopOnlineStatusTimer();
+
+  Future<void> refreshOnlineStatus() => _refreshOnlineStatus();
+
+  Future<void> _refreshOnlineStatus() async {
+    if (_apiOperationInProgress ||
+        _isLoading ||
+        _isRefreshing ||
+        _clients.isEmpty) {
+      return;
+    }
+    if (!_serviceManager.isConnected) {
+      return;
+    }
+
+    try {
+      final arpEntries = await _serviceManager.getArpTable();
+      final leaseLastSeen = await _serviceManager.getDhcpLastSeen();
+
+      final arpCompleteIps = <String>{};
+      for (final entry in arpEntries) {
+        if ((entry['complete'] ?? '') == 'true') {
+          final ip = (entry['address'] ?? '').trim();
+          if (ip.isNotEmpty) {
+            arpCompleteIps.add(ip);
+          }
+        }
+      }
+
+      final lastSeenMap = <String, int>{};
+      for (final lease in leaseLastSeen) {
+        final ip = (lease['address'] ?? '').trim();
+        final secs = RouterOsDurationParser.toSeconds(
+          lease['last-seen']?.toString(),
+        );
+        if (ip.isNotEmpty && secs != null) {
+          lastSeenMap[ip] = secs;
+        }
+      }
+
+      var anyChanged = false;
+
+      for (var i = 0; i < _clients.length; i++) {
+        final ip = (_clients[i].ipAddress ?? '').trim();
+        if (ip.isEmpty || ip == '0.0.0.0') {
+          continue;
+        }
+
+        final prevOnline = _clients[i].isOnline;
+        final inArp = arpCompleteIps.contains(ip);
+        final lastSeen = lastSeenMap[ip] ??
+            RouterOsDurationParser.toSeconds(
+              _clients[i].rawData['last-seen']?.toString(),
+            );
+
+        final bool? newStatus;
+        if (inArp) {
+          newStatus = true;
+        } else if (lastSeen != null && lastSeen > offlineThresholdSeconds) {
+          newStatus = false;
+        } else {
+          newStatus = null;
+        }
+
+        if (newStatus != prevOnline) {
+          _clients[i].isOnline = newStatus;
+          anyChanged = true;
+          debugPrint(
+            '[ONLINE_STATUS] Changed: ${_clients[i].hostName ?? ip} '
+            '$prevOnline → $newStatus',
+          );
+        }
+      }
+
+      if (anyChanged) {
+        notifyListeners();
+      }
+    } catch (e) {
+      debugPrint('[ONLINE_STATUS] Refresh failed: $e');
     }
   }
 
@@ -884,41 +1131,40 @@ class ClientsProvider extends ChangeNotifier {
       return;
     }
 
-    try {
-      var success = await _serviceManager.service!
-          .banClientWithFingerprint(
-            ipAddress,
-            macAddress: macAddress,
-            hostname: hostname,
-            ssid: ssid,
-          )
-          .timeout(const Duration(seconds: 25), onTimeout: () => false);
-
-      if (!success) {
-        success = await _serviceManager.service!
-            .banClient(
+    await _runUserApiOperation(() async {
+      try {
+        var success = await _serviceManager.service!
+            .banClientWithFingerprint(
               ipAddress,
               macAddress: macAddress,
-              comment: 'Banned via Flutter App',
+              hostname: hostname,
+              ssid: ssid,
             )
-            .timeout(const Duration(seconds: 15), onTimeout: () => false);
-      }
+            .timeout(const Duration(seconds: 25), onTimeout: () => false);
 
-      if (!success) {
-        _errorMessage = 'Client ban failed.';
-        notifyListeners();
-        return;
-      }
+        if (!success) {
+          success = await _serviceManager.service!
+              .banClient(
+                ipAddress,
+                macAddress: macAddress,
+                comment: 'Banned via Flutter App',
+              )
+              .timeout(const Duration(seconds: 15), onTimeout: () => false);
+        }
 
-      await loadBannedClients(notifyChanges: false);
-      _filterBannedFromConnectedList();
-      _errorMessage = null;
-      notifyListeners();
-    } catch (e) {
-      debugPrint('[BAN_FAST] background ban failed: $e');
-      _errorMessage = 'Error banning client: $e';
-      notifyListeners();
-    }
+        if (!success) {
+          _errorMessage = 'Client ban failed.';
+          return;
+        }
+
+        await loadBannedClients(notifyChanges: false);
+        _filterBannedFromConnectedList();
+        _errorMessage = null;
+      } catch (e) {
+        debugPrint('[BAN_FAST] background ban failed: $e');
+        _errorMessage = 'Error banning client: $e';
+      }
+    });
   }
 
   /// مسدودسازی سریع از صفحه جزئیات — UI فوری، API در پس‌زمینه.
@@ -934,13 +1180,13 @@ class ClientsProvider extends ChangeNotifier {
 
     if (!_serviceManager.isConnected || _serviceManager.service == null) {
       _errorMessage = 'Connection is not established.';
-      notifyListeners();
+      notifyListenersImmediate();
       return false;
     }
 
     if (_isCurrentDeviceTarget(ipAddress, macAddress: macAddress)) {
       _errorMessage = 'امکان مسدود کردن دستگاه فعلی وجود ندارد.';
-      notifyListeners();
+      notifyListenersImmediate();
       return false;
     }
 
@@ -952,7 +1198,7 @@ class ClientsProvider extends ChangeNotifier {
     );
     _filterBannedFromConnectedList();
     _errorMessage = null;
-    notifyListeners();
+    notifyListenersImmediate();
 
     unawaited(
       _applyBanOnRouterInBackground(
@@ -974,7 +1220,7 @@ class ClientsProvider extends ChangeNotifier {
     }
 
     _removeClientFromList(ipAddress, macAddress: macAddress);
-    notifyListeners();
+    notifyListenersImmediate();
 
     unawaited(
       _applyBanOnRouterInBackground(
@@ -994,51 +1240,92 @@ class ClientsProvider extends ChangeNotifier {
   }) async {
     if (!_serviceManager.isConnected || _serviceManager.service == null) {
       _errorMessage = 'Connection is not established.';
-      notifyListeners();
+      notifyListenersImmediate();
       return false;
     }
 
     if (_isCurrentDeviceTarget(ipAddress, macAddress: macAddress)) {
       _errorMessage = 'امکان مسدود کردن دستگاه فعلی وجود ندارد.';
-      notifyListeners();
+      notifyListenersImmediate();
       return false;
     }
 
-    try {
-      var success = await _serviceManager.service!
-          .banClientWithFingerprint(
-            ipAddress,
-            macAddress: macAddress,
-            hostname: hostname,
-            ssid: ssid,
-          )
-          .timeout(const Duration(seconds: 30), onTimeout: () => false);
+    final operationKey = _operationKeyForClient(
+      macAddress: macAddress,
+      ipAddress: ipAddress,
+    );
+    _activeOperationDeviceMac = operationKey;
 
-      if (!success) {
-        success = await _serviceManager.service!
-            .banClient(
+    ClientInfo? removedClient;
+    var removedIndex = -1;
+    if (macAddress != null && macAddress.isNotEmpty) {
+      final macUpper = macAddress.toUpperCase();
+      removedIndex = _clients.indexWhere(
+        (client) =>
+            client.macAddress?.toUpperCase() == macUpper ||
+            client.ipAddress == ipAddress,
+      );
+    } else {
+      removedIndex = _clients.indexWhere(
+        (client) => client.ipAddress == ipAddress,
+      );
+    }
+    if (removedIndex != -1) {
+      removedClient = _clients.removeAt(removedIndex);
+      _addOptimisticBannedEntry(
+        ipAddress: ipAddress,
+        macAddress: macAddress,
+        hostname: hostname,
+      );
+      _filterBannedFromConnectedList();
+      notifyListenersImmediate();
+    }
+
+    try {
+      return await _runUserApiOperation(() async {
+        var success = await _serviceManager.service!
+            .banClientWithFingerprint(
               ipAddress,
               macAddress: macAddress,
-              comment: 'Banned via Flutter App',
+              hostname: hostname,
+              ssid: ssid,
             )
-            .timeout(const Duration(seconds: 20), onTimeout: () => false);
-      }
+            .timeout(const Duration(seconds: 30), onTimeout: () => false);
 
-      if (!success) {
-        _errorMessage = 'Client ban failed.';
-        notifyListeners();
-        return false;
-      }
+        if (!success) {
+          success = await _serviceManager.service!
+              .banClient(
+                ipAddress,
+                macAddress: macAddress,
+                comment: 'Banned via Flutter App',
+              )
+              .timeout(const Duration(seconds: 20), onTimeout: () => false);
+        }
 
-      _removeClientFromList(ipAddress, macAddress: macAddress);
-      await refresh();
+        if (!success) {
+          _errorMessage = 'Client ban failed.';
+          if (removedClient != null && removedIndex >= 0) {
+            _clients.insert(removedIndex, removedClient);
+            _removeFromBannedList(ipAddress, macAddress: macAddress);
+          }
+          return false;
+        }
 
-      _errorMessage = null;
-      return true;
+        await loadBannedClients(notifyChanges: false);
+        _filterBannedFromConnectedList();
+        _errorMessage = null;
+        return true;
+      });
     } catch (e) {
+      if (removedClient != null && removedIndex >= 0) {
+        _clients.insert(removedIndex, removedClient);
+        _removeFromBannedList(ipAddress, macAddress: macAddress);
+      }
       _errorMessage = 'Error banning client: $e';
-      notifyListeners();
+      notifyListenersImmediate();
       return false;
+    } finally {
+      _activeOperationDeviceMac = null;
     }
   }
 
@@ -1112,7 +1399,7 @@ class ClientsProvider extends ChangeNotifier {
   Future<bool> approveDevice(ClientInfo client) async {
     if (!_serviceManager.isConnected) {
       _errorMessage = 'Connection is not established.';
-      notifyListeners();
+      notifyListenersImmediate();
       return false;
     }
 
@@ -1121,39 +1408,38 @@ class ClientsProvider extends ChangeNotifier {
       return false;
     }
 
-    _approvalActionsInProgress.add(key);
-    notifyListeners();
+    return _runUserApiOperation(() async {
+      _approvalActionsInProgress.add(key);
+      try {
+        final success = await _serviceManager
+            .makeClientStatic(
+              ipAddress: client.ipAddress,
+              macAddress: client.macAddress,
+            )
+            .timeout(_autoStaticTimeout, onTimeout: () => false);
 
-    try {
-      final success = await _serviceManager
-          .makeClientStatic(
-            ipAddress: client.ipAddress,
-            macAddress: client.macAddress,
-          )
-          .timeout(_autoStaticTimeout, onTimeout: () => false);
+        if (!success) {
+          _errorMessage = 'Make Static failed.';
+          return false;
+        }
 
-      if (!success) {
-        _errorMessage = 'Make Static failed.';
+        _markClientStatic(client);
+        _errorMessage = null;
+        Future.microtask(refresh);
+        return true;
+      } catch (e) {
+        _errorMessage = 'Error approving device: $e';
         return false;
+      } finally {
+        _approvalActionsInProgress.remove(key);
       }
-
-      _markClientStatic(client);
-      _errorMessage = null;
-      Future.microtask(refresh);
-      return true;
-    } catch (e) {
-      _errorMessage = 'Error approving device: $e';
-      return false;
-    } finally {
-      _approvalActionsInProgress.remove(key);
-      notifyListeners();
-    }
+    });
   }
 
   Future<bool> rejectDevice(ClientInfo client) async {
     if (client.ipAddress == null || client.ipAddress!.isEmpty) {
       _errorMessage = 'Device IP was not found.';
-      notifyListeners();
+      notifyListenersImmediate();
       return false;
     }
 
@@ -1162,39 +1448,38 @@ class ClientsProvider extends ChangeNotifier {
       return false;
     }
 
-    _approvalActionsInProgress.add(key);
-    notifyListeners();
+    return _runUserApiOperation(() async {
+      _approvalActionsInProgress.add(key);
+      try {
+        final staticSuccess = await _serviceManager
+            .makeClientStatic(
+              ipAddress: client.ipAddress,
+              macAddress: client.macAddress,
+            )
+            .timeout(_autoStaticTimeout, onTimeout: () => false);
 
-    try {
-      final staticSuccess = await _serviceManager
-          .makeClientStatic(
-            ipAddress: client.ipAddress,
-            macAddress: client.macAddress,
-          )
-          .timeout(_autoStaticTimeout, onTimeout: () => false);
+        if (!staticSuccess) {
+          _errorMessage = 'Make Static failed.';
+          return false;
+        }
 
-      if (!staticSuccess) {
-        _errorMessage = 'Make Static failed.';
+        _markClientStatic(client);
+
+        final banned = await banClientFast(
+          ipAddress: client.ipAddress!,
+          macAddress: client.macAddress,
+          hostname: client.hostName,
+          ssid: client.ssid,
+        );
+        _errorMessage = banned ? null : 'Device ban failed.';
+        return banned;
+      } catch (e) {
+        _errorMessage = 'Error rejecting device: $e';
         return false;
+      } finally {
+        _approvalActionsInProgress.remove(key);
       }
-
-      _markClientStatic(client);
-
-      final banned = await banClientFast(
-        ipAddress: client.ipAddress!,
-        macAddress: client.macAddress,
-        hostname: client.hostName,
-        ssid: client.ssid,
-      );
-      _errorMessage = banned ? null : 'Device ban failed.';
-      return banned;
-    } catch (e) {
-      _errorMessage = 'Error rejecting device: $e';
-      return false;
-    } finally {
-      _approvalActionsInProgress.remove(key);
-      notifyListeners();
-    }
+    });
   }
 
   Future<void> loadNewConnectionsLockStatus({bool notifyChanges = true}) async {
@@ -1227,63 +1512,65 @@ class ClientsProvider extends ChangeNotifier {
   Future<bool> lockNewConnections() async {
     if (!_serviceManager.isConnected) {
       _errorMessage = 'Connection is not established.';
-      notifyListeners();
+      notifyListenersImmediate();
       return false;
     }
 
     _isLockUpdating = true;
-    notifyListeners();
+    notifyListenersImmediate();
 
-    try {
-      final success = await _serviceManager.lockNewConnections().timeout(
-        const Duration(seconds: 8),
-        onTimeout: () => false,
-      );
-      if (success) {
-        _isNewConnectionsLocked = true;
-        _errorMessage = null;
-      } else {
-        _errorMessage = 'Lock New Connections failed.';
+    return _runUserApiOperation(() async {
+      try {
+        final success = await _serviceManager.lockNewConnections().timeout(
+          const Duration(seconds: 8),
+          onTimeout: () => false,
+        );
+        if (success) {
+          _isNewConnectionsLocked = true;
+          _errorMessage = null;
+        } else {
+          _errorMessage = 'Lock New Connections failed.';
+        }
+        return success;
+      } catch (e) {
+        _errorMessage = 'Error locking new connections: $e';
+        return false;
+      } finally {
+        _isLockUpdating = false;
       }
-      return success;
-    } catch (e) {
-      _errorMessage = 'Error locking new connections: $e';
-      return false;
-    } finally {
-      _isLockUpdating = false;
-      notifyListeners();
-    }
+    });
   }
 
   Future<bool> unlockNewConnections() async {
     if (!_serviceManager.isConnected) {
       _errorMessage = 'Connection is not established.';
-      notifyListeners();
+      notifyListenersImmediate();
       return false;
     }
 
     _isLockUpdating = true;
-    notifyListeners();
+    notifyListenersImmediate();
 
-    try {
-      final success = await _serviceManager.unlockNewConnections().timeout(
-        const Duration(seconds: 8),
-        onTimeout: () => false,
-      );
-      if (success) {
-        _isNewConnectionsLocked = false;
-        _errorMessage = null;
-      } else {
-        _errorMessage = 'Unlock New Connections failed.';
+    return _runUserApiOperation(() async {
+      try {
+        final success = await _serviceManager.unlockNewConnections().timeout(
+          const Duration(seconds: 8),
+          onTimeout: () => false,
+        );
+        if (success) {
+          _isNewConnectionsLocked = false;
+          _errorMessage = null;
+        } else {
+          _errorMessage = 'Unlock New Connections failed.';
+        }
+        return success;
+      } catch (e) {
+        _errorMessage = 'Error unlocking new connections: $e';
+        return false;
+      } finally {
+        _isLockUpdating = false;
       }
-      return success;
-    } catch (e) {
-      _errorMessage = 'Error unlocking new connections: $e';
-      return false;
-    } finally {
-      _isLockUpdating = false;
-      notifyListeners();
-    }
+    });
   }
 
   Future<bool> toggleNewConnectionsLock() {
@@ -1298,35 +1585,35 @@ class ClientsProvider extends ChangeNotifier {
   ) async {
     if (!_serviceManager.isConnected) {
       _errorMessage = 'Connection is not established.';
-      notifyListeners();
+      notifyListenersImmediate();
       return null;
     }
 
     final normalizedName = displayName.trim();
     if (normalizedName.isEmpty) {
       _errorMessage = 'Device name is required.';
-      notifyListeners();
+      notifyListenersImmediate();
       return null;
     }
 
-    try {
-      final savedName = await _serviceManager
-          .setDhcpLeaseDisplayName(
-            ipAddress: client.ipAddress,
-            macAddress: client.macAddress,
-            displayName: normalizedName,
-          )
-          .timeout(const Duration(seconds: 20));
+    return _runUserApiOperation(() async {
+      try {
+        final savedName = await _serviceManager
+            .setDhcpLeaseDisplayName(
+              ipAddress: client.ipAddress,
+              macAddress: client.macAddress,
+              displayName: normalizedName,
+            )
+            .timeout(const Duration(seconds: 20));
 
-      _updateClientDisplayName(client, savedName);
-      _errorMessage = null;
-      notifyListeners();
-      return savedName;
-    } catch (e) {
-      _errorMessage = 'Error saving device name: $e';
-      notifyListeners();
-      return null;
-    }
+        _updateClientDisplayName(client, savedName);
+        _errorMessage = null;
+        return savedName;
+      } catch (e) {
+        _errorMessage = 'Error saving device name: $e';
+        return null;
+      }
+    });
   }
 
   void _addOptimisticConnectedEntry({
@@ -1384,61 +1671,77 @@ class ClientsProvider extends ChangeNotifier {
   }) async {
     if (!_serviceManager.isConnected) {
       _errorMessage = 'اتصال برقرار نشده است.';
-      notifyListeners();
+      notifyListenersImmediate();
       return false;
     }
 
+    final operationKey = _operationKeyForClient(
+      macAddress: macAddress,
+      ipAddress: ipAddress,
+    );
+    _activeOperationDeviceMac = operationKey;
+
+    Map<String, dynamic>? bannedSnapshot;
+    for (final banned in _bannedClients) {
+      final bannedIp = banned['address']?.toString();
+      final bannedMac = banned['mac_address']?.toString().toUpperCase();
+      if (bannedIp == ipAddress ||
+          (macAddress != null &&
+              macAddress.isNotEmpty &&
+              bannedMac == macAddress.toUpperCase())) {
+        bannedSnapshot = Map<String, dynamic>.from(banned);
+        break;
+      }
+    }
+
+    _removeFromBannedList(ipAddress, macAddress: macAddress);
+    _addOptimisticConnectedEntry(
+      ipAddress: ipAddress,
+      macAddress: macAddress,
+      hostname:
+          hostname ??
+          bannedSnapshot?['host_name']?.toString() ??
+          bannedSnapshot?['hostname']?.toString(),
+      ssid: ssid ?? bannedSnapshot?['ssid']?.toString(),
+    );
+    notifyListenersImmediate();
+
     try {
-      final success =
-          await _serviceManager.service?.unbanClientWithFingerprint(
-            ipAddress,
-            macAddress: macAddress,
-            hostname: hostname,
-            ssid: ssid,
-          ) ??
-          false;
+      return await _runUserApiOperation(() async {
+        final success =
+            await _serviceManager.service?.unbanClientWithFingerprint(
+              ipAddress,
+              macAddress: macAddress,
+              hostname: hostname,
+              ssid: ssid,
+            ) ??
+            false;
 
-      if (!success) {
-        _errorMessage =
-            'رفع مسدودیت کامل نشد. DHCP یا Wireless هنوز مسدود است — دوباره تلاش کنید.';
-        notifyListeners();
-        return false;
-      }
-
-      Map<String, dynamic>? bannedSnapshot;
-      for (final banned in _bannedClients) {
-        final bannedIp = banned['address']?.toString();
-        final bannedMac = banned['mac_address']?.toString().toUpperCase();
-        if (bannedIp == ipAddress ||
-            (macAddress != null &&
-                macAddress.isNotEmpty &&
-                bannedMac == macAddress.toUpperCase())) {
-          bannedSnapshot = banned;
-          break;
+        if (!success) {
+          _errorMessage =
+              'رفع مسدودیت کامل نشد. DHCP یا Wireless هنوز مسدود است — دوباره تلاش کنید.';
+          if (bannedSnapshot != null) {
+            _bannedClients.add(bannedSnapshot);
+            _removeClientFromList(ipAddress, macAddress: macAddress);
+          }
+          return false;
         }
-      }
 
-      _removeFromBannedList(ipAddress, macAddress: macAddress);
-      _addOptimisticConnectedEntry(
-        ipAddress: ipAddress,
-        macAddress: macAddress,
-        hostname:
-            hostname ??
-            bannedSnapshot?['host_name']?.toString() ??
-            bannedSnapshot?['hostname']?.toString(),
-        ssid: ssid ?? bannedSnapshot?['ssid']?.toString(),
-      );
-      await loadBannedClients(notifyChanges: false);
-      _filterBannedFromConnectedList();
-      _errorMessage = null;
-      notifyListeners();
-
-      unawaited(loadClients(showLoading: false, notifyChanges: true));
-      return true;
+        await loadBannedClients(notifyChanges: false);
+        _filterBannedFromConnectedList();
+        _errorMessage = null;
+        return true;
+      });
     } catch (e) {
+      if (bannedSnapshot != null) {
+        _bannedClients.add(bannedSnapshot);
+        _removeClientFromList(ipAddress, macAddress: macAddress);
+      }
       _errorMessage = 'خطا در رفع مسدودیت کلاینت: $e';
-      notifyListeners();
+      notifyListenersImmediate();
       return false;
+    } finally {
+      _activeOperationDeviceMac = null;
     }
   }
 
@@ -1446,58 +1749,63 @@ class ClientsProvider extends ChangeNotifier {
   Future<bool> setClientSpeed(String target, String maxLimit) async {
     if (!_serviceManager.isConnected) {
       _errorMessage = '????? ?????? ???? ???.';
-      notifyListeners();
+      notifyListenersImmediate();
       return false;
     }
 
-    try {
-      final success = await _serviceManager.service
-          ?.setClientSpeed(target, maxLimit)
-          .timeout(_autoStaticTimeout, onTimeout: () => false);
+    return _runUserApiOperation(() async {
+      try {
+        final success = await _serviceManager.service
+            ?.setClientSpeed(target, maxLimit)
+            .timeout(_autoStaticTimeout, onTimeout: () => false);
 
-      if (success == true) {
-        _errorMessage = null;
-        return true;
+        if (success == true) {
+          _errorMessage = null;
+          return true;
+        }
+
+        _errorMessage = '????? ???? ?????? ???.';
+        return false;
+      } catch (e) {
+        _errorMessage = '??? ?? ????? ????: $e';
+        return false;
       }
-
-      _errorMessage = '????? ???? ?????? ???.';
-      notifyListeners();
-      return false;
-    } catch (e) {
-      _errorMessage = '??? ?? ????? ????: $e';
-      notifyListeners();
-      return false;
-    }
+    });
   }
 
   Future<bool> removeClientSpeed(String target) async {
     if (!_serviceManager.isConnected) {
       _errorMessage = '????? ?????? ???? ???.';
-      notifyListeners();
+      notifyListenersImmediate();
       return false;
     }
 
-    try {
-      final success = await _serviceManager.service
-          ?.removeClientSpeed(target)
-          .timeout(_autoStaticTimeout, onTimeout: () => false);
+    return _runUserApiOperation(() async {
+      try {
+        final success = await _serviceManager.service
+            ?.removeClientSpeed(target)
+            .timeout(_autoStaticTimeout, onTimeout: () => false);
 
-      if (success == true) {
-        _errorMessage = null;
-        return true;
+        if (success == true) {
+          _errorMessage = null;
+          return true;
+        }
+
+        _errorMessage = '???? ??????? ???? ??? ???? ???.';
+        return false;
+      } catch (e) {
+        _errorMessage = '??? ?? ??? ????: $e';
+        return false;
       }
-
-      _errorMessage = '???? ??????? ???? ??? ???? ???.';
-      notifyListeners();
-      return false;
-    } catch (e) {
-      _errorMessage = '??? ?? ??? ????: $e';
-      notifyListeners();
-      return false;
-    }
+    });
   }
 
   void clear() {
+    _stopOnlineStatusTimer();
+    _suppressNotifications = false;
+    _pendingNotifications = 0;
+    _apiOperationInProgress = false;
+    _activeOperationDeviceMac = null;
     _isLoading = false;
     _isDataComplete = false;
     _phase1Complete = false;

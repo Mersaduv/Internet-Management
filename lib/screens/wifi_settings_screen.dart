@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../models/mikrotik_connection.dart';
@@ -8,6 +9,8 @@ import '../providers/clients_provider.dart';
 import '../services/mikrotik_service_manager.dart';
 import '../services/settings_service.dart';
 import '../utils/app_localizations.dart';
+import '../utils/app_theme.dart';
+import '../utils/smart_text_direction.dart';
 import '../utils/wifi_webview_boards.dart';
 
 /// Entry point: routes to WebView or native WiFi form based on router board.
@@ -59,18 +62,14 @@ class _WifiWebViewRedirectState extends State<_WifiWebViewRedirect> {
       if (!mounted) {
         return;
       }
-      debugPrint(
-        '[WIFI_SETTINGS] opening /wifi-webview at http://10.10.10.2/',
-      );
+      debugPrint('[WIFI_SETTINGS] opening /wifi-webview at http://10.10.10.2/');
       Navigator.of(context).pushReplacementNamed('/wifi-webview');
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    return const Scaffold(
-      body: Center(child: CircularProgressIndicator()),
-    );
+    return const Scaffold(body: Center(child: CircularProgressIndicator()));
   }
 }
 
@@ -78,11 +77,11 @@ class _WifiLoadingPlaceholder extends StatefulWidget {
   const _WifiLoadingPlaceholder();
 
   @override
-  State<_WifiLoadingPlaceholder> createState() => _WifiLoadingPlaceholderState();
+  State<_WifiLoadingPlaceholder> createState() =>
+      _WifiLoadingPlaceholderState();
 }
 
 class _WifiLoadingPlaceholderState extends State<_WifiLoadingPlaceholder> {
-  static const Color _primaryColor = Color(0xFF428B7C);
   Timer? _pollTimer;
   int _elapsedMs = 0;
   static const int _maxWaitMs = 10000;
@@ -129,6 +128,7 @@ class _WifiLoadingPlaceholderState extends State<_WifiLoadingPlaceholder> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
+    final primaryColor = AppTheme.primaryFor(Theme.of(context).brightness);
     final provider = Provider.of<ClientsProvider>(context);
 
     if (provider.routerInfo != null) {
@@ -139,7 +139,7 @@ class _WifiLoadingPlaceholderState extends State<_WifiLoadingPlaceholder> {
       return Scaffold(
         appBar: AppBar(
           title: Text(l10n?.wifiSettings ?? 'تنظیمات وایفای'),
-          backgroundColor: _primaryColor,
+          backgroundColor: primaryColor,
           foregroundColor: Colors.white,
         ),
         body: Center(
@@ -164,7 +164,7 @@ class _WifiLoadingPlaceholderState extends State<_WifiLoadingPlaceholder> {
     return Scaffold(
       appBar: AppBar(
         title: Text(l10n?.wifiSettings ?? 'تنظیمات وایفای'),
-        backgroundColor: _primaryColor,
+        backgroundColor: primaryColor,
         foregroundColor: Colors.white,
       ),
       body: Center(
@@ -181,16 +181,27 @@ class _WifiLoadingPlaceholderState extends State<_WifiLoadingPlaceholder> {
   }
 }
 
+class _WifiSaveResult {
+  const _WifiSaveResult({
+    required this.ssid,
+    required this.password,
+    required this.hideSsid,
+  });
+
+  final String ssid;
+  final String password;
+  final bool hideSsid;
+}
+
 class WifiNativeSettingsScreen extends StatefulWidget {
   const WifiNativeSettingsScreen({super.key});
 
   @override
-  State<WifiNativeSettingsScreen> createState() => _WifiNativeSettingsScreenState();
+  State<WifiNativeSettingsScreen> createState() =>
+      _WifiNativeSettingsScreenState();
 }
 
 class _WifiNativeSettingsScreenState extends State<WifiNativeSettingsScreen> {
-  static const Color _primaryColor = Color(0xFF428B7C);
-
   final MikroTikServiceManager _manager = MikroTikServiceManager();
   final SettingsService _settingsService = SettingsService();
 
@@ -200,8 +211,10 @@ class _WifiNativeSettingsScreenState extends State<WifiNativeSettingsScreen> {
   String? _errorMessage;
 
   String _interfaceId = '';
+  String _interfaceName = 'wlan1';
   String _securityProfileId = '';
   String _securityProfileName = 'default';
+  _WifiSaveResult? _saveResult;
   String _currentSsid = '';
   bool _hideSsid = false;
   String _originalSsid = '';
@@ -248,7 +261,8 @@ class _WifiNativeSettingsScreenState extends State<WifiNativeSettingsScreen> {
           .getWifiSettings(interfaceId: interfaceId)
           .timeout(const Duration(seconds: 10));
 
-      final interfaces = (settings['interfaces'] as List<dynamic>?)
+      final interfaces =
+          (settings['interfaces'] as List<dynamic>?)
               ?.map((e) => Map<String, dynamic>.from(e as Map))
               .toList() ??
           <Map<String, dynamic>>[];
@@ -260,6 +274,7 @@ class _WifiNativeSettingsScreenState extends State<WifiNativeSettingsScreen> {
       setState(() {
         _interfaces = interfaces;
         _interfaceId = settings['interface_id']?.toString() ?? '';
+        _interfaceName = settings['interface_name']?.toString() ?? 'wlan1';
         _securityProfileId = settings['security_profile_id']?.toString() ?? '';
         _securityProfileName =
             settings['security_profile_name']?.toString() ?? 'default';
@@ -281,12 +296,12 @@ class _WifiNativeSettingsScreenState extends State<WifiNativeSettingsScreen> {
       final l10n = AppLocalizations.of(context);
       setState(() {
         _isLoading = false;
-        _errorMessage = message.contains('هیچ رابط وایرلسی') ||
-                message.contains('wireless')
+        _errorMessage =
+            message.contains('هیچ رابط وایرلسی') || message.contains('wireless')
             ? (l10n?.wifiNoInterface ?? 'رابط وایرلس یافت نشد')
             : message.contains('اتصال به روتر')
-                ? (l10n?.wifiConnectionLost ?? message)
-                : message;
+            ? (l10n?.wifiConnectionLost ?? message)
+            : message;
       });
     }
   }
@@ -301,7 +316,7 @@ class _WifiNativeSettingsScreenState extends State<WifiNativeSettingsScreen> {
       }
       final connection = MikroTikConnection(
         host: settings['host'] as String? ?? '192.168.88.1',
-        port: settings['port'] as int? ?? 8728,
+        port: settings['port'] as int? ?? 2752,
         username: credentials['username']!,
         password: credentials['password']!,
         useSsl: settings['useSsl'] as bool? ?? false,
@@ -310,7 +325,9 @@ class _WifiNativeSettingsScreenState extends State<WifiNativeSettingsScreen> {
       if (!ok) {
         throw Exception('اتصال برقرار نشد');
       }
-      await _loadWifiSettings(interfaceId: _interfaceId.isEmpty ? null : _interfaceId);
+      await _loadWifiSettings(
+        interfaceId: _interfaceId.isEmpty ? null : _interfaceId,
+      );
     } catch (e) {
       if (mounted) {
         _showErrorDialog(e.toString().replaceAll('Exception: ', ''));
@@ -327,94 +344,60 @@ class _WifiNativeSettingsScreenState extends State<WifiNativeSettingsScreen> {
       return;
     }
 
-    final l10n = AppLocalizations.of(context);
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(l10n?.wifiSaveConfirmTitle ?? 'ذخیره تنظیمات وایفای'),
-        content: Text(
-          l10n?.wifiSaveConfirmBody ??
-              'ممکن است اتصال وایفای چند ثانیه قطع شود. ادامه می‌دهید؟',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: Text(l10n?.cancel ?? 'انصراف'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: Text(l10n?.wifiSave ?? 'ذخیره'),
-          ),
-        ],
-      ),
-    );
+    final ssidChanged = _ssidController.text.trim() != _originalSsid;
+    final passwordChanged = _passwordController.text.isNotEmpty;
+    final hideSsidChanged = _hideSsid != _originalHideSsid;
 
-    if (confirmed != true || !mounted) {
+    if (!ssidChanged && !passwordChanged && !hideSsidChanged) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('هیچ تغییری وجود ندارد')));
       return;
     }
 
-    await _save();
-  }
-
-  Future<void> _save() async {
     final l10n = AppLocalizations.of(context);
-    final newSsid = _ssidController.text.trim();
-    final newPassword = _passwordController.text;
-    final ssidChanged = newSsid != _originalSsid;
-    final hideChanged = _hideSsid != _originalHideSsid;
-
     setState(() => _isSaving = true);
 
     try {
-      debugPrint('[WIFI_SETTINGS] saving changes');
+      debugPrint('[WIFI_SETTINGS] saveWifiSettingsAtomic (RouterOS script)');
       if (!await _manager.ensureSession()) {
         throw Exception(
           l10n?.wifiConnectionLost ?? 'اتصال به روتر قطع شده است',
         );
       }
 
-      if (ssidChanged || hideChanged) {
-        await _manager
-            .setWifiSsid(
-              interfaceId: _interfaceId,
-              ssid: newSsid,
-              hideSsid: _hideSsid,
-            )
-            .timeout(const Duration(seconds: 10));
-      }
-
-      if (newPassword.isNotEmpty) {
-        if (_securityProfileId.isEmpty) {
-          throw Exception('شناسه پروفایل امنیتی یافت نشد');
-        }
-        await _manager
-            .setWifiPassword(
-              securityProfileId: _securityProfileId,
-              password: newPassword,
-            )
-            .timeout(const Duration(seconds: 10));
-      }
+      await _manager.saveWifiSettingsAtomic(
+        interfaceName: _interfaceName,
+        profileName: _securityProfileName,
+        ssid: _ssidController.text.trim(),
+        hideSsid: _hideSsid,
+        password: _passwordController.text.isNotEmpty
+            ? _passwordController.text
+            : null,
+      );
 
       if (!mounted) {
         return;
       }
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            l10n?.wifiSaveSuccess ?? 'تنظیمات وایفای با موفقیت ذخیره شد',
-          ),
-        ),
-      );
-      Navigator.pop(context);
+      setState(() {
+        _saveResult = _WifiSaveResult(
+          ssid: _ssidController.text.trim(),
+          password: _passwordController.text.isNotEmpty
+              ? _passwordController.text
+              : '(بدون تغییر)',
+          hideSsid: _hideSsid,
+        );
+        _isSaving = false;
+      });
     } catch (e) {
       debugPrint('[WIFI_SETTINGS] save error: $e');
       if (mounted) {
-        _showErrorDialog(e.toString().replaceAll('Exception: ', ''));
-      }
-    } finally {
-      if (mounted) {
         setState(() => _isSaving = false);
+        _showErrorDialog(e.toString().replaceAll('Exception: ', ''));
       }
     }
   }
@@ -447,18 +430,32 @@ class _WifiNativeSettingsScreenState extends State<WifiNativeSettingsScreen> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final theme = Theme.of(context);
+    final isSuccess = _saveResult != null;
+    final primaryColor = AppTheme.primaryFor(theme.brightness);
 
     return Scaffold(
+      backgroundColor: theme.colorScheme.surfaceContainerHighest,
       appBar: AppBar(
-        title: Text(l10n?.wifiSettings ?? 'تنظیمات وایفای'),
-        backgroundColor: _primaryColor,
+        title: Text(
+          isSuccess
+              ? (l10n?.wifiSaveSuccessTitle ?? 'اطلاعات با موفقیت ذخیره شد')
+              : (l10n?.wifiSettings ?? 'تنظیمات وایفای'),
+        ),
+        backgroundColor: primaryColor,
         foregroundColor: Colors.white,
+        automaticallyImplyLeading: !isSuccess,
       ),
       body: _buildBody(l10n, theme),
     );
   }
 
   Widget _buildBody(AppLocalizations? l10n, ThemeData theme) {
+    final primaryColor = AppTheme.primaryFor(theme.brightness);
+
+    if (_saveResult != null) {
+      return _buildSuccessScreen(l10n, theme);
+    }
+
     if (_isLoading) {
       return Center(
         child: Column(
@@ -473,7 +470,8 @@ class _WifiNativeSettingsScreenState extends State<WifiNativeSettingsScreen> {
     }
 
     if (_errorMessage != null) {
-      final isConnectionLost = _errorMessage!.contains('قطع') ||
+      final isConnectionLost =
+          _errorMessage!.contains('قطع') ||
           _errorMessage!.contains('Connection') ||
           _errorMessage!.contains('connect');
       return Center(
@@ -482,7 +480,11 @@ class _WifiNativeSettingsScreenState extends State<WifiNativeSettingsScreen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(Icons.error_outline, size: 48, color: theme.colorScheme.error),
+              Icon(
+                Icons.error_outline,
+                size: 48,
+                color: theme.colorScheme.error,
+              ),
               const SizedBox(height: 16),
               Text(_errorMessage!, textAlign: TextAlign.center),
               const SizedBox(height: 24),
@@ -537,12 +539,18 @@ class _WifiNativeSettingsScreenState extends State<WifiNativeSettingsScreen> {
                   if (id == null || id == _interfaceId) {
                     return;
                   }
+                  final selected = _interfaces.firstWhere(
+                    (iface) => iface['id']?.toString() == id,
+                    orElse: () => <String, dynamic>{},
+                  );
+                  _interfaceName =
+                      selected['name']?.toString() ?? _interfaceName;
                   _loadWifiSettings(interfaceId: id);
                 },
               ),
               const SizedBox(height: 16),
             ],
-            TextFormField(
+            SmartDirectionTextFormField(
               controller: _ssidController,
               maxLength: 32,
               decoration: InputDecoration(
@@ -560,15 +568,14 @@ class _WifiNativeSettingsScreenState extends State<WifiNativeSettingsScreen> {
               },
             ),
             const SizedBox(height: 12),
-            TextFormField(
+            SmartDirectionTextFormField(
               controller: _passwordController,
               obscureText: _obscurePassword,
               maxLength: 63,
               onChanged: (_) => setState(() {}),
               decoration: InputDecoration(
                 labelText: l10n?.wifiPasswordLabel ?? 'رمز عبور',
-                hintText: l10n?.wifiPasswordHint ??
-                    'برای حفظ رمز فعلی خالی بگذارید',
+                hintText: l10n?.wifiPasswordHint ?? 'رمز عبور جدید',
                 border: const OutlineInputBorder(),
                 suffixIcon: IconButton(
                   icon: Icon(
@@ -617,8 +624,7 @@ class _WifiNativeSettingsScreenState extends State<WifiNativeSettingsScreen> {
             SwitchListTile(
               title: Text(l10n?.wifiHideSsid ?? 'مخفی کردن نام شبکه'),
               subtitle: Text(
-                l10n?.wifiHideSsidSubtitle ??
-                    'دستگاه‌ها نام شبکه را نمی‌بینند',
+                l10n?.wifiHideSsidSubtitle ?? 'دستگاه‌ها نام شبکه را نمی‌بینند',
               ),
               value: _hideSsid,
               onChanged: (val) => setState(() => _hideSsid = val),
@@ -627,7 +633,7 @@ class _WifiNativeSettingsScreenState extends State<WifiNativeSettingsScreen> {
             ElevatedButton(
               onPressed: _isSaving ? null : _onSavePressed,
               style: ElevatedButton.styleFrom(
-                backgroundColor: _primaryColor,
+                backgroundColor: primaryColor,
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(vertical: 14),
               ),
@@ -644,6 +650,250 @@ class _WifiNativeSettingsScreenState extends State<WifiNativeSettingsScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  String _displayPassword(String password) {
+    if (password == '(بدون تغییر)' || password.isEmpty) {
+      return password;
+    }
+    if (password.length <= 4) {
+      return '•' * password.length;
+    }
+    return '${password.substring(0, 2)}${'•' * (password.length - 2)}';
+  }
+
+  Widget _buildSuccessScreen(AppLocalizations? l10n, ThemeData theme) {
+    final result = _saveResult!;
+    final colorScheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
+    final primaryColor = AppTheme.primaryFor(theme.brightness);
+
+    return SafeArea(
+      child: Center(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 440),
+            child: Card(
+              elevation: isDark ? 2 : 1,
+              color: colorScheme.surface,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+                side: BorderSide(
+                  color: colorScheme.outline.withOpacity(isDark ? 0.25 : 0.12),
+                ),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(24, 32, 24, 24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 88,
+                      height: 88,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: primaryColor.withOpacity(isDark ? 0.22 : 0.12),
+                        border: Border.all(
+                          color: primaryColor.withOpacity(0.35),
+                          width: 2,
+                        ),
+                      ),
+                      child: Icon(
+                        Icons.check_rounded,
+                        color: primaryColor,
+                        size: 48,
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    Text(
+                      l10n?.wifiSaveSuccessTitle ??
+                          'اطلاعات با موفقیت ذخیره شد',
+                      style: theme.textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        color: colorScheme.onSurface,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      l10n?.wifiSaveSuccess ??
+                          'تنظیمات وایفای با موفقیت ذخیره شد',
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: colorScheme.onSurface.withOpacity(0.65),
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 24),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 8,
+                      ),
+                      decoration: BoxDecoration(
+                        color: isDark
+                            ? colorScheme.surfaceContainerHighest
+                            : const Color(0xFFF4F7F6),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: colorScheme.outline.withOpacity(0.15),
+                        ),
+                      ),
+                      child: Column(
+                        children: [
+                          _buildSuccessSummaryRow(
+                            theme,
+                            icon: Icons.wifi_rounded,
+                            label: 'نام وایفای',
+                            value: result.ssid,
+                          ),
+                          Divider(
+                            height: 1,
+                            color: colorScheme.outline.withOpacity(0.12),
+                          ),
+                          _buildSuccessSummaryRow(
+                            theme,
+                            icon: Icons.lock_outline_rounded,
+                            label: 'رمز وایفای',
+                            value: _displayPassword(result.password),
+                          ),
+                          Divider(
+                            height: 1,
+                            color: colorScheme.outline.withOpacity(0.12),
+                          ),
+                          _buildSuccessSummaryRow(
+                            theme,
+                            icon: Icons.visibility_outlined,
+                            label: 'حالت نمایش',
+                            value: result.hideSsid ? 'مخفی' : 'قابل نمایش',
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: primaryColor.withOpacity(isDark ? 0.15 : 0.08),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: primaryColor.withOpacity(0.28),
+                        ),
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Icon(
+                            Icons.info_outline_rounded,
+                            color: primaryColor,
+                            size: 22,
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              l10n?.wifiSaveSuccessReconnectBody ??
+                                  'برای استفاده مجدد لطفاً برنامه را بسته نمایید، '
+                                      'دوباره به وایفای خود متصل شوید، '
+                                      'مجدداً برنامه را باز کنید.',
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: colorScheme.onSurface.withOpacity(0.85),
+                                height: 1.65,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 28),
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton.icon(
+                        onPressed: () => SystemNavigator.pop(),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: primaryColor,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        icon: const Icon(Icons.exit_to_app_rounded, size: 20),
+                        label: Text(
+                          l10n?.wifiCloseApp ?? 'بستن برنامه',
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    SizedBox(
+                      width: double.infinity,
+                      child: TextButton(
+                        onPressed: () => Navigator.pop(context),
+                        style: TextButton.styleFrom(
+                          foregroundColor: primaryColor,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                        ),
+                        child: Text(
+                          l10n?.wifiBackWithoutClose ?? 'بازگشت بدون بستن',
+                          style: const TextStyle(fontWeight: FontWeight.w500),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSuccessSummaryRow(
+    ThemeData theme, {
+    required IconData icon,
+    required String label,
+    required String value,
+  }) {
+    final colorScheme = theme.colorScheme;
+    final primaryColor = AppTheme.primaryFor(theme.brightness);
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 22, color: primaryColor),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: theme.textTheme.labelMedium?.copyWith(
+                    color: colorScheme.onSurface.withOpacity(0.55),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  value,
+                  style: theme.textTheme.bodyLarge?.copyWith(
+                    fontWeight: FontWeight.w600,
+                    color: colorScheme.onSurface,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

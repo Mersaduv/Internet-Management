@@ -6,6 +6,8 @@ import '../models/client_info.dart';
 import '../providers/clients_provider.dart';
 import '../services/mikrotik_service_manager.dart';
 import '../utils/app_localizations.dart';
+import '../utils/app_theme.dart';
+import '../utils/smart_text_direction.dart';
 import '../utils/client_display_policy.dart';
 
 /// صفحه جزئیات دستگاه
@@ -41,7 +43,7 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
   late final TextEditingController _leaseNameController;
   String? _displayHostName;
 
-  static const Color _primaryColor = Color(0xFF428B7C);
+  static const Color _primaryColor = AppTheme.primary;
 
   bool get _allowDeviceActions =>
       ClientDisplayPolicy.shouldAllowDeviceActions(widget.device);
@@ -372,7 +374,7 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
                                                 selectedUploadUnit = value;
                                               }),
                                           icon: Icons.upload,
-                                          color: Colors.green,
+                                          color: AppTheme.primary,
                                           label: 'Upload',
                                         );
                                         final downloadField = speedField(
@@ -757,7 +759,7 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
                           children: [
                             const Icon(
                               Icons.upload,
-                              color: Colors.green,
+                              color: AppTheme.primary,
                               size: 20,
                             ),
                             const SizedBox(width: 8),
@@ -769,7 +771,7 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
                                   style: TextStyle(
                                     fontSize: 18,
                                     fontWeight: FontWeight.bold,
-                                    color: Colors.green,
+                                    color: AppTheme.primary,
                                   ),
                                 );
                               },
@@ -1107,7 +1109,7 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
                 ),
               ],
             ),
-            backgroundColor: Colors.green,
+            backgroundColor: AppTheme.primary,
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -1227,7 +1229,7 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
                 Expanded(child: Text('سرعت اختصاصی حذف شد')),
               ],
             ),
-            backgroundColor: Colors.green,
+            backgroundColor: AppTheme.primary,
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -1389,8 +1391,9 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
       final Future<Map<String, String>?> speedFuture;
       if (widget.isCurrentDevice) {
         // اتصال دوم به RouterOS روی دستگاه فعلی می‌تواند API را اشباع کند.
-        speedFuture = serviceManager.service!
-            .getClientSpeed(widget.device.ipAddress!);
+        speedFuture = serviceManager.service!.getClientSpeed(
+          widget.device.ipAddress!,
+        );
       } else {
         speedFuture = serviceManager.getClientSpeedIsolated(
           widget.device.ipAddress!,
@@ -1547,7 +1550,7 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
         final isDisabled =
             widget.isBanned || widget.device.ipAddress == null || _isDisposed;
 
-        final field = TextField(
+        final field = SmartDirectionTextField(
           controller: _leaseNameController,
           enabled: !isDisabled && !_isSavingLeaseName,
           textInputAction: TextInputAction.done,
@@ -1791,7 +1794,7 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
             ElevatedButton(
               onPressed: () => Navigator.pop(context, true),
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.green,
+                backgroundColor: AppTheme.primary,
                 foregroundColor: Colors.white,
               ),
               child: Text(l10n?.unbanDevice ?? 'Unban Device'),
@@ -2407,8 +2410,8 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
                                   style: ElevatedButton.styleFrom(
                                     backgroundColor:
                                         theme.brightness == Brightness.dark
-                                        ? _darkenColor(Colors.green, 0.3)
-                                        : Colors.green,
+                                        ? AppTheme.primaryDark
+                                        : AppTheme.primary,
                                     foregroundColor: Colors.white,
                                     padding: const EdgeInsets.symmetric(
                                       vertical: 16,
@@ -2514,7 +2517,11 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
                 if (showSpeedValues) ...[
                   Row(
                     children: [
-                      const Icon(Icons.upload, color: Colors.green, size: 16),
+                      const Icon(
+                        Icons.upload,
+                        color: AppTheme.primary,
+                        size: 16,
+                      ),
                       const SizedBox(width: 6),
                       Text(
                         AppLocalizations.of(context)?.upload ?? 'Upload: ',
@@ -2528,7 +2535,7 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
                         style: const TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.w600,
-                          color: Colors.green,
+                          color: AppTheme.primary,
                         ),
                         textDirection: TextDirection.ltr,
                       ),

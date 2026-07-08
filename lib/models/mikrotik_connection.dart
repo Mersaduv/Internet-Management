@@ -8,7 +8,7 @@ class MikroTikConnection {
 
   MikroTikConnection({
     required this.host,
-    this.port = 8728,
+    this.port = 2752,
     required this.username,
     required this.password,
     this.useSsl = false,
@@ -16,7 +16,7 @@ class MikroTikConnection {
 
   /// پورت واقعی با توجه به SSL
   int get actualPort {
-    if (useSsl && port == 8728) {
+    if (useSsl && port == 2752) {
       return 8729;
     }
     return port;

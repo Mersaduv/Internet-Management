@@ -27,6 +27,35 @@ void main() {
     expect(ClientDisplayPolicy.shouldAllowDeviceActions(client), isTrue);
   });
 
+  test('only confirmed online shown in connected UI', () {
+    final offline = ClientInfo(
+      type: 'dhcp',
+      source: 'dhcp_lease',
+      ipAddress: '172.16.0.51',
+      macAddress: 'AA:BB:CC:DD:EE:02',
+      isOnline: false,
+      rawData: const {},
+    );
+    final unknown = ClientInfo(
+      type: 'dhcp',
+      source: 'dhcp_lease',
+      ipAddress: '172.16.0.52',
+      macAddress: 'AA:BB:CC:DD:EE:03',
+      rawData: const {},
+    );
+    final online = ClientInfo(
+      type: 'dhcp',
+      source: 'dhcp_lease',
+      ipAddress: '172.16.0.53',
+      macAddress: 'AA:BB:CC:DD:EE:04',
+      isOnline: true,
+      rawData: const {},
+    );
+    expect(ClientDisplayPolicy.shouldShowInConnectedListUi(offline), isFalse);
+    expect(ClientDisplayPolicy.shouldShowInConnectedListUi(unknown), isFalse);
+    expect(ClientDisplayPolicy.shouldShowInConnectedListUi(online), isTrue);
+  });
+
   test('CPE board skips wireless enrichment', () {
     expect(
       ClientDisplayPolicy.shouldSkipWirelessEnrichment({

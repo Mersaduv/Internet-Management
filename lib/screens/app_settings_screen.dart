@@ -5,6 +5,7 @@ import '../providers/clients_provider.dart';
 import 'package:provider/provider.dart';
 import '../main.dart';
 import '../utils/app_localizations.dart';
+import '../utils/app_theme.dart';
 
 /// 应用设置页面
 class AppSettingsScreen extends StatefulWidget {
@@ -17,11 +18,11 @@ class AppSettingsScreen extends StatefulWidget {
 class _AppSettingsScreenState extends State<AppSettingsScreen> {
   final MikroTikServiceManager _serviceManager = MikroTikServiceManager();
   final SettingsService _settingsService = SettingsService();
-  ThemeMode _selectedThemeMode = ThemeMode.system;
+  ThemeMode _selectedThemeMode = ThemeMode.light;
   String _selectedLanguageCode = 'fa';
   bool _isLoading = true;
 
-  static const Color _primaryColor = Color(0xFF428B7C);
+  static const Color _primaryColor = AppTheme.primary;
 
   @override
   void initState() {
@@ -34,10 +35,10 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
     try {
       // 加载语言设置
       final languageCode = await _settingsService.getLanguage();
-      
+
       // 加载主题设置
       final themeMode = await _settingsService.getThemeModeEnum();
-      
+
       setState(() {
         _selectedLanguageCode = languageCode;
         _selectedThemeMode = themeMode;
@@ -46,7 +47,7 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
     } catch (e) {
       setState(() {
         _selectedLanguageCode = 'fa';
-        _selectedThemeMode = ThemeMode.system;
+        _selectedThemeMode = ThemeMode.light;
         _isLoading = false;
       });
     }
@@ -68,7 +69,7 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
       final newLocale = languageCode == 'en'
           ? const Locale('en', 'US')
           : const Locale('fa', 'IR');
-      
+
       // 使用全局回调通知主应用
       if (onLanguageChanged != null) {
         onLanguageChanged!(newLocale);
@@ -162,7 +163,8 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
     final l10n = AppLocalizations.of(context);
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    
+    final primaryColor = AppTheme.primaryFor(theme.brightness);
+
     showModalBottomSheet(
       context: context,
       backgroundColor: colorScheme.surface,
@@ -189,11 +191,11 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
             const Divider(),
             // 明亮模式选项
             ListTile(
-              leading: const Icon(Icons.light_mode, color: _primaryColor),
+              leading: Icon(Icons.light_mode, color: primaryColor),
               title: Text(l10n?.light ?? 'Light'),
               subtitle: Text(l10n?.lightMode ?? 'Light Mode'),
               trailing: _selectedThemeMode == ThemeMode.light
-                  ? const Icon(Icons.check, color: _primaryColor)
+                  ? Icon(Icons.check, color: primaryColor)
                   : null,
               onTap: () {
                 Navigator.pop(context);
@@ -204,11 +206,11 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
             ),
             // 暗黑模式选项
             ListTile(
-              leading: const Icon(Icons.dark_mode, color: _primaryColor),
+              leading: Icon(Icons.dark_mode, color: primaryColor),
               title: Text(l10n?.dark ?? 'Dark'),
               subtitle: Text(l10n?.darkMode ?? 'Dark Mode'),
               trailing: _selectedThemeMode == ThemeMode.dark
-                  ? const Icon(Icons.check, color: _primaryColor)
+                  ? Icon(Icons.check, color: primaryColor)
                   : null,
               onTap: () {
                 Navigator.pop(context);
@@ -219,11 +221,11 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
             ),
             // 跟随系统选项
             ListTile(
-              leading: const Icon(Icons.brightness_auto, color: _primaryColor),
+              leading: Icon(Icons.brightness_auto, color: primaryColor),
               title: Text(l10n?.system ?? 'System'),
               subtitle: Text(l10n?.followSystem ?? 'Follow System'),
               trailing: _selectedThemeMode == ThemeMode.system
-                  ? const Icon(Icons.check, color: _primaryColor)
+                  ? Icon(Icons.check, color: primaryColor)
                   : null,
               onTap: () {
                 Navigator.pop(context);
@@ -244,7 +246,8 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
     final l10n = AppLocalizations.of(context);
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    
+    final primaryColor = AppTheme.primaryFor(theme.brightness);
+
     showModalBottomSheet(
       context: context,
       backgroundColor: colorScheme.surface,
@@ -271,7 +274,7 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
             const Divider(),
             // 波斯语选项
             ListTile(
-              leading: const Icon(Icons.language, color: _primaryColor),
+              leading: Icon(Icons.g_translate, color: primaryColor),
               title: Text(l10n?.persian ?? 'Persian'),
               subtitle: Builder(
                 builder: (context) {
@@ -280,7 +283,7 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
                 },
               ),
               trailing: _selectedLanguageCode == 'fa'
-                  ? const Icon(Icons.check, color: _primaryColor)
+                  ? Icon(Icons.check, color: primaryColor)
                   : null,
               onTap: () {
                 Navigator.pop(context);
@@ -291,11 +294,11 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
             ),
             // 英语选项
             ListTile(
-              leading: const Icon(Icons.language, color: _primaryColor),
+              leading: Icon(Icons.g_translate, color: primaryColor),
               title: Text(l10n?.english ?? 'English'),
               subtitle: const Text('English'),
               trailing: _selectedLanguageCode == 'en'
-                  ? const Icon(Icons.check, color: _primaryColor)
+                  ? Icon(Icons.check, color: primaryColor)
                   : null,
               onTap: () {
                 Navigator.pop(context);
@@ -316,15 +319,14 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
     final l10n = AppLocalizations.of(context);
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final primaryColor = AppTheme.primaryFor(theme.brightness);
 
     return Scaffold(
       appBar: PreferredSize(
         preferredSize: const Size.fromHeight(kToolbarHeight),
         child: Container(
           decoration: BoxDecoration(
-            color: theme.brightness == Brightness.dark
-                ? colorScheme.surface
-                : _primaryColor,
+            color: primaryColor,
             boxShadow: [
               BoxShadow(
                 color: theme.brightness == Brightness.dark
@@ -369,10 +371,7 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
               child: Column(
                 children: [
                   ListTile(
-                    leading: Icon(
-                      Icons.wifi,
-                      color: _primaryColor,
-                    ),
+                    leading: Icon(Icons.wifi, color: primaryColor),
                     title: Text(
                       l10n?.wifiSettings ?? 'تنظیمات وایفای',
                       style: const TextStyle(
@@ -381,8 +380,7 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
                       ),
                     ),
                     subtitle: Text(
-                      l10n?.wifiSettingsSubtitle ??
-                          'تغییر نام و رمز شبکه',
+                      l10n?.wifiSettingsSubtitle ?? 'تغییر نام و رمز شبکه',
                       style: TextStyle(
                         color: Colors.grey.shade600,
                         fontSize: 14,
@@ -391,7 +389,7 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
                     trailing: const Icon(
                       Icons.arrow_forward_ios,
                       size: 16,
-                      color: _primaryColor,
+                      color: AppTheme.primary,
                     ),
                     onTap: () {
                       Navigator.of(context).pushNamed('/wifi-settings');
@@ -400,10 +398,7 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
                   const Divider(height: 1),
                   // 语言选择
                   ListTile(
-                    leading: Icon(
-                      Icons.language,
-                      color: _primaryColor,
-                    ),
+                    leading: Icon(Icons.g_translate, color: primaryColor),
                     title: Text(
                       l10n?.language ?? 'Language',
                       style: const TextStyle(
@@ -434,19 +429,21 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
                                     ? (l10n?.english ?? 'English')
                                     : (l10n?.persian ?? 'Persian'),
                                 style: TextStyle(
-                                  color: _primaryColor,
+                                  color: primaryColor,
                                   fontWeight: FontWeight.w500,
                                 ),
                               ),
                               const SizedBox(width: 8),
-                              const Icon(
+                              Icon(
                                 Icons.arrow_forward_ios,
                                 size: 16,
-                                color: _primaryColor,
+                                color: primaryColor,
                               ),
                             ],
                           ),
-                    onTap: _isLoading ? null : () => _showLanguageSelector(context),
+                    onTap: _isLoading
+                        ? null
+                        : () => _showLanguageSelector(context),
                   ),
                   const Divider(height: 1),
                   // 主题模式
@@ -455,9 +452,9 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
                       _selectedThemeMode == ThemeMode.dark
                           ? Icons.dark_mode
                           : _selectedThemeMode == ThemeMode.system
-                              ? Icons.brightness_auto
-                              : Icons.light_mode,
-                      color: _primaryColor,
+                          ? Icons.brightness_auto
+                          : Icons.light_mode,
+                      color: primaryColor,
                     ),
                     title: Text(
                       l10n?.darkMode ?? 'Theme Mode',
@@ -485,19 +482,21 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
                               Text(
                                 _getThemeModeName(_selectedThemeMode, l10n),
                                 style: TextStyle(
-                                  color: _primaryColor,
+                                  color: primaryColor,
                                   fontWeight: FontWeight.w500,
                                 ),
                               ),
                               const SizedBox(width: 8),
-                              const Icon(
+                              Icon(
                                 Icons.arrow_forward_ios,
                                 size: 16,
-                                color: _primaryColor,
+                                color: primaryColor,
                               ),
                             ],
                           ),
-                    onTap: _isLoading ? null : () => _showThemeSelector(context),
+                    onTap: _isLoading
+                        ? null
+                        : () => _showThemeSelector(context),
                   ),
                 ],
               ),
@@ -510,10 +509,7 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
                 borderRadius: BorderRadius.circular(12),
               ),
               child: ListTile(
-                leading: const Icon(
-                  Icons.logout,
-                  color: Colors.red,
-                ),
+                leading: const Icon(Icons.logout, color: Colors.red),
                 title: Text(
                   l10n?.logout ?? 'Logout',
                   style: const TextStyle(
@@ -524,15 +520,10 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
                 ),
                 subtitle: Text(
                   l10n?.logoutMessage ?? 'Logout from account',
-                  style: const TextStyle(
-                    fontSize: 14,
-                  ),
+                  style: const TextStyle(fontSize: 14),
                 ),
                 onTap: _handleLogout,
-                trailing: const Icon(
-                  Icons.chevron_right,
-                  color: Colors.red,
-                ),
+                trailing: const Icon(Icons.chevron_right, color: Colors.red),
               ),
             ),
           ],
@@ -543,12 +534,14 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
 
   Future<void> _handleLogout() async {
     final l10n = AppLocalizations.of(context);
-    
+
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: Text(l10n?.logout ?? 'Logout'),
-        content: Text(l10n?.logoutConfirm ?? 'Are you sure you want to logout?'),
+        content: Text(
+          l10n?.logoutConfirm ?? 'Are you sure you want to logout?',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -570,7 +563,7 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
       final provider = Provider.of<ClientsProvider>(context, listen: false);
       provider.clear();
       _serviceManager.disconnect();
-      
+
       final settingsService = SettingsService();
       await settingsService.clearCredentials();
       await settingsService.clearLoginTimestamp();

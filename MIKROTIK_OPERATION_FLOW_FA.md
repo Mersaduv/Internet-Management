@@ -170,7 +170,7 @@
    - `port`
    - `useSsl`
 3. یک `MikroTikConnection` ساخته می‌شود.
-4. اگر `useSsl = true` و پورت `8728` باشد، مدل اتصال `actualPort` را به `8729` تبدیل می‌کند.
+4. اگر `useSsl = true` و پورت `2752` باشد، مدل اتصال `actualPort` را به `8729` تبدیل می‌کند.
 5. `MikroTikServiceManager.connect()` فراخوانی می‌شود.
 6. Manager اتصال قبلی را قطع می‌کند و یک نمونه جدید از `MikroTikService` می‌سازد.
 7. `MikroTikService.connect()`، شیء `RouterOSClientV2` را ساخته و `login()` را صدا می‌زند.

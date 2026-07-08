@@ -25,14 +25,14 @@ class RouterOSClient {
     required this.user,
     required this.password,
     this.useSsl = false,
-    this.port = 8728,
+    this.port = 2752,
   });
 
   /// اتصال و احراز هویت
   Future<bool> login() async {
     try {
       // اتصال TCP Socket
-      final actualPort = useSsl && port == 8728 ? 8729 : port;
+      final actualPort = useSsl && port == 2752 ? 8729 : port;
 
       // اگر SSL استفاده می‌شود، از SecureSocket استفاده می‌کنیم
       if (useSsl) {

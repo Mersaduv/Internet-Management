@@ -23,6 +23,13 @@ class ClientInfo {
   final bool? isStaticLease; // true = static, false = dynamic, null = unknown
   final Map<String, dynamic> rawData;
 
+  /// Whether the device is currently reachable (DHCP last-seen + ARP complete).
+  /// null = unknown (grace period or not yet evaluated).
+  bool? isOnline;
+
+  /// Legacy field — unused; kept for API compatibility.
+  int missedPollCount;
+
   ClientInfo({
     required this.type,
     required this.source,
@@ -46,6 +53,8 @@ class ClientInfo {
     this.expiresAfter,
     this.isStaticLease,
     required this.rawData,
+    this.isOnline,
+    this.missedPollCount = 0,
   });
 
   factory ClientInfo.fromMap(Map<String, dynamic> map) {
@@ -125,6 +134,8 @@ class ClientInfo {
     String? expiresAfter,
     bool? isStaticLease,
     Map<String, dynamic>? rawData,
+    bool? isOnline,
+    int? missedPollCount,
   }) {
     return ClientInfo(
       type: type ?? this.type,
@@ -149,6 +160,8 @@ class ClientInfo {
       expiresAfter: expiresAfter ?? this.expiresAfter,
       isStaticLease: isStaticLease ?? this.isStaticLease,
       rawData: rawData ?? this.rawData,
+      isOnline: isOnline ?? this.isOnline,
+      missedPollCount: missedPollCount ?? this.missedPollCount,
     );
   }
 

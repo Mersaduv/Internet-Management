@@ -314,6 +314,13 @@ class MikroTikService {
     }
   }
 
+  /// Public API for isolated short-lived connections (speed, disconnect poll).
+  Future<List<Map<String, String>>> talk(
+    List<String> command, {
+    Duration timeout = _apiTimeout,
+  }) =>
+      _talk(command, timeout: timeout);
+
   Future<List<Map<String, String>>> _talk(
     List<String> command, {
     Duration timeout = _apiTimeout,
@@ -1762,6 +1769,7 @@ class MikroTikService {
     'dynamic',
     'block-access',
     'status',
+    'last-seen',
   ];
 
   /// Phase 1 — bound DHCP leases only (minimal payload).
@@ -1840,8 +1848,27 @@ class MikroTikService {
     await _requireConnection();
     return _talk([
       '/ip/arp/print',
-      _proplist(['address', 'mac-address', 'interface']),
+      _proplist(['address', 'mac-address', 'interface', 'complete']),
     ], timeout: _phaseTalkTimeout);
+  }
+
+  /// ARP table with complete flag — online/offline status refresh.
+  Future<List<Map<String, String>>> getArpTable() async {
+    await _requireConnection();
+    return _talk([
+      '/ip/arp/print',
+      _proplist(['address', 'mac-address', 'complete']),
+    ], timeout: _apiTimeout);
+  }
+
+  /// Bound DHCP leases with last-seen only — online/offline status refresh.
+  Future<List<Map<String, String>>> getDhcpLastSeen() async {
+    await _requireConnection();
+    return _talk([
+      '/ip/dhcp-server/lease/print',
+      '?status=bound',
+      _proplist(['address', 'mac-address', 'last-seen']),
+    ], timeout: _apiTimeout);
   }
 
   /// Phase 2c — wireless registration (skipped on unsupported boards).
@@ -2917,6 +2944,52 @@ class MikroTikService {
     }
   }
 
+  static const List<String> _wifiSecurityProfileProplist = [
+    '.id',
+    'name',
+    'mode',
+    'default',
+    'wpa2-pre-shared-key',
+    'wpa-pre-shared-key',
+    'authentication-types',
+  ];
+
+  /// Resolves security profile by name (RouterOS `?=name=` filter is unreliable).
+  Future<Map<String, String>> _resolveWirelessSecurityProfile(
+    String profileName,
+  ) async {
+    final profiles = await _talk([
+      '/interface/wireless/security-profiles/print',
+      _proplist(_wifiSecurityProfileProplist),
+    ]).timeout(_apiTimeout);
+
+    if (profiles.isEmpty) {
+      return {};
+    }
+
+    final target = profileName.trim().isEmpty ? 'default' : profileName.trim();
+    for (final profile in profiles) {
+      if (profile['name'] == target) {
+        return profile;
+      }
+    }
+
+    final targetLower = target.toLowerCase();
+    for (final profile in profiles) {
+      if ((profile['name'] ?? '').toLowerCase() == targetLower) {
+        return profile;
+      }
+    }
+
+    for (final profile in profiles) {
+      if (profile['default'] == 'true') {
+        return profile;
+      }
+    }
+
+    return profiles.first;
+  }
+
   /// Reads wireless interfaces and settings for one interface.
   Future<Map<String, dynamic>> getWifiSettings({String? interfaceId}) async {
     debugPrint('[WIFI_SETTINGS] getWifiSettings(interfaceId=$interfaceId)');
@@ -2952,19 +3025,7 @@ class MikroTikService {
     }
 
     final profileName = iface['security-profile'] ?? 'default';
-    final profiles = await _talk([
-      '/interface/wireless/security-profiles/print',
-      '?=name=$profileName',
-      _proplist([
-        '.id',
-        'name',
-        'wpa2-pre-shared-key',
-        'wpa-pre-shared-key',
-        'authentication-types',
-      ]),
-    ]).timeout(_apiTimeout);
-
-    final profile = profiles.isNotEmpty ? profiles.first : <String, String>{};
+    final profile = await _resolveWirelessSecurityProfile(profileName);
     final sharedProfileCount = interfaces
         .where((i) => (i['security-profile'] ?? 'default') == profileName)
         .length;
@@ -2996,36 +3057,127 @@ class MikroTikService {
     };
   }
 
-  /// Updates WiFi SSID and hide-ssid on a wireless interface.
-  Future<void> setWifiSsid({
-    required String interfaceId,
+  /// Applies WiFi changes via a temporary RouterOS script (runs on the router).
+  Future<void> saveWifiSettingsAtomic({
+    required String interfaceName,
+    required String profileName,
     required String ssid,
     required bool hideSsid,
+    String? password,
   }) async {
-    debugPrint(
-      '[WIFI_SETTINGS] setWifiSsid(id=$interfaceId, hideSsid=$hideSsid)',
-    );
     await ensureConnected();
-    await _talk([
-      '/interface/wireless/set',
-      '=.id=$interfaceId',
-      '=ssid=$ssid',
-      '=hide-ssid=${hideSsid ? 'yes' : 'no'}',
-    ]).timeout(_apiTimeout);
+
+    const scriptName = '_ariyabod_wifi_update';
+    final wlan = interfaceName.trim().isEmpty ? 'wlan1' : interfaceName.trim();
+    final profile = profileName.trim().isEmpty ? 'default' : profileName.trim();
+
+    final buffer = StringBuffer();
+
+    if (password != null && password.isNotEmpty) {
+      final escapedPassword = _escapeRouterOsString(password);
+      final escapedProfile = _escapeRouterOsString(profile);
+      buffer.writeln(
+        '/interface wireless security-profiles set '
+        '[find name="$escapedProfile"] '
+        'wpa2-pre-shared-key="$escapedPassword" '
+        'wpa-pre-shared-key="$escapedPassword"',
+      );
+    }
+
+    final escapedSsid = _escapeRouterOsString(ssid);
+    final escapedInterface = _escapeRouterOsString(wlan);
+    final hideSsidValue = hideSsid ? 'yes' : 'no';
+    buffer.writeln(
+      '/interface wireless set '
+      '[find name="$escapedInterface"] '
+      'ssid="$escapedSsid" '
+      'hide-ssid=$hideSsidValue',
+    );
+
+    buffer.writeln(
+      '/system script remove [find name="$scriptName"]',
+    );
+
+    final scriptSource = buffer.toString().trim();
+    debugPrint('[WIFI_SETTINGS] Script source:\n$scriptSource');
+
+    try {
+      final existing = await _talk([
+        '/system/script/print',
+        '?name=$scriptName',
+        _proplist(['.id', 'name']),
+      ]).timeout(const Duration(seconds: 5));
+
+      for (final entry in existing) {
+        final id = entry['.id'];
+        if (id != null && id.isNotEmpty) {
+          await _talk([
+            '/system/script/remove',
+            '=.id=$id',
+          ]).timeout(const Duration(seconds: 5));
+          debugPrint('[WIFI_SETTINGS] Removed leftover script id=$id');
+        }
+      }
+    } catch (_) {
+      debugPrint('[WIFI_SETTINGS] No leftover script to remove');
+    }
+
+    try {
+      await _talk([
+        '/system/script/add',
+        '=name=$scriptName',
+        '=source=$scriptSource',
+        '=policy=read,write,policy,test',
+      ]).timeout(const Duration(seconds: 10));
+    } catch (e) {
+      final message = e.toString().toLowerCase();
+      if (message.contains('policy') ||
+          message.contains('permission') ||
+          message.contains('denied')) {
+        throw Exception(
+          'کاربر API دسترسی کافی برای اجرای اسکریپت ندارد. '
+          'لطفاً با مدیر شبکه تماس بگیرید.',
+        );
+      }
+      rethrow;
+    }
+
+    debugPrint('[WIFI_SETTINGS] ✅ Script uploaded as "$scriptName"');
+
+    String? scriptId;
+    try {
+      final added = await _talk([
+        '/system/script/print',
+        '?name=$scriptName',
+        _proplist(['.id', 'name']),
+      ]).timeout(const Duration(seconds: 5));
+      if (added.isNotEmpty) {
+        scriptId = added.first['.id'];
+      }
+    } catch (_) {}
+
+    final runCommand = scriptId != null && scriptId.isNotEmpty
+        ? ['/system/script/run', '=.id=$scriptId']
+        : ['/system/script/run', '=number=0'];
+
+    unawaited(
+      _talk(runCommand).timeout(const Duration(seconds: 3)).catchError((Object e) {
+        debugPrint(
+          '[WIFI_SETTINGS] ℹ️ Script triggered, connection may drop (expected): $e',
+        );
+      }),
+    );
+
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+    debugPrint('[WIFI_SETTINGS] ✅ All changes dispatched. Wireless will restart.');
   }
 
-  /// Updates WPA password on a wireless security profile.
-  Future<void> setWifiPassword({
-    required String securityProfileId,
-    required String password,
-  }) async {
-    debugPrint('[WIFI_SETTINGS] setWifiPassword(profileId=$securityProfileId)');
-    await ensureConnected();
-    await _talk([
-      '/interface/wireless/security-profiles/set',
-      '=.id=$securityProfileId',
-      '=wpa2-pre-shared-key=$password',
-      '=wpa-pre-shared-key=$password',
-    ]).timeout(_apiTimeout);
+  String _escapeRouterOsString(String value) {
+    return value
+        .replaceAll(r'\', r'\\')
+        .replaceAll('"', r'\"')
+        .replaceAll('\$', r'\$')
+        .replaceAll('\n', r'\n')
+        .replaceAll('\r', r'\r');
   }
 }

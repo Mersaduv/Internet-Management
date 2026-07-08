@@ -54,7 +54,7 @@ class MikroTikServiceManager {
       final settings = await settingsService.getAllSettings();
       final connection = MikroTikConnection(
         host: settings['host'] as String? ?? '192.168.88.1',
-        port: settings['port'] as int? ?? 8728,
+        port: settings['port'] as int? ?? 2752,
         username: credentials['username']!,
         password: credentials['password']!,
         useSsl: settings['useSsl'] as bool? ?? false,
@@ -249,6 +249,20 @@ class MikroTikServiceManager {
     return _service!.getPhase2ArpTable();
   }
 
+  Future<List<Map<String, String>>> getArpTable() async {
+    if (_service == null || !isConnected) {
+      throw Exception('Connection is not established');
+    }
+    return _service!.getArpTable();
+  }
+
+  Future<List<Map<String, String>>> getDhcpLastSeen() async {
+    if (_service == null || !isConnected) {
+      throw Exception('Connection is not established');
+    }
+    return _service!.getDhcpLastSeen();
+  }
+
   Future<List<Map<String, String>>> getPhase2WirelessRegistrations() async {
     if (_service == null || !isConnected) {
       throw Exception('Connection is not established');
@@ -349,30 +363,21 @@ class MikroTikServiceManager {
     return _service!.getWifiSettings(interfaceId: interfaceId);
   }
 
-  Future<void> setWifiSsid({
-    required String interfaceId,
+  Future<void> saveWifiSettingsAtomic({
+    required String interfaceName,
+    required String profileName,
     required String ssid,
     required bool hideSsid,
+    String? password,
   }) async {
     if (_service == null || !isConnected) {
       throw Exception('اتصال برقرار نشده');
     }
-    return _service!.setWifiSsid(
-      interfaceId: interfaceId,
+    return _service!.saveWifiSettingsAtomic(
+      interfaceName: interfaceName,
+      profileName: profileName,
       ssid: ssid,
       hideSsid: hideSsid,
-    );
-  }
-
-  Future<void> setWifiPassword({
-    required String securityProfileId,
-    required String password,
-  }) async {
-    if (_service == null || !isConnected) {
-      throw Exception('اتصال برقرار نشده');
-    }
-    return _service!.setWifiPassword(
-      securityProfileId: securityProfileId,
       password: password,
     );
   }
