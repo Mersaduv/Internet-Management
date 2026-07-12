@@ -1,14 +1,84 @@
 import 'dart:io';
+
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:network_info_plus/network_info_plus.dart';
+
 import 'mikrotik_service_manager.dart';
-import 'settings_service.dart';
+
+/// منبع تشخیص Default Gateway دستگاه (کلاینت)
+enum DeviceGatewaySource {
+  /// جدول مسیریابی / DHCP سیستم‌عامل (دقیق برای هر subnet)
+  system,
+
+  /// تشخیص ممکن نبود (مثلاً Web یا محدودیت پلتفرم)
+  unavailable,
+}
+
+/// نتیجهٔ تشخیص gateway اینترنت دستگاه
+class DeviceGatewayDiscovery {
+  const DeviceGatewayDiscovery({this.ip, required this.source});
+
+  final String? ip;
+  final DeviceGatewaySource source;
+
+  bool get found => ip != null && ip!.isNotEmpty;
+}
 
 /// سرویس برای دریافت اطلاعات شبکه دستگاه (IPv4 Address و Default Gateway)
 class NetworkInfoService {
   static final NetworkInfoService _instance = NetworkInfoService._internal();
   factory NetworkInfoService() => _instance;
   NetworkInfoService._internal();
-  
-  final SettingsService _settingsService = SettingsService();
+
+  final NetworkInfo _networkInfo = NetworkInfo();
+
+  static final RegExp _ipv4Regex = RegExp(
+    r'^(?:\d{1,3}\.){3}\d{1,3}$',
+  );
+
+  /// نرمال‌سازی و اعتبارسنجی IPv4 (برای تست و استفاده داخلی)
+  static String? normalizeIpv4(String? raw) {
+    if (raw == null) {
+      return null;
+    }
+    var value = raw.trim().replaceAll('"', '');
+    if (value.isEmpty || value == '0.0.0.0' || value == '255.255.255.255') {
+      return null;
+    }
+    if (!_ipv4Regex.hasMatch(value)) {
+      return null;
+    }
+    final parts = value.split('.');
+    for (final part in parts) {
+      final octet = int.tryParse(part);
+      if (octet == null || octet < 0 || octet > 255) {
+        return null;
+      }
+    }
+    return value;
+  }
+
+  /// Default Gateway واقعی اینترنت دستگاه از OS
+  /// (نه حدس subnet و نه route WAN روتر MikroTik)
+  Future<DeviceGatewayDiscovery> discoverDeviceDefaultGateway() async {
+    if (kIsWeb) {
+      return const DeviceGatewayDiscovery(source: DeviceGatewaySource.unavailable);
+    }
+
+    try {
+      final gateway = normalizeIpv4(await _networkInfo.getWifiGatewayIP());
+      if (gateway != null) {
+        return DeviceGatewayDiscovery(
+          ip: gateway,
+          source: DeviceGatewaySource.system,
+        );
+      }
+    } catch (_) {
+      // ignore
+    }
+
+    return const DeviceGatewayDiscovery(source: DeviceGatewaySource.unavailable);
+  }
 
   /// دریافت IPv4 Address دستگاه از NetworkInterface
   /// این متد IP محلی دستگاه را از interface های فعال برمی‌گرداند
@@ -47,14 +117,28 @@ class NetworkInfoService {
     }
   }
 
-  /// دریافت Default Gateway از RouterOS API
-  /// این متد از MikroTikServiceManager استفاده می‌کند
-  /// اگر اتصال به RouterOS برقرار باشد، gateway را از route table می‌گیرد
+  /// Default Gateway دستگاه — فقط از OS
+  Future<String?> getDefaultGatewayOrRouterIp() async {
+    final discovery = await discoverDeviceDefaultGateway();
+    return discovery.ip;
+  }
+
+  /// برچسب فارسی منبع gateway برای لاگ
+  String sourceLabel(DeviceGatewaySource source) {
+    switch (source) {
+      case DeviceGatewaySource.system:
+        return 'سیستم‌عامل (جدول مسیریابی / DHCP)';
+      case DeviceGatewaySource.unavailable:
+        return 'یافت نشد';
+    }
+  }
+
+  /// دریافت Default Gateway از route table RouterOS (WAN روتر — فقط تشخیصی)
+  /// برای تنظیم host اتصال کلاینت استفاده نکنید؛ از [discoverDeviceDefaultGateway] استفاده کنید.
   Future<String?> getDefaultGateway() async {
     try {
       final serviceManager = MikroTikServiceManager();
       if (serviceManager.isConnected) {
-        // استفاده از RouterOS API برای دریافت gateway
         return await serviceManager.getDefaultGateway();
       }
       return null;
@@ -63,65 +147,15 @@ class NetworkInfoService {
     }
   }
 
-  /// دریافت Default Gateway یا IP روتر (fallback)
-  /// این متد به ترتیب از روش‌های زیر استفاده می‌کند:
-  /// 1. RouterOS API (اگر متصل باشد) - دقیق‌ترین روش
-  /// 2. حدس زدن gateway از IP دستگاه (اولین IP در subnet) - معمولاً دقیق است
-  /// 3. IP روتر از تنظیمات (fallback آخر) - ممکن است با gateway واقعی متفاوت باشد
-  Future<String?> getDefaultGatewayOrRouterIp() async {
-    try {
-      final serviceManager = MikroTikServiceManager();
-      
-      // روش 1: استفاده از RouterOS API (اگر متصل باشد) - دقیق‌ترین روش
-      if (serviceManager.isConnected) {
-        final gateway = await serviceManager.getDefaultGatewayOrRouterIp();
-        if (gateway != null) {
-          return gateway;
-        }
-      }
-      
-      // روش 2: حدس زدن gateway از IP دستگاه (اولین IP در subnet)
-      // معمولاً gateway اولین IP در subnet است (مثلاً 172.16.0.1 برای 172.16.0.241)
-      // این روش معمولاً دقیق‌تر از IP روتر در تنظیمات است
-      final deviceIp = await getDeviceIPv4Address();
-      if (deviceIp != null) {
-        final parts = deviceIp.split('.');
-        if (parts.length == 4) {
-          // ساخت gateway با استفاده از اولین IP در subnet
-          final guessedGateway = '${parts[0]}.${parts[1]}.${parts[2]}.1';
-          
-          // همیشه از gateway حدس زده شده استفاده کن (معمولاً gateway .1 است)
-          // این دقیق‌ترین روش است چون gateway معمولاً اولین IP در subnet است
-          return guessedGateway;
-        }
-      }
-      
-      // روش 3: استفاده از IP روتر از تنظیمات (fallback آخر)
-      try {
-        final settings = await _settingsService.getAllSettings();
-        final routerHost = settings['host'] as String?;
-        if (routerHost != null && routerHost.isNotEmpty) {
-          return routerHost;
-        }
-      } catch (e) {
-        // ignore
-      }
-      
-      return null;
-    } catch (e) {
-      return null;
-    }
-  }
-
   /// دریافت همه اطلاعات شبکه (IPv4 Address و Default Gateway)
-  /// این متد هم IP دستگاه و هم gateway را برمی‌گرداند
   Future<Map<String, String?>> getNetworkInfo() async {
     final deviceIp = await getDeviceIPv4Address();
-    final gateway = await getDefaultGatewayOrRouterIp();
+    final discovery = await discoverDeviceDefaultGateway();
 
     return {
       'deviceIp': deviceIp,
-      'defaultGateway': gateway,
+      'defaultGateway': discovery.ip,
+      'gatewaySource': sourceLabel(discovery.source),
     };
   }
 }

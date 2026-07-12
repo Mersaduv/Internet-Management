@@ -565,8 +565,10 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
       _serviceManager.disconnect();
 
       final settingsService = SettingsService();
-      await settingsService.clearCredentials();
       await settingsService.clearLoginTimestamp();
+      if (!await settingsService.getRememberMe()) {
+        await settingsService.clearCredentials();
+      }
 
       if (mounted) {
         Navigator.of(context).pushReplacementNamed('/login');

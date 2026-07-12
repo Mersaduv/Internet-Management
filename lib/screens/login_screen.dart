@@ -21,6 +21,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   bool _isConnecting = false;
   bool _obscurePassword = true;
+  bool _rememberMe = false;
   String? _errorMessage;
   final FocusNode _usernameFocusNode = FocusNode();
   final FocusNode _passwordFocusNode = FocusNode();
@@ -30,7 +31,32 @@ class _LoginScreenState extends State<LoginScreen> {
   void initState() {
     super.initState();
     _checkLoginExpiration();
+    _loadRememberedCredentials();
     _autoSetRouterHostFromGateway();
+  }
+
+  /// بارگذاری وضعیت «مرا به خاطر بسپار» و پر کردن فیلدها پس از خروج یا انقضا
+  Future<void> _loadRememberedCredentials() async {
+    var rememberMe = await _settingsService.getRememberMe();
+    final credentials = await _settingsService.getSavedCredentials();
+
+    // سازگاری با نسخه قبلی که همیشه اعتبارنامه را ذخیره می‌کرد
+    if (credentials != null && !rememberMe) {
+      rememberMe = true;
+      await _settingsService.setRememberMe(true);
+    }
+
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _rememberMe = rememberMe;
+      if (rememberMe && credentials != null) {
+        _usernameController.text = credentials['username']!;
+        _passwordController.text = credentials['password']!;
+      }
+    });
   }
 
   /// تنظیم خودکار Router Host از Default Gateway
@@ -42,30 +68,31 @@ class _LoginScreenState extends State<LoginScreen> {
       );
 
       final networkInfo = NetworkInfoService();
-      final gateway = await networkInfo.getDefaultGatewayOrRouterIp();
+      final discovery = await networkInfo.discoverDeviceDefaultGateway();
 
-      if (gateway != null) {
-        // دریافت Router Host فعلی
+      if (discovery.found) {
+        final gateway = discovery.ip!;
         final currentHost = await _settingsService.getHost();
 
-        // همیشه Default Gateway را در Router Host ست کن
-        // این باعث می‌شود که Router Host همیشه با Default Gateway هماهنگ باشد
         await _settingsService.setHost(gateway);
 
         if (currentHost != gateway) {
           print(
-            '✅ [LOGIN] Router Host به صورت خودکار از Default Gateway ست شد:',
+            '✅ [LOGIN] Router Host از Default Gateway سیستم‌عامل ست شد:',
           );
           print('   └─ Router Host قبلی: $currentHost');
-          print('   └─ Router Host جدید: $gateway (Default Gateway)');
+          print('   └─ Router Host جدید: $gateway');
+          print(
+            '   └─ منبع: ${networkInfo.sourceLabel(discovery.source)}',
+          );
         } else {
           print(
-            'ℹ️ [LOGIN] Router Host از قبل با Default Gateway هماهنگ است: $gateway',
+            'ℹ️ [LOGIN] Router Host با Default Gateway سیستم هماهنگ است: $gateway',
           );
         }
       } else {
         print(
-          '⚠️ [LOGIN] Default Gateway شناسایی نشد - Router Host تغییر نکرد',
+          '⚠️ [LOGIN] Default Gateway از OS شناسایی نشد — Router Host دست‌نخورده ماند (بدون حدس IP)',
         );
       }
     } catch (e) {
@@ -126,11 +153,16 @@ class _LoginScreenState extends State<LoginScreen> {
       });
 
       if (success && serviceManager.isConnected) {
+        await _settingsService.setRememberMe(_rememberMe);
         await _settingsService.setLoginTimestamp();
-        await _settingsService.saveCredentials(
-          username: _usernameController.text.trim(),
-          password: _passwordController.text,
-        );
+        if (_rememberMe) {
+          await _settingsService.saveCredentials(
+            username: _usernameController.text.trim(),
+            password: _passwordController.text,
+          );
+        } else {
+          await _settingsService.clearCredentials();
+        }
 
         if (mounted) {
           Navigator.of(context).pushReplacementNamed('/home');
@@ -393,7 +425,113 @@ class _LoginScreenState extends State<LoginScreen> {
                       );
                     },
                   ),
-                  const SizedBox(height: 32),
+                  const SizedBox(height: 16),
+
+                  // مرا به خاطر بسپار
+                  Builder(
+                    builder: (context) {
+                      final l10n = AppLocalizations.of(context);
+                      return Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          onTap: () {
+                            setState(() {
+                              _rememberMe = !_rememberMe;
+                            });
+                          },
+                          borderRadius: BorderRadius.circular(12),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 4,
+                              vertical: 10,
+                            ),
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: _rememberMe
+                                    ? primaryColor.withOpacity(0.45)
+                                    : (isDark
+                                        ? colorScheme.outline.withOpacity(0.2)
+                                        : Colors.grey.shade200),
+                              ),
+                              color: _rememberMe
+                                  ? primaryColor.withOpacity(
+                                      isDark ? 0.12 : 0.06,
+                                    )
+                                  : (isDark
+                                      ? colorScheme.surfaceContainerHighest
+                                          .withOpacity(0.5)
+                                      : Colors.grey.shade50),
+                            ),
+                            child: Row(
+                              children: [
+                                AnimatedContainer(
+                                  duration: const Duration(milliseconds: 200),
+                                  width: 24,
+                                  height: 24,
+                                  margin: const EdgeInsetsDirectional.only(
+                                    start: 12,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(6),
+                                    color: _rememberMe
+                                        ? primaryColor
+                                        : Colors.transparent,
+                                    border: Border.all(
+                                      color: _rememberMe
+                                          ? primaryColor
+                                          : (isDark
+                                              ? colorScheme.onSurface
+                                                  .withOpacity(0.4)
+                                              : Colors.grey.shade400),
+                                      width: 2,
+                                    ),
+                                  ),
+                                  child: _rememberMe
+                                      ? const Icon(
+                                          Icons.check_rounded,
+                                          size: 16,
+                                          color: Colors.white,
+                                        )
+                                      : null,
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Text(
+                                    l10n?.rememberMe ?? 'Remember me',
+                                    style: TextStyle(
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w600,
+                                      color: _rememberMe
+                                          ? primaryColor
+                                          : (isDark
+                                              ? colorScheme.onSurface
+                                                  .withOpacity(0.85)
+                                              : Colors.grey.shade800),
+                                    ),
+                                  ),
+                                ),
+                                Icon(
+                                  _rememberMe
+                                      ? Icons.bookmark_rounded
+                                      : Icons.bookmark_outline_rounded,
+                                  size: 22,
+                                  color: _rememberMe
+                                      ? primaryColor
+                                      : (isDark
+                                          ? colorScheme.onSurface
+                                              .withOpacity(0.35)
+                                          : Colors.grey.shade400),
+                                ),
+                                const SizedBox(width: 12),
+                              ],
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 24),
 
                   // دکمه ورود
                   Container(

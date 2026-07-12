@@ -13,6 +13,7 @@ class SettingsService {
   static const String _keyUseSsl = 'mikrotik_use_ssl';
   static const String _keyServiceUrl = 'internet_service_url';
   static const String _keyLoginTimestamp = 'login_timestamp';
+  static const String _keyRememberMe = 'remember_me';
   static const String _keyLanguage = 'app_language';
   static const String _keyThemeMode = 'app_theme_mode';
 
@@ -204,6 +205,26 @@ class SettingsService {
       await prefs.remove(_keyLoginTimestamp);
     } catch (e) {
       // اگر shared_preferences کار نکرد، نادیده بگیر
+    }
+  }
+
+  /// آیا کاربر «مرا به خاطر بسپار» را فعال کرده است
+  Future<bool> getRememberMe() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      return prefs.getBool(_keyRememberMe) ?? false;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  /// ذخیره وضعیت «مرا به خاطر بسپار»
+  Future<void> setRememberMe(bool value) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_keyRememberMe, value);
+    } catch (e) {
+      // نادیده
     }
   }
 

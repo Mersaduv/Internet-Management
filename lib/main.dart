@@ -83,40 +83,17 @@ class _MyAppState extends State<MyApp> {
         print('⚠️ [APP_STARTUP] IPv4 Address دستگاه کاربر: یافت نشد');
       }
 
-      // دریافت Default Gateway
-      // این متد به ترتیب از RouterOS API، حدس از IP دستگاه، یا IP روتر از تنظیمات استفاده می‌کند
-      final gateway = await networkInfo.getDefaultGatewayOrRouterIp();
-      if (gateway != null) {
-        print('✅ [APP_STARTUP] Default Gateway اینترنت: $gateway');
-
-        // بررسی اینکه gateway از کجا آمده
-        final serviceManager = MikroTikServiceManager();
-        final settings = await _settingsService.getAllSettings();
-        final routerHost = settings['host'] as String?;
-        final deviceIp = await networkInfo.getDeviceIPv4Address();
-
-        String source = 'نامشخص';
-        if (serviceManager.isConnected) {
-          source = 'RouterOS API (route table)';
-        } else if (deviceIp != null) {
-          final parts = deviceIp.split('.');
-          if (parts.length == 4) {
-            final guessedGateway = '${parts[0]}.${parts[1]}.${parts[2]}.1';
-            if (gateway == guessedGateway) {
-              source = 'حدس از IP دستگاه (${deviceIp} → ${gateway})';
-            } else if (gateway == routerHost) {
-              source = 'IP روتر از تنظیمات (${routerHost})';
-            } else {
-              source = 'IP روتر از تنظیمات (${routerHost}) - در همان subnet';
-            }
-          }
-        } else if (gateway == routerHost) {
-          source = 'IP روتر از تنظیمات (${routerHost})';
-        }
-
-        print('   └─ منبع: $source');
+      final gatewayDiscovery =
+          await networkInfo.discoverDeviceDefaultGateway();
+      if (gatewayDiscovery.found) {
+        print(
+          '✅ [APP_STARTUP] Default Gateway اینترنت: ${gatewayDiscovery.ip}',
+        );
+        print(
+          '   └─ منبع: ${networkInfo.sourceLabel(gatewayDiscovery.source)}',
+        );
       } else {
-        print('⚠️ [APP_STARTUP] Default Gateway اینترنت: یافت نشد');
+        print('⚠️ [APP_STARTUP] Default Gateway اینترنت: یافت نشد (OS)');
       }
 
       // دریافت تنظیمات اتصال
@@ -425,12 +402,17 @@ class _MainScaffoldState extends State<MainScaffold>
         print('⚠️ [NETWORK_INFO] IPv4 Address دستگاه کاربر: یافت نشد');
       }
 
-      // دریافت Default Gateway
-      final gateway = await networkInfo.getDefaultGatewayOrRouterIp();
-      if (gateway != null) {
-        print('✅ [NETWORK_INFO] Default Gateway اینترنت: $gateway');
+      final gatewayDiscovery =
+          await networkInfo.discoverDeviceDefaultGateway();
+      if (gatewayDiscovery.found) {
+        print(
+          '✅ [NETWORK_INFO] Default Gateway اینترنت: ${gatewayDiscovery.ip}',
+        );
+        print(
+          '   └─ منبع: ${networkInfo.sourceLabel(gatewayDiscovery.source)}',
+        );
       } else {
-        print('⚠️ [NETWORK_INFO] Default Gateway اینترنت: یافت نشد');
+        print('⚠️ [NETWORK_INFO] Default Gateway اینترنت: یافت نشد (OS)');
       }
 
       // بررسی وضعیت اتصال RouterOS
@@ -451,6 +433,7 @@ class _MainScaffoldState extends State<MainScaffold>
       print('📊 [NETWORK_INFO] خلاصه اطلاعات شبکه:');
       print('   └─ Device IPv4: ${allInfo['deviceIp'] ?? 'N/A'}');
       print('   └─ Default Gateway: ${allInfo['defaultGateway'] ?? 'N/A'}');
+      print('   └─ Gateway Source: ${allInfo['gatewaySource'] ?? 'N/A'}');
 
       print('═══════════════════════════════════════════════════════');
     } catch (e) {
@@ -472,8 +455,10 @@ class _MainScaffoldState extends State<MainScaffold>
       final provider = Provider.of<ClientsProvider>(context, listen: false);
       provider.clear();
       _serviceManager.disconnect();
-      await _settingsService.clearCredentials();
       await _settingsService.clearLoginTimestamp();
+      if (!await _settingsService.getRememberMe()) {
+        await _settingsService.clearCredentials();
+      }
       if (mounted) {
         Navigator.of(context).pushReplacementNamed('/login');
       }

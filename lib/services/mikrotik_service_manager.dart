@@ -41,8 +41,10 @@ class MikroTikServiceManager {
       final settingsService = SettingsService();
 
       if (!await settingsService.hasValidSession()) {
-        await settingsService.clearCredentials();
         await settingsService.clearLoginTimestamp();
+        if (!await settingsService.getRememberMe()) {
+          await settingsService.clearCredentials();
+        }
         return false;
       }
 

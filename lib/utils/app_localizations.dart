@@ -285,6 +285,8 @@ class AppLocalizations {
       ? 'Please enter password'
       : 'لطفاً رمز عبور را وارد کنید';
   String get login => locale.languageCode == 'en' ? 'Login' : 'ورود';
+  String get rememberMe =>
+      locale.languageCode == 'en' ? 'Remember me' : 'مرا به خاطر بسپار';
   String get enterPassword => locale.languageCode == 'en'
       ? 'Enter your password'
       : 'رمز عبور خود را وارد کنید';
