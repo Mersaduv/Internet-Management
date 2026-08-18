@@ -7,8 +7,12 @@ import '../providers/clients_provider.dart';
 import '../services/mikrotik_service_manager.dart';
 import '../utils/app_localizations.dart';
 import '../utils/app_theme.dart';
+import '../utils/app_layout.dart';
+import '../widgets/app_page_bar.dart';
+import '../widgets/desktop_content.dart';
 import '../widgets/client_live_traffic_badge.dart';
 import '../utils/smart_text_direction.dart';
+import '../utils/client_display_name.dart';
 import '../utils/client_display_policy.dart';
 
 /// صفحه جزئیات دستگاه
@@ -16,12 +20,16 @@ class DeviceDetailScreen extends StatefulWidget {
   final ClientInfo device;
   final bool isCurrentDevice;
   final bool isBanned;
+  final bool embedded;
+  final ValueChanged<Object?>? onFinished;
 
   const DeviceDetailScreen({
     super.key,
     required this.device,
     required this.isCurrentDevice,
     this.isBanned = false,
+    this.embedded = false,
+    this.onFinished,
   });
 
   @override
@@ -30,6 +38,7 @@ class DeviceDetailScreen extends StatefulWidget {
 
 class _DeviceDetailScreenState extends State<DeviceDetailScreen>
     with WidgetsBindingObserver {
+  ClientsProvider? _trafficProvider;
   // ignore: unused_field
   bool _isLoading = false; // برای عملیات ban/unban
   bool _hasLoadedOnce = false; // برای بررسی اینکه آیا یک بار بارگذاری شده است
@@ -69,6 +78,13 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
     _hasLoadedOnce = false;
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+      _trafficProvider = context.read<ClientsProvider>();
+      if (!widget.isBanned && widget.device.ipAddress != null) {
+        _trafficProvider!.pinTrafficMonitoring(widget.device.ipAddress);
+      }
       _loadAllData();
       _hasLoadedOnce = true;
     });
@@ -76,6 +92,7 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
 
   @override
   void dispose() {
+    _trafficProvider?.unpinTrafficMonitoring(widget.device.ipAddress);
     _cancelAllPendingOperations();
     _leaseNameController.dispose();
     WidgetsBinding.instance.removeObserver(this);
@@ -122,11 +139,7 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
   }
 
   String? _initialLeaseDisplayName() {
-    final name = widget.device.hostName?.trim();
-    if (name != null && name.isNotEmpty) {
-      return name;
-    }
-    return null;
+    return ClientDisplayName.resolveHostName(widget.device);
   }
 
   String _resolvedDeviceTitle() {
@@ -134,10 +147,13 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
     if (customName != null && customName.isNotEmpty) {
       return customName;
     }
-    return widget.device.user ??
-        widget.device.name ??
-        AppLocalizations.of(context)?.unknown ??
-        'Unknown';
+
+    final l10n = AppLocalizations.of(context);
+    return ClientDisplayName.displayLabel(
+      widget.device,
+      devicePrefix: l10n?.device ?? 'Device',
+      unknownLabel: l10n?.unknown ?? 'Unknown',
+    );
   }
 
   bool _isPendingApproval(ClientsProvider provider) {
@@ -156,6 +172,14 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
     }
     final provider = Provider.of<ClientsProvider>(context, listen: false);
     return _isPendingApproval(provider);
+  }
+
+  void _finish([Object? result]) {
+    if (widget.embedded) {
+      widget.onFinished?.call(result);
+      return;
+    }
+    Navigator.pop(context, result);
   }
 
   /// بارگذاری اطلاعات صفحه
@@ -218,12 +242,23 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
     var selectedUploadUnit = uploadPart['unit'] ?? 'M';
     var isSaving = false;
 
-    final result = await showModalBottomSheet<Map<String, dynamic>>(
-      context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      backgroundColor: Colors.transparent,
-      builder: (sheetContext) {
+    Future<Map<String, dynamic>?> presentSheet(WidgetBuilder builder) {
+      if (AppLayout.isDesktop(context)) {
+        return showDialog<Map<String, dynamic>>(
+          context: context,
+          builder: builder,
+        );
+      }
+      return showModalBottomSheet<Map<String, dynamic>>(
+        context: context,
+        isScrollControlled: true,
+        useSafeArea: true,
+        backgroundColor: Colors.transparent,
+        builder: builder,
+      );
+    }
+
+    final result = await presentSheet((sheetContext) {
         final theme = Theme.of(sheetContext);
         final colorScheme = theme.colorScheme;
 
@@ -291,43 +326,22 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
             final keyboardOpen = MediaQuery.of(context).viewInsets.bottom > 0;
             final heightFactor = keyboardOpen ? 0.9 : 0.52;
             final canDeleteSpeed = _currentSpeedLimit != null;
+            final desktop = AppLayout.isDesktop(context);
 
-            return Padding(
-              padding: EdgeInsets.only(
-                bottom: MediaQuery.of(context).viewInsets.bottom,
-              ),
-              child: FractionallySizedBox(
-                heightFactor: heightFactor,
-                alignment: Alignment.bottomCenter,
-                child: Align(
-                  alignment: Alignment.bottomCenter,
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 760),
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: colorScheme.surface,
-                        borderRadius: const BorderRadius.vertical(
-                          top: Radius.circular(24),
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.18),
-                            blurRadius: 24,
-                            offset: const Offset(0, -6),
-                          ),
-                        ],
-                      ),
-                      child: Column(
-                        children: [
-                          const SizedBox(height: 10),
-                          Container(
-                            width: 42,
-                            height: 4,
-                            decoration: BoxDecoration(
-                              color: colorScheme.outlineVariant,
-                              borderRadius: BorderRadius.circular(99),
-                            ),
-                          ),
+            final sheetBody = Column(
+              children: [
+                if (!desktop) ...[
+                  const SizedBox(height: 10),
+                  Container(
+                    width: 42,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: colorScheme.outlineVariant,
+                      borderRadius: BorderRadius.circular(99),
+                    ),
+                  ),
+                ] else
+                  const SizedBox(height: 8),
                           Expanded(
                             child: SingleChildScrollView(
                               padding: const EdgeInsets.fromLTRB(
@@ -516,7 +530,50 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
                             ),
                           ),
                         ],
+                      );
+
+            if (desktop) {
+              return Dialog(
+                insetPadding: const EdgeInsets.symmetric(
+                  horizontal: 28,
+                  vertical: 24,
+                ),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(
+                    maxWidth: 560,
+                    maxHeight: 560,
+                  ),
+                  child: sheetBody,
+                ),
+              );
+            }
+
+            return Padding(
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.of(context).viewInsets.bottom,
+              ),
+              child: FractionallySizedBox(
+                heightFactor: heightFactor,
+                alignment: Alignment.bottomCenter,
+                child: Align(
+                  alignment: Alignment.bottomCenter,
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 760),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: colorScheme.surface,
+                        borderRadius: const BorderRadius.vertical(
+                          top: Radius.circular(24),
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.18),
+                            blurRadius: 24,
+                            offset: const Offset(0, -6),
+                          ),
+                        ],
                       ),
+                      child: sheetBody,
                     ),
                   ),
                 ),
@@ -1392,28 +1449,20 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
         '🔧 [LOAD_SPEED] در حال بارگذاری سرعت برای IP: ${widget.device.ipAddress}',
       );
       var timedOut = false;
-      final Future<Map<String, String>?> speedFuture;
-      if (widget.isCurrentDevice) {
-        // اتصال دوم به RouterOS روی دستگاه فعلی می‌تواند API را اشباع کند.
-        speedFuture = serviceManager.service!.getClientSpeed(
-          widget.device.ipAddress!,
-        );
-      } else {
-        speedFuture = serviceManager.getClientSpeedIsolated(
-          widget.device.ipAddress!,
-        );
-      }
-
-      final speedInfo = await speedFuture.timeout(
-        Duration(seconds: widget.isCurrentDevice ? 20 : 35),
-        onTimeout: () {
-          timedOut = true;
-          print(
-            '⚠️ [LOAD_SPEED] Timeout در بارگذاری سرعت برای IP: ${widget.device.ipAddress}',
+      // Always use the main API session. A third isolated login (on top of
+      // home + live-traffic) can drop the primary socket on RouterOS 6.
+      final speedInfo = await serviceManager.service!
+          .getClientSpeed(widget.device.ipAddress!)
+          .timeout(
+            const Duration(seconds: 20),
+            onTimeout: () {
+              timedOut = true;
+              print(
+                '⚠️ [LOAD_SPEED] Timeout در بارگذاری سرعت برای IP: ${widget.device.ipAddress}',
+              );
+              return null;
+            },
           );
-          return null;
-        },
-      );
 
       if (_isDisposed || !mounted) return;
 
@@ -1738,7 +1787,7 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
 
     try {
       final provider = Provider.of<ClientsProvider>(context, listen: false);
-      final success = await provider.banClientFast(
+      final started = await provider.banClientFast(
         ipAddress: widget.device.ipAddress!,
         macAddress: widget.device.macAddress,
         hostname: _displayHostName ?? widget.device.hostName,
@@ -1747,8 +1796,8 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
 
       if (_isDisposed || !mounted) return;
 
-      if (success) {
-        Navigator.pop(context, const {'action': 'banned'});
+      if (started) {
+        _finish(const {'action': 'banned'});
         return;
       }
 
@@ -1857,7 +1906,7 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
           });
         }
 
-        Navigator.pop(context, true);
+        _finish(true);
       } else {
         // در صورت خطا، فقط loading را متوقف کن
         if (mounted && !_isDisposed) {
@@ -1915,44 +1964,46 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
           final isPendingApproval = _isPendingApproval(provider);
 
           return Scaffold(
-            appBar: PreferredSize(
-              preferredSize: const Size.fromHeight(kToolbarHeight),
-              child: Container(
-                decoration: BoxDecoration(
-                  color: theme.brightness == Brightness.dark
-                      ? colorScheme.surface
-                      : _primaryColor,
-                  boxShadow: [
-                    BoxShadow(
-                      color: theme.brightness == Brightness.dark
-                          ? Colors.black.withOpacity(0.3)
-                          : Colors.black.withOpacity(0.05),
-                      blurRadius: 10,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-                ),
-                child: AppBar(
-                  title: Text(
-                    AppLocalizations.of(context)?.deviceDetails ??
+            backgroundColor: widget.embedded
+                ? colorScheme.surface
+                : colorScheme.surfaceContainerHighest,
+            appBar: widget.embedded
+                ? AppPageBar(
+                    title: _resolvedDeviceTitle(),
+                    automaticallyImplyLeading: false,
+                    actions: [
+                      IconButton(
+                        tooltip:
+                            AppLocalizations.of(context)?.close ?? 'Close',
+                        onPressed: () => _finish(),
+                        icon: const Icon(Icons.close),
+                      ),
+                    ],
+                  )
+                : AppPageBar(
+                    title:
+                        AppLocalizations.of(context)?.deviceDetails ??
                         'Device Details',
-                    style: TextStyle(
-                      color: theme.brightness == Brightness.dark
-                          ? colorScheme.onSurface
-                          : Colors.white,
-                    ),
                   ),
-                  backgroundColor: Colors.transparent,
-                  foregroundColor: theme.brightness == Brightness.dark
-                      ? colorScheme.onSurface
-                      : Colors.white,
-                  elevation: 0,
-                  shadowColor: Colors.transparent,
-                  surfaceTintColor: Colors.transparent,
-                ),
+            body: DesktopContent(
+              maxWidth: widget.embedded ? 900 : AppLayout.pageMaxWidth,
+              padding: EdgeInsets.all(
+                AppLayout.isDesktop(context) ? 16 : 0,
               ),
-            ),
-            body: SingleChildScrollView(
+              alignment: Alignment.topCenter,
+              child: Card(
+                margin: EdgeInsets.zero,
+                clipBehavior: Clip.antiAlias,
+                elevation: 0,
+                color: AppLayout.isDesktop(context)
+                    ? colorScheme.surface
+                    : Colors.transparent,
+                shape: AppLayout.isDesktop(context)
+                    ? null
+                    : const RoundedRectangleBorder(
+                        side: BorderSide(color: Colors.transparent),
+                      ),
+                child: SingleChildScrollView(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -2451,6 +2502,8 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
                       },
                     ),
                 ],
+              ),
+            ),
               ),
             ),
           );

@@ -178,195 +178,208 @@ class _ConnectionTestScreenState extends State<ConnectionTestScreen> {
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16.0),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // فیلد Host/IP
-              TextFormField(
-                controller: _hostController,
-                decoration: const InputDecoration(
-                  labelText: 'آدرس IP یا Hostname',
-                  hintText: '192.168.88.1',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.router),
-                ),
-                keyboardType: TextInputType.text,
-                textDirection: TextDirection.ltr,
-                validator: (value) {
-                  if (value == null || value.trim().isEmpty) {
-                    return 'لطفاً آدرس IP را وارد کنید';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: 16),
-
-              // فیلد Port
-              TextFormField(
-                controller: _portController,
-                decoration: const InputDecoration(
-                  labelText: 'پورت',
-                  hintText: '2752',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.numbers),
-                ),
-                keyboardType: TextInputType.number,
-                textDirection: TextDirection.ltr,
-                validator: (value) {
-                  if (value == null || value.trim().isEmpty) {
-                    return 'لطفاً پورت را وارد کنید';
-                  }
-                  final port = int.tryParse(value.trim());
-                  if (port == null || port < 1 || port > 65535) {
-                    return 'پورت باید عددی بین 1 تا 65535 باشد';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: 16),
-
-              // فیلد Username
-              TextFormField(
-                controller: _usernameController,
-                decoration: const InputDecoration(
-                  labelText: 'نام کاربری',
-                  hintText: 'admin',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.person),
-                ),
-                textDirection: TextDirection.ltr,
-                validator: (value) {
-                  if (value == null || value.trim().isEmpty) {
-                    return 'لطفاً نام کاربری را وارد کنید';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: 16),
-
-              // فیلد Password
-              TextFormField(
-                controller: _passwordController,
-                decoration: const InputDecoration(
-                  labelText: 'رمز عبور',
-                  hintText: 'رمز عبور را وارد کنید',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.lock),
-                ),
-                obscureText: true,
-                textDirection: TextDirection.ltr,
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'لطفاً رمز عبور را وارد کنید';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: 16),
-
-              // Checkbox SSL
-              CheckboxListTile(
-                title: const Text('استفاده از SSL'),
-                subtitle: const Text(
-                  'برای اتصال امن از SSL روی پورت 2752 استفاده کنید',
-                ),
-                value: _useSsl,
-                onChanged: (value) {
-                  setState(() {
-                    _useSsl = value ?? false;
-                  });
-                },
-                controlAffinity: ListTileControlAffinity.leading,
-              ),
-              const SizedBox(height: 24),
-
-              // دکمه تست اتصال
-              ElevatedButton.icon(
-                onPressed: _isConnecting ? null : _testConnection,
-                icon: _isConnecting
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.link),
-                label: Text(_isConnecting ? 'در حال اتصال...' : 'تست اتصال'),
-                style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  backgroundColor: Theme.of(context).colorScheme.primary,
-                  foregroundColor: Colors.white,
-                ),
-              ),
-              const SizedBox(height: 16),
-
-              // دکمه تست دریافت کلاینت‌ها (فقط اگر متصل باشد)
-              if (_isConnected == true)
-                ElevatedButton.icon(
-                  onPressed: _isConnecting ? null : _testGetClients,
-                  icon: _isConnecting
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.people),
-                  label: Text(
-                    _isConnecting ? 'در حال دریافت...' : 'تست دریافت کلاینت‌ها',
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    backgroundColor: primaryColor,
-                    foregroundColor: Colors.white,
-                  ),
-                ),
-              if (_isConnected == true) const SizedBox(height: 16),
-
-              // نمایش نتیجه
-              if (_connectionResult != null)
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: _isConnected == true
-                        ? AppTheme.successSurfaceFor(theme.brightness)
-                        : Colors.red.shade50,
-                    border: Border.all(
-                      color: _isConnected == true
-                          ? AppTheme.successBorderFor(theme.brightness)
-                          : Colors.red,
-                      width: 2,
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 560),
+            child: Form(
+              key: _formKey,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // فیلد Host/IP
+                  TextFormField(
+                    controller: _hostController,
+                    decoration: const InputDecoration(
+                      labelText: 'آدرس IP یا Hostname',
+                      hintText: '192.168.88.1',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.router),
                     ),
-                    borderRadius: BorderRadius.circular(8),
+                    keyboardType: TextInputType.text,
+                    textDirection: TextDirection.ltr,
+                    validator: (value) {
+                      if (value == null || value.trim().isEmpty) {
+                        return 'لطفاً آدرس IP را وارد کنید';
+                      }
+                      return null;
+                    },
                   ),
-                  child: Row(
-                    children: [
-                      Icon(
-                        _isConnected == true ? Icons.check_circle : Icons.error,
-                        color: _isConnected == true
-                            ? AppTheme.successForegroundFor(theme.brightness)
-                            : Colors.red,
-                        size: 32,
+                  const SizedBox(height: 16),
+
+                  // فیلد Port
+                  TextFormField(
+                    controller: _portController,
+                    decoration: const InputDecoration(
+                      labelText: 'پورت',
+                      hintText: '2752',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.numbers),
+                    ),
+                    keyboardType: TextInputType.number,
+                    textDirection: TextDirection.ltr,
+                    validator: (value) {
+                      if (value == null || value.trim().isEmpty) {
+                        return 'لطفاً پورت را وارد کنید';
+                      }
+                      final port = int.tryParse(value.trim());
+                      if (port == null || port < 1 || port > 65535) {
+                        return 'پورت باید عددی بین 1 تا 65535 باشد';
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 16),
+
+                  // فیلد Username
+                  TextFormField(
+                    controller: _usernameController,
+                    decoration: const InputDecoration(
+                      labelText: 'نام کاربری',
+                      hintText: 'admin',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.person),
+                    ),
+                    textDirection: TextDirection.ltr,
+                    validator: (value) {
+                      if (value == null || value.trim().isEmpty) {
+                        return 'لطفاً نام کاربری را وارد کنید';
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 16),
+
+                  // فیلد Password
+                  TextFormField(
+                    controller: _passwordController,
+                    decoration: const InputDecoration(
+                      labelText: 'رمز عبور',
+                      hintText: 'رمز عبور را وارد کنید',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.lock),
+                    ),
+                    obscureText: true,
+                    textDirection: TextDirection.ltr,
+                    validator: (value) {
+                      if (value == null || value.isEmpty) {
+                        return 'لطفاً رمز عبور را وارد کنید';
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Checkbox SSL
+                  CheckboxListTile(
+                    title: const Text('استفاده از SSL'),
+                    subtitle: const Text(
+                      'برای اتصال امن از SSL روی پورت 2752 استفاده کنید',
+                    ),
+                    value: _useSsl,
+                    onChanged: (value) {
+                      setState(() {
+                        _useSsl = value ?? false;
+                      });
+                    },
+                    controlAffinity: ListTileControlAffinity.leading,
+                  ),
+                  const SizedBox(height: 24),
+
+                  // دکمه تست اتصال
+                  ElevatedButton.icon(
+                    onPressed: _isConnecting ? null : _testConnection,
+                    icon: _isConnecting
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.link),
+                    label: Text(
+                      _isConnecting ? 'در حال اتصال...' : 'تست اتصال',
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      backgroundColor: Theme.of(context).colorScheme.primary,
+                      foregroundColor: Colors.white,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // دکمه تست دریافت کلاینت‌ها (فقط اگر متصل باشد)
+                  if (_isConnected == true)
+                    ElevatedButton.icon(
+                      onPressed: _isConnecting ? null : _testGetClients,
+                      icon: _isConnecting
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.people),
+                      label: Text(
+                        _isConnecting
+                            ? 'در حال دریافت...'
+                            : 'تست دریافت کلاینت‌ها',
                       ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: Text(
-                          _connectionResult!,
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
+                      style: ElevatedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        backgroundColor: primaryColor,
+                        foregroundColor: Colors.white,
+                      ),
+                    ),
+                  if (_isConnected == true) const SizedBox(height: 16),
+
+                  // نمایش نتیجه
+                  if (_connectionResult != null)
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: _isConnected == true
+                            ? AppTheme.successSurfaceFor(theme.brightness)
+                            : Colors.red.shade50,
+                        border: Border.all(
+                          color: _isConnected == true
+                              ? AppTheme.successBorderFor(theme.brightness)
+                              : Colors.red,
+                          width: 2,
+                        ),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            _isConnected == true
+                                ? Icons.check_circle
+                                : Icons.error,
                             color: _isConnected == true
                                 ? AppTheme.successForegroundFor(
                                     theme.brightness,
                                   )
-                                : Colors.red.shade900,
+                                : Colors.red,
+                            size: 32,
                           ),
-                        ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: Text(
+                              _connectionResult!,
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: _isConnected == true
+                                    ? AppTheme.successForegroundFor(
+                                        theme.brightness,
+                                      )
+                                    : Colors.red.shade900,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
-                ),
-            ],
+                    ),
+                ],
+              ),
+            ),
           ),
         ),
       ),

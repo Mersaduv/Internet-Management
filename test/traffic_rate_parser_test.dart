@@ -11,6 +11,27 @@ void main() {
       );
     });
 
+    test('isDedicatedHostQueueTarget rejects PCQ and group queues', () {
+      expect(
+        TrafficRateParser.isDedicatedHostQueueTarget('172.16.0.63/32'),
+        isTrue,
+      );
+      expect(
+        TrafficRateParser.isDedicatedHostQueueTarget('172.16.0.63'),
+        isTrue,
+      );
+      expect(
+        TrafficRateParser.isDedicatedHostQueueTarget('172.16.0.0/24'),
+        isFalse,
+      );
+      expect(
+        TrafficRateParser.isDedicatedHostQueueTarget(
+          '172.16.0.72/32,172.16.0.73/32',
+        ),
+        isFalse,
+      );
+    });
+
     test('fromQueueStatsRow parses rate tx/rx pair', () {
       final parsed = TrafficRateParser.fromQueueStatsRow({
         'rate': '512000/2048000',
@@ -64,6 +85,50 @@ void main() {
       );
       expect(delta?.rxBps, 0);
       expect(delta?.txBps, 0);
+    });
+
+    test('fromByteDelta rejects rates above maxReasonableBps', () {
+      final delta = TrafficRateParser.fromByteDelta(
+        prevRxBytes: 0,
+        prevTxBytes: 0,
+        rxBytes: 80 * 1000 * 1000,
+        txBytes: 0,
+        elapsed: const Duration(milliseconds: 500),
+      );
+      expect(delta, isNull);
+    });
+
+    test('instantElapsed accepts only the live window', () {
+      final now = DateTime(2026, 1, 1, 12);
+      expect(TrafficRateParser.instantElapsed(null, now), isNull);
+      expect(
+        TrafficRateParser.instantElapsed(
+          now.subtract(const Duration(milliseconds: 200)),
+          now,
+        ),
+        isNull,
+      );
+      expect(
+        TrafficRateParser.instantElapsed(
+          now.subtract(const Duration(milliseconds: 500)),
+          now,
+        ),
+        const Duration(milliseconds: 500),
+      );
+      expect(
+        TrafficRateParser.instantElapsed(
+          now.subtract(const Duration(seconds: 4)),
+          now,
+        ),
+        const Duration(seconds: 4),
+      );
+      expect(
+        TrafficRateParser.instantElapsed(
+          now.subtract(const Duration(seconds: 21)),
+          now,
+        ),
+        isNull,
+      );
     });
   });
 

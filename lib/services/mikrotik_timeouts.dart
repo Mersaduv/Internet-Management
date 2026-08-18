@@ -31,6 +31,7 @@ abstract final class MikrotikTimeouts {
   static const Duration isolatedConnect = Duration(seconds: 8);
   static const Duration userOperation = Duration(seconds: 45);
 
-  static const Duration trafficPollInterval = Duration(seconds: 1);
+  static const Duration trafficPollInterval = Duration(milliseconds: 500);
+  static const Duration trafficPollIntervalFallback = Duration(milliseconds: 1000);
   static const Duration statusRefreshInterval = Duration(seconds: 30);
 }

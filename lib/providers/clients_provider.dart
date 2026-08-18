@@ -1,11 +1,14 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/scheduler.dart';
 import '../models/client_info.dart';
 import '../models/client_traffic_rate.dart';
 import '../services/client_traffic_store.dart';
 import '../services/mikrotik_service_manager.dart';
 import '../services/mikrotik_timeouts.dart';
 import '../services/network_info_service.dart';
+import '../services/traffic_stream_coordinator.dart';
+import '../utils/client_display_name.dart';
 import '../utils/client_display_policy.dart';
 import '../utils/current_device_policy.dart';
 import '../utils/device_list_pagination.dart';
@@ -56,7 +59,7 @@ class ClientsProvider extends ChangeNotifier {
   final Set<String> _approvalActionsInProgress = <String>{};
   Future<void>? _activeRefreshFuture;
   Timer? _onlineStatusTimer;
-  Timer? _trafficTimer;
+  TrafficStreamCoordinator? _trafficStreamCoordinator;
   bool _trafficPollInProgress = false;
   final ClientTrafficStore _trafficStore = ClientTrafficStore();
   bool _suppressNotifications = false;
@@ -72,7 +75,15 @@ class ClientsProvider extends ChangeNotifier {
   bool _isLoadingMoreConnected = false;
   int _visibleBannedLimit = 0;
   bool _isLoadingMoreBanned = false;
-  DateTime? _lastPhase1LoadedAt;
+  final Set<int> _trafficVisibleListIndices = {};
+  final Set<String> _trafficActivePollIps = {};
+  Timer? _trafficViewportSyncTimer;
+  Timer? _trafficPlaceholderTimer;
+  Timer? _trafficDisplayTimer;
+  final Set<String> _pinnedTrafficIps = {};
+
+  static const Duration _trafficViewportSyncDelay = Duration(milliseconds: 200);
+  static const int _trafficViewportIndexPad = 2;
 
   // Getters
   bool get isLoading => _isLoading;
@@ -85,6 +96,8 @@ class ClientsProvider extends ChangeNotifier {
   bool get trafficUiEnabled => _phase1Complete;
 
   bool trafficMeasuredForIp(String? ip) => _trafficStore.isMeasured(ip);
+  bool trafficAwaitingTimedOut(String? ip) =>
+      _trafficStore.awaitingFirstSampleTimedOut(ip);
   bool get bannedListLoaded => _bannedListLoaded;
   bool get isBannedListLoading => _isBannedListLoading;
   List<ClientInfo> get clients => _clients;
@@ -98,6 +111,188 @@ class ClientsProvider extends ChangeNotifier {
   bool get isLoadingMoreConnected => _isLoadingMoreConnected;
   bool get hasMoreBannedToShow => _visibleBannedLimit < _bannedClients.length;
   bool get isLoadingMoreBanned => _isLoadingMoreBanned;
+
+  /// Whether [ip] is actively polled (scroll viewport or detail pin).
+  bool isTrafficPollTarget(String? ip) {
+    final normalized = ip?.trim();
+    if (normalized == null || normalized.isEmpty) {
+      return false;
+    }
+    if (_pinnedTrafficIps.contains(normalized)) {
+      return true;
+    }
+    return _trafficTrackingContext().ips.contains(normalized);
+  }
+
+  bool isTrafficPinnedIp(String? ip) {
+    final normalized = ip?.trim();
+    return normalized != null && _pinnedTrafficIps.contains(normalized);
+  }
+
+  /// Detail screen — always include this IP in the live traffic poll set.
+  void pinTrafficMonitoring(String? ip) {
+    final normalized = ip?.trim();
+    if (normalized == null || normalized.isEmpty || normalized == '0.0.0.0') {
+      return;
+    }
+    if (_pinnedTrafficIps.add(normalized)) {
+      _trafficActivePollIps.add(normalized);
+      _trafficStore.onViewportChanged(Set<String>.from(_trafficActivePollIps));
+      _configureTrafficStream();
+      _scheduleTrafficPollForNewClients();
+      _trafficStreamCoordinator?.wake();
+      _armTrafficPlaceholderWatch();
+      notifyListeners();
+    }
+  }
+
+  void unpinTrafficMonitoring(String? ip) {
+    final normalized = ip?.trim();
+    if (normalized == null || normalized.isEmpty) {
+      return;
+    }
+    if (_pinnedTrafficIps.remove(normalized)) {
+      _scheduleTrafficViewportSync();
+    }
+  }
+
+  /// Per-row visibility from [TrafficListItemVisibility] — starts/stops poll IPs.
+  void reportTrafficListItemVisibility(int index, bool visible) {
+    if (index < 0) {
+      return;
+    }
+
+    final changed = visible
+        ? _trafficVisibleListIndices.add(index)
+        : _trafficVisibleListIndices.remove(index);
+    if (changed) {
+      _scheduleTrafficViewportSync();
+    }
+  }
+
+  void _scheduleTrafficViewportSync() {
+    _trafficViewportSyncTimer?.cancel();
+    _trafficViewportSyncTimer = Timer(_trafficViewportSyncDelay, () {
+      SchedulerBinding.instance.scheduleFrameCallback((_) {
+        _syncTrafficViewportFromVisibleRows();
+      });
+    });
+  }
+
+  void _cancelTrafficViewportSyncTimer() {
+    _trafficViewportSyncTimer?.cancel();
+    _trafficViewportSyncTimer = null;
+    _trafficPlaceholderTimer?.cancel();
+    _trafficPlaceholderTimer = null;
+  }
+
+  void _armTrafficPlaceholderWatch() {
+    _trafficPlaceholderTimer?.cancel();
+    if (!_trafficStore.hasUnmeasuredActiveIps) {
+      _trafficPlaceholderTimer = null;
+      return;
+    }
+    _trafficPlaceholderTimer = Timer(_trafficStore.placeholderTimeout, () {
+      _trafficPlaceholderTimer = null;
+      if (_trafficStore.hasUnmeasuredActiveIps) {
+        notifyListeners();
+      }
+    });
+  }
+
+  /// Called from [TrafficListScrollScope] after the list scrolls.
+  void notifyTrafficListScrolled() {
+    _scheduleTrafficViewportSync();
+  }
+
+  /// Rebuilds the active poll IP set from rows intersecting the scroll viewport.
+  void _syncTrafficViewportFromVisibleRows() {
+    final displayed = clientsForDisplay;
+    _trafficVisibleListIndices.removeWhere((index) => index >= displayed.length);
+
+    final nextIps = <String>{..._pinnedTrafficIps};
+
+    if (displayed.isNotEmpty) {
+      for (final index in _trafficVisibleListIndices) {
+        if (index < 0 || index >= displayed.length) {
+          continue;
+        }
+        final start = index - _trafficViewportIndexPad;
+        final end = index + _trafficViewportIndexPad;
+        for (var i = start; i <= end; i++) {
+          if (i < 0 || i >= displayed.length) {
+            continue;
+          }
+          final client = displayed[i];
+          if (!ClientDisplayPolicy.shouldShowInConnectedList(client)) {
+            continue;
+          }
+          final ip = client.ipAddress?.trim();
+          if (ip != null && ip.isNotEmpty && ip != '0.0.0.0') {
+            nextIps.add(ip);
+          }
+        }
+      }
+    }
+
+    if (setEquals(nextIps, _trafficActivePollIps)) {
+      return;
+    }
+
+    _trafficActivePollIps
+      ..clear()
+      ..addAll(nextIps);
+    _trafficStore.onViewportChanged(Set<String>.from(_trafficActivePollIps));
+    _configureTrafficStream();
+    _scheduleTrafficPollForNewClients();
+    _trafficStreamCoordinator?.wake();
+    _armTrafficPlaceholderWatch();
+    if (_trafficActivePollIps.isNotEmpty &&
+        _trafficStreamCoordinator?.isRunning != true) {
+      _startTrafficStream();
+    }
+    notifyListeners();
+  }
+
+  /// Legacy scroll hook — triggers visibility resync after programmatic scroll.
+  void updateTrafficViewportFromScroll({
+    required double scrollOffset,
+    required double viewportHeight,
+  }) {
+    _scheduleTrafficViewportSync();
+  }
+
+  void _seedInitialTrafficViewport() {
+    _scheduleTrafficViewportSync();
+  }
+
+  /// ListView row built — grow window; viewport comes from scroll offset.
+  void noteListItemVisible(int index) {
+    if (index < 0) {
+      return;
+    }
+    ensureConnectedVisibleThrough(index);
+  }
+
+  /// Grow the rendered list window so [index] is included.
+  void ensureConnectedVisibleThrough(int index) {
+    if (index < 0 || _displayClientsCache.isEmpty) {
+      return;
+    }
+
+    final needed = DeviceListPagination.clampLimit(
+      index + 1 + DeviceListPagination.prefetchThreshold,
+      _displayClientsCache.length,
+    );
+    if (needed <= _visibleClientLimit) {
+      return;
+    }
+
+    _visibleClientLimit = needed;
+    _isLoadingMoreConnected = false;
+    _scheduleTrafficPollForNewClients();
+    notifyListeners();
+  }
 
   /// Devices currently rendered in the connected tab (windowed).
   List<ClientInfo> get clientsForDisplay {
@@ -207,11 +402,26 @@ class ClientsProvider extends ChangeNotifier {
 
   Future<T> _runUserApiOperation<T>(Future<T> Function() action) async {
     _apiOperationInProgress = true;
+    _trafficStreamCoordinator?.stop();
     try {
+      await _serviceManager.disconnectTrafficMonitor();
+      await _serviceManager.ensureSessionHealthy();
       return await _withBatchedNotifications(action);
     } finally {
       _apiOperationInProgress = false;
+      _resumeTrafficAfterUserOp();
     }
+  }
+
+  void _resumeTrafficAfterUserOp() {
+    if (!_phase1Complete || _clients.isEmpty || !_serviceManager.isConnected) {
+      return;
+    }
+    if (_trafficStreamCoordinator?.isRunning == true) {
+      _scheduleTrafficPollForNewClients();
+      return;
+    }
+    _startTrafficStream();
   }
 
   String? _operationKeyForClient({String? macAddress, String? ipAddress}) {
@@ -367,6 +577,10 @@ class ClientsProvider extends ChangeNotifier {
     _displayClientsCache = [];
     _visibleClientLimit = 0;
     _isLoadingMoreConnected = false;
+    _cancelTrafficViewportSyncTimer();
+    _trafficVisibleListIndices.clear();
+    _trafficActivePollIps.clear();
+    _pinnedTrafficIps.clear();
   }
 
   void _resetBannedWindow() {
@@ -401,6 +615,11 @@ class ClientsProvider extends ChangeNotifier {
     }
   }
 
+  void _resetPaginationLoadingState() {
+    _isLoadingMoreConnected = false;
+    _isLoadingMoreBanned = false;
+  }
+
   void maybePrefetchConnectedAtIndex(int index) {
     if (!hasMoreConnectedToShow || _isLoadingMoreConnected) {
       return;
@@ -413,22 +632,18 @@ class ClientsProvider extends ChangeNotifier {
   }
 
   void loadMoreConnectedDevices() {
-    if (!hasMoreConnectedToShow || _isLoadingMoreConnected) {
+    if (!hasMoreConnectedToShow) {
+      _isLoadingMoreConnected = false;
       return;
     }
 
-    _isLoadingMoreConnected = true;
+    _visibleClientLimit = DeviceListPagination.clampLimit(
+      _visibleClientLimit + DeviceListPagination.pageSize,
+      _displayClientsCache.length,
+    );
+    _isLoadingMoreConnected = false;
+    _scheduleTrafficPollForNewClients();
     notifyListeners();
-
-    scheduleMicrotask(() {
-      _visibleClientLimit = DeviceListPagination.clampLimit(
-        _visibleClientLimit + DeviceListPagination.pageSize,
-        _displayClientsCache.length,
-      );
-      _isLoadingMoreConnected = false;
-      _scheduleTrafficPollForNewClients();
-      notifyListeners();
-    });
   }
 
   void maybePrefetchBannedAtIndex(int index) {
@@ -443,33 +658,67 @@ class ClientsProvider extends ChangeNotifier {
   }
 
   void loadMoreBannedDevices() {
-    if (!hasMoreBannedToShow || _isLoadingMoreBanned) {
+    if (!hasMoreBannedToShow) {
+      _isLoadingMoreBanned = false;
       return;
     }
 
-    _isLoadingMoreBanned = true;
+    _visibleBannedLimit = DeviceListPagination.clampLimit(
+      _visibleBannedLimit + DeviceListPagination.pageSize,
+      _bannedClients.length,
+    );
+    _isLoadingMoreBanned = false;
     notifyListeners();
-
-    scheduleMicrotask(() {
-      _visibleBannedLimit = DeviceListPagination.clampLimit(
-        _visibleBannedLimit + DeviceListPagination.pageSize,
-        _bannedClients.length,
-      );
-      _isLoadingMoreBanned = false;
-      notifyListeners();
-    });
   }
 
   List<ClientInfo> get _trafficTrackedClients {
-    if (_displayClientsCache.isEmpty) {
-      return clientsForDisplay;
-    }
-    final limit = (_visibleClientLimit + DeviceListPagination.trafficBuffer)
-        .clamp(0, _displayClientsCache.length);
-    if (limit <= 0) {
+    final displayed = clientsForDisplay;
+    if (_trafficActivePollIps.isEmpty && _pinnedTrafficIps.isEmpty) {
       return const [];
     }
-    return _displayClientsCache.sublist(0, limit);
+
+    if (displayed.isEmpty) {
+      return _resolvePinnedClients(const []);
+    }
+
+    final clients = <ClientInfo>[];
+    for (final client in displayed) {
+      if (!ClientDisplayPolicy.shouldShowInConnectedList(client)) {
+        continue;
+      }
+      final ip = client.ipAddress?.trim();
+      if (ip != null && _trafficActivePollIps.contains(ip)) {
+        clients.add(client);
+      }
+    }
+
+    return _resolvePinnedClients(clients);
+  }
+
+  List<ClientInfo> _resolvePinnedClients(List<ClientInfo> base) {
+    if (_pinnedTrafficIps.isEmpty) {
+      return base;
+    }
+
+    final merged = List<ClientInfo>.from(base);
+    final presentIps = merged
+        .map((c) => c.ipAddress?.trim())
+        .whereType<String>()
+        .toSet();
+
+    for (final ip in _pinnedTrafficIps) {
+      if (presentIps.contains(ip)) {
+        continue;
+      }
+      for (final client in _clients) {
+        if (client.ipAddress?.trim() == ip) {
+          merged.add(client);
+          presentIps.add(ip);
+          break;
+        }
+      }
+    }
+    return merged;
   }
 
   bool _isBannedComment(String? comment) {
@@ -548,23 +797,60 @@ class ClientsProvider extends ChangeNotifier {
   }
 
   String? _displayNameFromLease(Map<String, String> lease) {
-    var comment = lease['comment']?.trim() ?? '';
-    if (comment.isNotEmpty && !_isBannedComment(comment)) {
-      comment = comment
-          .replaceAll(_banMarker, '')
-          .replaceAll('[Ariyabod STATIC]', '')
-          .replaceAll(RegExp(r'\s{2,}'), ' ')
-          .trim();
-      if (comment.isNotEmpty) {
-        return comment;
+    return ClientDisplayName.displayNameFromLease(lease);
+  }
+
+  String? _neighborIdentityForMac(
+    String mac,
+    List<Map<String, String>> neighbors,
+  ) {
+    final normalizedMac = mac.toUpperCase();
+    for (final neighbor in neighbors) {
+      final neighborMac = neighbor['mac-address']?.trim().toUpperCase();
+      if (neighborMac != normalizedMac) {
+        continue;
+      }
+      final identity = neighbor['identity']?.trim();
+      if (identity != null && identity.isNotEmpty) {
+        return identity;
       }
     }
-
-    final hostName = lease['host-name']?.trim();
-    if (hostName != null && hostName.isNotEmpty) {
-      return hostName;
-    }
     return null;
+  }
+
+  void _applyNeighborIdentities(List<Map<String, String>> neighbors) {
+    if (neighbors.isEmpty) {
+      return;
+    }
+
+    var changed = false;
+    for (var i = 0; i < _clients.length; i++) {
+      final client = _clients[i];
+      final currentName = ClientDisplayName.resolveHostName(client);
+      if (currentName != null && currentName.isNotEmpty) {
+        continue;
+      }
+
+      final mac = client.macAddress?.trim().toUpperCase();
+      if (mac == null || mac.isEmpty) {
+        continue;
+      }
+
+      final identity = _neighborIdentityForMac(mac, neighbors);
+      if (identity == null) {
+        continue;
+      }
+
+      final rawData = Map<String, dynamic>.from(client.rawData)
+        ..['identity'] = identity;
+      _clients[i] = client.copyWith(hostName: identity, rawData: rawData);
+      changed = true;
+    }
+
+    if (changed) {
+      _sortClientsForDisplay();
+      notifyListeners();
+    }
   }
 
   ClientInfo _clientFromDhcpLease(Map<String, String> lease) {
@@ -805,10 +1091,12 @@ class ClientsProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> _loadPhase1DeviceList() async {
+  Future<void> _loadPhase1DeviceList({bool preserveVisibleWindow = false}) async {
     if (!_serviceManager.isConnected) {
       throw Exception('Connection is not established');
     }
+
+    final previousVisibleLimit = _visibleClientLimit;
 
     final leases = await _serviceManager
         .getPhase1BoundDhcpLeases()
@@ -821,11 +1109,18 @@ class ClientsProvider extends ChangeNotifier {
     _clients.sort(_compareClientsByIpOrder);
     _applyResolvedDeviceIdentity(_deviceIp, clients: _clients);
     _rebuildDisplayCache();
-    _visibleClientLimit = DeviceListPagination.initialPageSize
-        .clamp(1, _displayClientsCache.length);
+    if (preserveVisibleWindow && previousVisibleLimit > 0) {
+      _visibleClientLimit = DeviceListPagination.clampLimit(
+        previousVisibleLimit,
+        _displayClientsCache.length,
+      );
+    } else {
+      _visibleClientLimit = DeviceListPagination.initialPageSize
+          .clamp(1, _displayClientsCache.length);
+    }
+    _seedInitialTrafficViewport();
     _isDataComplete = false;
     _errorMessage = null;
-    _lastPhase1LoadedAt = DateTime.now();
     _scheduleTrafficPollForNewClients();
   }
 
@@ -920,6 +1215,11 @@ class ClientsProvider extends ChangeNotifier {
         notifyListeners();
       }
 
+      final neighborEntries = await _serviceManager
+          .getPhase2NeighborDiscovery()
+          .timeout(_phase2StepTimeout, onTimeout: () => <Map<String, String>>[]);
+      _applyNeighborIdentities(neighborEntries);
+
       final routerInfoForWireless =
           _routerInfo ?? _serviceManager.routerInfo;
       var wirelessChanged = false;
@@ -964,16 +1264,22 @@ class ClientsProvider extends ChangeNotifier {
             wirelessChanged = true;
           } else if (ClientDisplayPolicy.hasValidIp(lastIp) &&
               !_isTargetInBannedLists(ip: lastIp, mac: mac)) {
+            final neighborName = _neighborIdentityForMac(mac, neighborEntries);
+            final wirelessRawData = Map<String, dynamic>.from(wireless);
+            if (neighborName != null) {
+              wirelessRawData['identity'] = neighborName;
+            }
             _clients.add(
               ClientInfo(
                 type: 'wireless',
                 source: 'wireless_registration',
                 macAddress: mac,
                 ipAddress: lastIp,
+                hostName: neighborName,
                 ssid: ssid,
                 signalStrength: signal,
                 interface: wireless['interface'],
-                rawData: Map<String, dynamic>.from(wireless),
+                rawData: wirelessRawData,
               ),
             );
             wirelessChanged = true;
@@ -998,6 +1304,7 @@ class ClientsProvider extends ChangeNotifier {
       debugPrint('[PROGRESSIVE_LOAD] Phase 2 failed: $e');
       _sortClientsForDisplay();
       _isDataComplete = true;
+      _phase2Complete = true;
     }
   }
 
@@ -1116,27 +1423,103 @@ class ClientsProvider extends ChangeNotifier {
     _onlineStatusTimer = null;
   }
 
-  void _startTrafficTimer() {
-    _trafficTimer?.cancel();
-    unawaited(_refreshTrafficRates().whenComplete(_scheduleNextTrafficPoll));
+  void _startTrafficStream() {
+    _stopTrafficStream();
+    _seedInitialTrafficViewport();
+    _trafficStreamCoordinator = TrafficStreamCoordinator(
+      onSample: _sampleTrafficRates,
+      onRates: _applyTrafficRates,
+      shouldContinue: () =>
+          _phase1Complete &&
+          _clients.isNotEmpty &&
+          _serviceManager.isConnected,
+    );
+    _configureTrafficStream();
+    _trafficStreamCoordinator!.start();
+    _startTrafficDisplayTimer();
   }
 
-  Duration _trafficIntervalForClientCount(int count) {
-    if (count <= 50) {
-      return const Duration(milliseconds: 1000);
-    }
-    if (count <= 80) {
-      return const Duration(milliseconds: 1500);
-    }
-    return const Duration(milliseconds: 2000);
+  void _startTrafficDisplayTimer() {
+    _trafficDisplayTimer?.cancel();
+    _trafficDisplayTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (_trafficStore.syncDisplayTick()) {
+        notifyListeners();
+      }
+    });
+  }
+
+  void _stopTrafficDisplayTimer() {
+    _trafficDisplayTimer?.cancel();
+    _trafficDisplayTimer = null;
   }
 
   ({Set<String> ips, Map<String, String> macToIp}) _trafficTrackingContext() {
     return _trafficStore.trackingContext(_trafficTrackedClients);
   }
 
+  void _configureTrafficStream({int? trackedCount}) {
+    final coordinator = _trafficStreamCoordinator;
+    if (coordinator == null) {
+      return;
+    }
+    final tracking = _trafficTrackingContext();
+    coordinator.configure(
+      trackedCount: trackedCount ?? tracking.ips.length,
+      usesInstantQueueRates: _serviceManager.trafficUsesInstantQueueRates,
+    );
+  }
+
+  Future<Map<String, ClientTrafficRate>> _sampleTrafficRates() async {
+    if (_trafficPollInProgress ||
+        _apiOperationInProgress ||
+        !_phase1Complete ||
+        _clients.isEmpty ||
+        !_serviceManager.isConnected) {
+      return {};
+    }
+
+    _trafficPollInProgress = true;
+    try {
+      final tracking = _trafficTrackingContext();
+      if (tracking.ips.isEmpty) {
+        return {};
+      }
+      _configureTrafficStream(trackedCount: tracking.ips.length);
+      return await _serviceManager.pollTrafficRates(
+        trackedIps: tracking.ips,
+        macToIp: tracking.macToIp,
+      );
+    } catch (e) {
+      debugPrint('[TRAFFIC] stream sample failed: $e');
+      return {};
+    } finally {
+      _trafficPollInProgress = false;
+    }
+  }
+
+  void _applyTrafficRates(Map<String, ClientTrafficRate> rates) {
+    if (rates.isEmpty) {
+      return;
+    }
+    final tracking = _trafficTrackingContext();
+    if (tracking.ips.isEmpty) {
+      return;
+    }
+
+    final isFirstPoll = !_trafficStore.pollReady;
+    final firstMeasurement = _trafficStore.applyPoll(
+      trackedIps: tracking.ips,
+      samples: rates,
+      rateChanged: _trafficRateChanged,
+    );
+    if (firstMeasurement || isFirstPoll) {
+      notifyListeners();
+    }
+    _armTrafficPlaceholderWatch();
+  }
+
   void _scheduleTrafficPollForNewClients() {
-    if (!_phase1Complete || _trafficPollInProgress) {
+    if (!_phase1Complete) {
       return;
     }
     final tracking = _trafficTrackingContext();
@@ -1146,27 +1529,22 @@ class ClientsProvider extends ChangeNotifier {
     if (_trafficStore.newIpsSinceLastPoll(tracking.ips).isEmpty) {
       return;
     }
-    unawaited(_refreshTrafficRates().whenComplete(_scheduleNextTrafficPoll));
-  }
-
-  void _scheduleNextTrafficPoll() {
-    _trafficTimer?.cancel();
-    if (!_phase1Complete) {
-      return;
+    _configureTrafficStream(trackedCount: tracking.ips.length);
+    if (_trafficStreamCoordinator?.isRunning != true) {
+      _startTrafficStream();
     }
-
-    final interval = _trafficIntervalForClientCount(_clients.length);
-    _trafficTimer = Timer(interval, () {
-      unawaited(
-        _refreshTrafficRates().whenComplete(_scheduleNextTrafficPoll),
-      );
-    });
   }
 
-  void _stopTrafficTimer() {
-    _trafficTimer?.cancel();
-    _trafficTimer = null;
+  void _stopTrafficStream() {
+    _cancelTrafficViewportSyncTimer();
+    _stopTrafficDisplayTimer();
+    _trafficStreamCoordinator?.stop();
+    _trafficStreamCoordinator?.dispose();
+    _trafficStreamCoordinator = null;
   }
+
+  Stream<Map<String, ClientTrafficRate>>? get trafficRateStream =>
+      _trafficStreamCoordinator?.stream;
 
   ClientTrafficRate? trafficForIp(String? ip) => _trafficStore.rateFor(ip);
 
@@ -1183,56 +1561,15 @@ class ClientsProvider extends ChangeNotifier {
     if (previous == next) {
       return false;
     }
-    if (previous == 0 || next == 0) {
-      return true;
-    }
     final delta = (previous - next).abs();
     if (delta <= 1) {
+      return false;
+    }
+    if (previous == 0 || next == 0) {
       return true;
     }
     final peak = previous > next ? previous : next;
     return delta > 100 || delta > peak * 0.02;
-  }
-
-  Future<void> _refreshTrafficRates() async {
-    if (_trafficPollInProgress ||
-        _apiOperationInProgress ||
-        !_phase1Complete ||
-        _clients.isEmpty) {
-      return;
-    }
-    if (!_serviceManager.isConnected) {
-      return;
-    }
-
-    _trafficPollInProgress = true;
-    try {
-      final tracking = _trafficTrackingContext();
-      if (tracking.ips.isEmpty) {
-        return;
-      }
-
-      final isFirstPoll = !_trafficStore.pollReady;
-
-      final rates = await _serviceManager.pollTrafficRates(
-        trackedIps: tracking.ips,
-        macToIp: tracking.macToIp,
-      );
-
-      final anyChanged = _trafficStore.applyPoll(
-        trackedIps: tracking.ips,
-        samples: rates,
-        rateChanged: _trafficRateChanged,
-      );
-
-      if (anyChanged || isFirstPoll) {
-        notifyListeners();
-      }
-    } catch (e) {
-      debugPrint('[TRAFFIC] refresh failed: $e');
-    } finally {
-      _trafficPollInProgress = false;
-    }
   }
 
   ClientTrafficRate? liveTrafficForIp(String? ip) => trafficForIp(ip);
@@ -1377,11 +1714,12 @@ class ClientsProvider extends ChangeNotifier {
     _phase3Complete = false;
     _currentPhase = LoadingPhase.counts;
     _isDataComplete = false;
+    _resetPaginationLoadingState();
     _resetConnectedWindow();
     _connectedCountHint = null;
     notifyListeners();
 
-    _stopTrafficTimer();
+    _stopTrafficStream();
     _trafficStore.reset();
     _serviceManager.beginProgressiveLoad();
     try {
@@ -1395,7 +1733,7 @@ class ClientsProvider extends ChangeNotifier {
       _currentPhase = LoadingPhase.phase2;
       notifyListeners();
 
-      _startTrafficTimer();
+      _startTrafficStream();
       _serviceManager.endProgressiveLoad();
 
       unawaited(_loadPhase2AndFinish());
@@ -1408,8 +1746,11 @@ class ClientsProvider extends ChangeNotifier {
         _errorMessage = message.replaceAll('Exception: ', '');
       }
       debugPrint('[PROGRESSIVE_LOAD] Error: $e');
+      _isLoading = false;
       _isDataComplete = false;
+      _phase2Complete = true;
       _serviceManager.endProgressiveLoad();
+      notifyListeners();
     }
   }
 
@@ -1425,6 +1766,9 @@ class ClientsProvider extends ChangeNotifier {
       unawaited(_runBackgroundTasks());
     } catch (e) {
       debugPrint('[PROGRESSIVE_LOAD] Phase 2/3 background failed: $e');
+      _phase2Complete = true;
+      _isDataComplete = true;
+      notifyListeners();
     }
   }
 
@@ -1466,42 +1810,41 @@ class ClientsProvider extends ChangeNotifier {
       return;
     }
     _isRefreshing = true;
+    _resetPaginationLoadingState();
+    _phase2Complete = false;
     notifyListeners();
     try {
       unawaited(prefetchTabCounts());
-      await _loadPhase1DeviceList();
+      await _loadPhase1DeviceList(preserveVisibleWindow: true);
       _phase1Complete = true;
       _isLoading = false;
       _currentPhase = LoadingPhase.phase2;
-      _startTrafficTimer();
+      _startTrafficStream();
       notifyListeners();
       unawaited(_loadPhase2AndFinish());
     } catch (e) {
       debugPrint('[PROGRESSIVE_LOAD] fast refresh failed: $e');
+      _phase2Complete = true;
     } finally {
       _isRefreshing = false;
+      _isLoadingMoreConnected = false;
       notifyListeners();
     }
   }
 
-  Future<void> refreshAfterDetailReturn({required bool bannedTab}) async {
-    if (bannedTab) {
-      await ensureBannedListLoaded(force: true);
-      unawaited(prefetchTabCounts());
+  /// Return from device detail / overlay: keep list, Phase2, scroll, and traffic.
+  /// Never refetches DHCP or restarts the live-traffic loop.
+  void resumeAfterOverlay() {
+    if (!_phase1Complete || _clients.isEmpty) {
       return;
     }
-
-    final last = _lastPhase1LoadedAt;
-    final freshEnough =
-        last != null && DateTime.now().difference(last) < const Duration(seconds: 25);
-    if (_phase1Complete && freshEnough) {
-      unawaited(prefetchTabCounts());
-      unawaited(refreshOnlineStatus());
-      _scheduleTrafficPollForNewClients();
-      notifyListeners();
+    _scheduleTrafficViewportSync();
+    if (_trafficStreamCoordinator?.isRunning != true) {
+      _startTrafficStream();
       return;
     }
-    await refreshConnectedFast();
+    _configureTrafficStream();
+    _scheduleTrafficPollForNewClients();
   }
 
   Future<void> onHomeTabActivated() async {
@@ -1555,7 +1898,7 @@ class ClientsProvider extends ChangeNotifier {
     _ensureBannedWindowInitialized();
   }
 
-  Future<void> _applyBanOnRouterInBackground({
+  Future<bool> _applyBanOnRouter({
     required String ipAddress,
     String? macAddress,
     String? hostname,
@@ -1564,28 +1907,41 @@ class ClientsProvider extends ChangeNotifier {
     int removedIndex = -1,
   }) async {
     if (!_serviceManager.isConnected || _serviceManager.service == null) {
-      return;
+      return false;
     }
 
-    await _runUserApiOperation(() async {
+    return _runUserApiOperation(() async {
       try {
-        var success = await _serviceManager.service!
-            .banClientWithFingerprint(
+        var success = false;
+        for (var attempt = 1; attempt <= 2; attempt++) {
+          try {
+            if (attempt > 1) {
+              await _serviceManager.ensureSessionHealthy();
+            }
+            success = await _serviceManager.service!.banClientWithFingerprint(
               ipAddress,
               macAddress: macAddress,
               hostname: hostname,
               ssid: ssid,
-            )
-            .timeout(const Duration(seconds: 25), onTimeout: () => false);
+            );
+            if (success) {
+              break;
+            }
+          } catch (e) {
+            debugPrint('[BAN] attempt $attempt failed: $e');
+            success = false;
+            if (attempt == 2) {
+              rethrow;
+            }
+          }
+        }
 
         if (!success) {
-          success = await _serviceManager.service!
-              .banClient(
-                ipAddress,
-                macAddress: macAddress,
-                comment: 'Banned via Flutter App',
-              )
-              .timeout(const Duration(seconds: 15), onTimeout: () => false);
+          success = await _serviceManager.service!.banClient(
+            ipAddress,
+            macAddress: macAddress,
+            comment: 'Banned via Flutter App',
+          );
         }
 
         if (!success) {
@@ -1596,15 +1952,16 @@ class ClientsProvider extends ChangeNotifier {
             _filterBannedFromConnectedList();
           }
           notifyListenersImmediate();
-          return;
+          return false;
         }
 
-        await loadBannedClients(notifyChanges: false);
         _filterBannedFromConnectedList();
         _errorMessage = null;
         notifyListenersImmediate();
+        unawaited(loadBannedClients());
+        return true;
       } catch (e) {
-        debugPrint('[BAN_FAST] background ban failed: $e');
+        debugPrint('[BAN] router ban failed: $e');
         _errorMessage = 'Error banning client: $e';
         if (removedClient != null && removedIndex >= 0) {
           _clients.insert(removedIndex, removedClient);
@@ -1612,6 +1969,7 @@ class ClientsProvider extends ChangeNotifier {
           _filterBannedFromConnectedList();
         }
         notifyListenersImmediate();
+        return false;
       }
     });
   }
@@ -1667,7 +2025,7 @@ class ClientsProvider extends ChangeNotifier {
     notifyListenersImmediate();
 
     unawaited(
-      _applyBanOnRouterInBackground(
+      _applyBanOnRouter(
         ipAddress: ipAddress,
         macAddress: macAddress,
         hostname: hostname,
@@ -1676,7 +2034,6 @@ class ClientsProvider extends ChangeNotifier {
         removedIndex: removedIndex,
       ),
     );
-
     return true;
   }
 
@@ -1690,14 +2047,10 @@ class ClientsProvider extends ChangeNotifier {
     _removeClientFromList(ipAddress, macAddress: macAddress);
     notifyListenersImmediate();
 
-    unawaited(
-      _applyBanOnRouterInBackground(
-        ipAddress: ipAddress,
-        macAddress: macAddress,
-      ),
+    return _applyBanOnRouter(
+      ipAddress: ipAddress,
+      macAddress: macAddress,
     );
-
-    return true;
   }
 
   Future<bool> banClient(
@@ -1751,23 +2104,24 @@ class ClientsProvider extends ChangeNotifier {
 
     try {
       return await _runUserApiOperation(() async {
-        var success = await _serviceManager.service!
-            .banClientWithFingerprint(
-              ipAddress,
-              macAddress: macAddress,
-              hostname: hostname,
-              ssid: ssid,
-            )
-            .timeout(const Duration(seconds: 30), onTimeout: () => false);
+        var success = false;
+        try {
+          success = await _serviceManager.service!.banClientWithFingerprint(
+            ipAddress,
+            macAddress: macAddress,
+            hostname: hostname,
+            ssid: ssid,
+          );
+        } catch (e) {
+          debugPrint('[BAN] fingerprint ban failed: $e');
+        }
 
         if (!success) {
-          success = await _serviceManager.service!
-              .banClient(
-                ipAddress,
-                macAddress: macAddress,
-                comment: 'Banned via Flutter App',
-              )
-              .timeout(const Duration(seconds: 20), onTimeout: () => false);
+          success = await _serviceManager.service!.banClient(
+            ipAddress,
+            macAddress: macAddress,
+            comment: 'Banned via Flutter App',
+          );
         }
 
         if (!success) {
@@ -2291,7 +2645,7 @@ class ClientsProvider extends ChangeNotifier {
 
   void clear() {
     _stopOnlineStatusTimer();
-    _stopTrafficTimer();
+    _stopTrafficStream();
     unawaited(_serviceManager.disconnectTrafficMonitor());
     _trafficStore.reset();
     _suppressNotifications = false;
@@ -2375,7 +2729,7 @@ class ClientsProvider extends ChangeNotifier {
   @override
   void dispose() {
     _stopOnlineStatusTimer();
-    _stopTrafficTimer();
+    _stopTrafficStream();
     unawaited(_serviceManager.disconnectTrafficMonitor());
     _trafficStore.reset();
     super.dispose();

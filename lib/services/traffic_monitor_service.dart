@@ -12,8 +12,10 @@ import 'mikrotik_timeouts.dart';
 class TrafficMonitorService {
   final LiveTrafficEngine _engine = LiveTrafficEngine();
   MikroTikConnection? _connection;
+  int _failures = 0;
 
   LiveTrafficCapabilities get capabilities => _engine.capabilities;
+  bool get usesInstantQueueRates => _engine.usesInstantQueueRates;
 
   Future<void> ensureConnected(MikroTikConnection connection) async {
     if (_connection == connection && _engine.isReady) {
@@ -35,25 +37,30 @@ class TrafficMonitorService {
     }
 
     try {
-      return await _engine
+      final rates = await _engine
           .sample(trackedIps: trackedIps, macToIp: macToIp)
-          .timeout(
-            MikrotikTimeouts.trafficSampleTimeout(trackedIps.length),
-            onTimeout: () {
-              debugPrint(
-                '[TRAFFIC] sample timeout for ${trackedIps.length} clients',
-              );
-              return {};
-            },
-          );
+          .timeout(MikrotikTimeouts.trafficSampleTimeout(trackedIps.length));
+      _failures = 0;
+      return rates;
+    } on TimeoutException {
+      debugPrint('[TRAFFIC] sample timeout for ${trackedIps.length} clients');
+      _failures++;
+      if (_failures >= 3) {
+        await disconnect();
+      }
+      return {};
     } catch (e) {
       debugPrint('[TRAFFIC] sample failed: $e');
-      await disconnect();
+      _failures++;
+      if (_failures >= 3) {
+        await disconnect();
+      }
       return {};
     }
   }
 
   Future<void> disconnect() async {
+    _failures = 0;
     await _engine.disconnect();
     _connection = null;
   }

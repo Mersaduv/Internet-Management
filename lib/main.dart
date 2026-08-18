@@ -7,6 +7,7 @@ import 'dart:async';
 ///
 /// A Flutter application for managing internet connections and MikroTik routers.
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:provider/provider.dart';
@@ -21,9 +22,12 @@ import 'services/settings_service.dart';
 import 'services/network_info_service.dart';
 import 'models/client_info.dart';
 import 'providers/clients_provider.dart';
+import 'utils/device_list_pagination.dart';
+import 'utils/client_display_name.dart';
 import 'utils/app_localizations.dart';
 import 'utils/app_theme.dart';
 import 'widgets/client_live_traffic_badge.dart';
+import 'widgets/traffic_list_item_visibility.dart';
 import 'utils/wifi_panel_url_resolver.dart';
 
 // 全局回调函数，用于从子组件通知主应用更改语言
@@ -84,8 +88,7 @@ class _MyAppState extends State<MyApp> {
         print('⚠️ [APP_STARTUP] IPv4 Address دستگاه کاربر: یافت نشد');
       }
 
-      final gatewayDiscovery =
-          await networkInfo.discoverDeviceDefaultGateway();
+      final gatewayDiscovery = await networkInfo.discoverDeviceDefaultGateway();
       if (gatewayDiscovery.found) {
         print(
           '✅ [APP_STARTUP] Default Gateway اینترنت: ${gatewayDiscovery.ip}',
@@ -258,10 +261,21 @@ class _MyAppState extends State<MyApp> {
           ),
         },
         builder: (context, child) {
+          final mediaQuery = MediaQuery.of(context);
+          final textScaler = switch (defaultTargetPlatform) {
+            TargetPlatform.windows ||
+            TargetPlatform.linux ||
+            TargetPlatform.macOS => mediaQuery.textScaler.clamp(
+              minScaleFactor: 0.9,
+              maxScaleFactor: 1.2,
+            ),
+            _ => mediaQuery.textScaler.clamp(
+              minScaleFactor: 0.95,
+              maxScaleFactor: 1.1,
+            ),
+          };
           return MediaQuery(
-            data: MediaQuery.of(
-              context,
-            ).copyWith(textScaler: TextScaler.linear(1.0)),
+            data: mediaQuery.copyWith(textScaler: textScaler),
             child: child!,
           );
         },
@@ -403,8 +417,7 @@ class _MainScaffoldState extends State<MainScaffold>
         print('⚠️ [NETWORK_INFO] IPv4 Address دستگاه کاربر: یافت نشد');
       }
 
-      final gatewayDiscovery =
-          await networkInfo.discoverDeviceDefaultGateway();
+      final gatewayDiscovery = await networkInfo.discoverDeviceDefaultGateway();
       if (gatewayDiscovery.found) {
         print(
           '✅ [NETWORK_INFO] Default Gateway اینترنت: ${gatewayDiscovery.ip}',
@@ -657,6 +670,12 @@ class _HomePageState extends State<HomePage> with RouteAware {
           !provider.isLoading &&
           provider.clients.isEmpty) {
         provider.initialize();
+      } else if (_connectedScrollController.hasClients) {
+        final position = _connectedScrollController.position;
+        provider.updateTrafficViewportFromScroll(
+          scrollOffset: position.pixels,
+          viewportHeight: position.viewportDimension,
+        );
       }
     });
   }
@@ -667,6 +686,19 @@ class _HomePageState extends State<HomePage> with RouteAware {
     }
     final provider = Provider.of<ClientsProvider>(context, listen: false);
     final position = _connectedScrollController.position;
+
+    provider.updateTrafficViewportFromScroll(
+      scrollOffset: position.pixels,
+      viewportHeight: position.viewportDimension,
+    );
+
+    final estimatedFirst =
+        (position.pixels / DeviceListPagination.estimatedRowHeight).floor();
+    final estimatedVisible =
+        (position.viewportDimension / DeviceListPagination.estimatedRowHeight)
+            .ceil();
+    provider.ensureConnectedVisibleThrough(estimatedFirst + estimatedVisible);
+
     if (position.maxScrollExtent - position.pixels < 240) {
       provider.loadMoreConnectedDevices();
     }
@@ -711,16 +743,25 @@ class _HomePageState extends State<HomePage> with RouteAware {
 
   @override
   void didPopNext() {
-    unawaited(_refreshActiveTabData());
+    _restoreHomeAfterOverlay();
   }
 
-  Future<void> _refreshActiveTabData() async {
+  /// Overlay (device detail) closed — restore traffic viewport, do not refetch.
+  void _restoreHomeAfterOverlay() {
     if (!mounted) {
       return;
     }
-
     final provider = Provider.of<ClientsProvider>(context, listen: false);
-    await provider.refreshAfterDetailReturn(bannedTab: _selectedTab == 1);
+
+    if (_selectedTab == 0 && _connectedScrollController.hasClients) {
+      final position = _connectedScrollController.position;
+      provider.updateTrafficViewportFromScroll(
+        scrollOffset: position.pixels,
+        viewportHeight: position.viewportDimension,
+      );
+    }
+
+    provider.resumeAfterOverlay();
   }
 
   Widget _buildPullToRefresh({
@@ -1087,9 +1128,13 @@ class _HomePageState extends State<HomePage> with RouteAware {
                       ),
                       // محتوای Tab
                       Expanded(
-                        child: _selectedTab == 0
-                            ? _buildConnectedDevicesTab(provider)
-                            : _buildBannedDevicesTab(provider),
+                        child: IndexedStack(
+                          index: _selectedTab,
+                          children: [
+                            _buildConnectedDevicesTab(provider),
+                            _buildBannedDevicesTab(provider),
+                          ],
+                        ),
                       ),
                     ],
                   ),
@@ -1173,10 +1218,10 @@ class _HomePageState extends State<HomePage> with RouteAware {
                                 ? colorScheme.onSurface.withOpacity(0.6)
                                 : Colors.grey.shade600),
                     ),
-                    overflow: TextOverflow.visible,
-                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
                     textAlign: TextAlign.center,
-                    softWrap: true,
+                    softWrap: false,
                   ),
                 ),
               ],
@@ -1339,39 +1384,44 @@ class _HomePageState extends State<HomePage> with RouteAware {
 
     return _buildPullToRefresh(
       onRefresh: provider.refresh,
-      child: ListView.builder(
+      child: TrafficListScrollScope(
         controller: _connectedScrollController,
-        cacheExtent: 500,
-        physics: const BouncingScrollPhysics(
-          parent: AlwaysScrollableScrollPhysics(),
-        ),
-        itemCount: _connectedListItemCount(provider),
-        itemBuilder: (context, index) {
-          final clients = provider.clientsForDisplay;
-          if (index >= clients.length) {
-            return _buildConnectedListFooter(provider);
-          }
+        child: ListView.builder(
+          key: const PageStorageKey<String>('home-connected-list'),
+          controller: _connectedScrollController,
+          cacheExtent: 500,
+          physics: const BouncingScrollPhysics(
+            parent: AlwaysScrollableScrollPhysics(),
+          ),
+          itemCount: _connectedListItemCount(provider),
+          itemBuilder: (context, index) {
+            final clients = provider.clientsForDisplay;
+            if (index >= clients.length) {
+              return _buildConnectedListFooter(provider);
+            }
 
-          provider.maybePrefetchConnectedAtIndex(index);
-          final client = clients[index];
-          final stableKey =
-              client.macAddress ?? client.ipAddress ?? index.toString();
-          return RepaintBoundary(
-            key: ValueKey('client-$stableKey'),
-            child: _buildClientCard(
-              context,
-              client,
-              provider,
-            ),
-          );
-        },
+            provider.noteListItemVisible(index);
+            provider.maybePrefetchConnectedAtIndex(index);
+            final client = clients[index];
+            final stableKey =
+                client.macAddress ?? client.ipAddress ?? index.toString();
+            return RepaintBoundary(
+              key: ValueKey('client-$stableKey'),
+              child: TrafficListItemVisibility(
+                key: ValueKey('traffic-vis-$stableKey'),
+                index: index,
+                child: _buildClientCard(context, client, provider),
+              ),
+            );
+          },
+        ),
       ),
     );
   }
 
   int _connectedListItemCount(ClientsProvider provider) {
     var count = provider.clientsForDisplay.length;
-    if (provider.hasMoreConnectedToShow || provider.isLoadingMoreConnected) {
+    if (provider.hasMoreConnectedToShow) {
       count += 1;
     }
     return count;
@@ -1381,22 +1431,15 @@ class _HomePageState extends State<HomePage> with RouteAware {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 16),
       child: Center(
-        child: provider.isLoadingMoreConnected
-            ? const SizedBox(
-                width: 24,
-                height: 24,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              )
-            : Text(
-                '${provider.clientsForDisplay.length} / ${provider.totalConnectedCount}',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Theme.of(context)
-                      .colorScheme
-                      .onSurface
-                      .withValues(alpha: 0.55),
-                ),
-              ),
+        child: Text(
+          '${provider.clientsForDisplay.length} / ${provider.totalConnectedCount}',
+          style: TextStyle(
+            fontSize: 12,
+            color: Theme.of(
+              context,
+            ).colorScheme.onSurface.withValues(alpha: 0.55),
+          ),
+        ),
       ),
     );
   }
@@ -1521,6 +1564,7 @@ class _HomePageState extends State<HomePage> with RouteAware {
     return _buildPullToRefresh(
       onRefresh: () => provider.ensureBannedListLoaded(force: true),
       child: ListView.builder(
+        key: const PageStorageKey<String>('home-banned-list'),
         controller: _bannedScrollController,
         physics: const BouncingScrollPhysics(
           parent: AlwaysScrollableScrollPhysics(),
@@ -1561,10 +1605,9 @@ class _HomePageState extends State<HomePage> with RouteAware {
                 '${provider.bannedClientsForDisplay.length} / ${provider.bannedTabCount}',
                 style: TextStyle(
                   fontSize: 12,
-                  color: Theme.of(context)
-                      .colorScheme
-                      .onSurface
-                      .withValues(alpha: 0.55),
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.onSurface.withValues(alpha: 0.55),
                 ),
               ),
       ),
@@ -1723,7 +1766,9 @@ class _HomePageState extends State<HomePage> with RouteAware {
                                 style: TextStyle(color: colorScheme.onSurface),
                               ),
                               content: Text(
-                                l10n?.unbanDeviceConfirmTextWithIP(targetLabel) ??
+                                l10n?.unbanDeviceConfirmTextWithIP(
+                                      targetLabel,
+                                    ) ??
                                     'Are you sure you want to unban device $targetLabel?',
                                 style: TextStyle(color: colorScheme.onSurface),
                               ),
@@ -1912,7 +1957,6 @@ class _HomePageState extends State<HomePage> with RouteAware {
             behavior: SnackBarBehavior.floating,
           ),
         );
-        unawaited(provider.ensureBannedListLoaded(force: true));
         return;
       }
 
@@ -1921,7 +1965,6 @@ class _HomePageState extends State<HomePage> with RouteAware {
         setState(() {
           _selectedTab = 0;
         });
-        unawaited(provider.refreshConnectedFast());
         return;
       }
     }
@@ -2263,10 +2306,7 @@ class _HomePageState extends State<HomePage> with RouteAware {
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      ClientLiveTrafficBadge(
-                        client: client,
-                        fixedSlot: true,
-                      ),
+                      ClientLiveTrafficBadge(client: client, fixedSlot: true),
                       if (!isPendingApproval) ...[
                         const SizedBox(width: 2),
                         Icon(
@@ -2318,23 +2358,12 @@ class _HomePageState extends State<HomePage> with RouteAware {
   }
 
   String _getDeviceDisplayName(ClientInfo client) {
-    // اولویت: hostName > user > name > IP > MAC
-    if (client.hostName != null && client.hostName!.isNotEmpty) {
-      return client.hostName!;
-    }
-    if (client.user != null && client.user!.isNotEmpty) {
-      return client.user!;
-    }
-    if (client.name != null && client.name!.isNotEmpty) {
-      return client.name!;
-    }
-    if (client.ipAddress != null && client.ipAddress!.isNotEmpty) {
-      return '${AppLocalizations.of(context)?.device ?? 'Device'} ${client.ipAddress}';
-    }
-    if (client.macAddress != null && client.macAddress!.isNotEmpty) {
-      return '${AppLocalizations.of(context)?.device ?? 'Device'} ${client.macAddress}';
-    }
-    return AppLocalizations.of(context)?.unknownDevice ?? 'Unknown Device';
+    final l10n = AppLocalizations.of(context);
+    return ClientDisplayName.displayLabel(
+      client,
+      devicePrefix: l10n?.device ?? 'Device',
+      unknownLabel: l10n?.unknownDevice ?? 'Unknown Device',
+    );
   }
 }
 

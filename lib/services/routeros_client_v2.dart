@@ -153,6 +153,29 @@ class RouterOSClientV2 {
     return completer.future;
   }
 
+  /// Long-running RouterOS commands that emit repeated `!re` records (e.g.
+  /// `/interface/monitor-traffic`). Must not share the talk command queue.
+  Stream<Map<String, String>> streamData(
+    List<String> command, {
+    Map<String, String>? params,
+    String? tag,
+  }) {
+    final client = _client;
+    if (client == null || !_loggedIn) {
+      throw Exception('اتصال برقرار نشده یا احراز هویت انجام نشده');
+    }
+
+    return client.streamData(command, params, tag).map(
+      (row) {
+        final converted = <String, String>{};
+        row.forEach((key, value) {
+          converted[key.toString()] = value.toString();
+        });
+        return converted;
+      },
+    );
+  }
+
   void close() {
     _resetState();
   }

@@ -77,14 +77,10 @@ class _LoginScreenState extends State<LoginScreen> {
         await _settingsService.setHost(gateway);
 
         if (currentHost != gateway) {
-          print(
-            '✅ [LOGIN] Router Host از Default Gateway سیستم‌عامل ست شد:',
-          );
+          print('✅ [LOGIN] Router Host از Default Gateway سیستم‌عامل ست شد:');
           print('   └─ Router Host قبلی: $currentHost');
           print('   └─ Router Host جدید: $gateway');
-          print(
-            '   └─ منبع: ${networkInfo.sourceLabel(discovery.source)}',
-          );
+          print('   └─ منبع: ${networkInfo.sourceLabel(discovery.source)}');
         } else {
           print(
             'ℹ️ [LOGIN] Router Host با Default Gateway سیستم هماهنگ است: $gateway',
@@ -195,6 +191,9 @@ class _LoginScreenState extends State<LoginScreen> {
     final colorScheme = theme.colorScheme;
     final isDark = theme.brightness == Brightness.dark;
     final primaryColor = AppTheme.primaryFor(theme.brightness);
+    final screenWidth = MediaQuery.of(context).size.width;
+    final contentMaxWidth = screenWidth >= 900 ? 460.0 : 520.0;
+    final logoSize = screenWidth >= 900 ? 180.0 : 230.0;
 
     return Scaffold(
       backgroundColor: colorScheme.surface,
@@ -205,437 +204,442 @@ class _LoginScreenState extends State<LoginScreen> {
               horizontal: 32.0,
               vertical: 24.0,
             ),
-            child: Form(
-              key: _formKey,
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.start,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  const SizedBox(height: 32),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(maxWidth: contentMaxWidth),
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.start,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const SizedBox(height: 32),
 
-                  // لوگو (بزرگ‌تر و کمی پایین‌تر تا به فیلدها نزدیک شود)
-                  Center(
-                    child: Image.asset(
-                      isDark
-                          ? 'assets/images/logos/logo_dark.png'
-                          : 'assets/images/logos/logo.png',
-                      height: 230,
-                      width: 230,
-                      errorBuilder: (context, error, stackTrace) {
-                        // اگر لوگو پیدا نشد، از آیکون استفاده کن
-                        return Container(
-                          width: 230,
-                          height: 230,
-                          decoration: BoxDecoration(
+                    // لوگو (بزرگ‌تر و کمی پایین‌تر تا به فیلدها نزدیک شود)
+                    Center(
+                      child: Image.asset(
+                        isDark
+                            ? 'assets/images/logos/logo_dark.png'
+                            : 'assets/images/logos/logo.png',
+                        height: logoSize,
+                        width: logoSize,
+                        errorBuilder: (context, error, stackTrace) {
+                          // اگر لوگو پیدا نشد، از آیکون استفاده کن
+                          return Container(
+                            width: logoSize,
+                            height: logoSize,
+                            decoration: BoxDecoration(
+                              color: isDark
+                                  ? primaryColor.withOpacity(0.14)
+                                  : primaryColor.withOpacity(0.1),
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(
+                              Icons.router,
+                              size: logoSize * 0.39,
+                              color: primaryColor,
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                    // const SizedBox(height: 24),
+
+                    // عنوان
+                    const SizedBox(height: 8),
+                    Builder(
+                      builder: (context) {
+                        final l10n = AppLocalizations.of(context);
+                        return Text(
+                          l10n?.pleaseEnterRouterInfo ??
+                              'Please enter your router information',
+                          style: TextStyle(
+                            fontSize: 16,
                             color: isDark
-                                ? primaryColor.withOpacity(0.14)
-                                : primaryColor.withOpacity(0.1),
-                            shape: BoxShape.circle,
+                                ? colorScheme.onSurface.withOpacity(0.7)
+                                : Colors.grey.shade600,
                           ),
-                          child: Icon(
-                            Icons.router,
-                            size: 90,
-                            color: primaryColor,
+                          textAlign: TextAlign.center,
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 32),
+
+                    // فیلد نام کاربری
+                    Builder(
+                      builder: (context) {
+                        final l10n = AppLocalizations.of(context);
+                        return TextFormField(
+                          controller: _usernameController,
+                          focusNode: _usernameFocusNode,
+                          decoration: InputDecoration(
+                            labelText: l10n?.username ?? 'Username',
+                            hintText: 'username',
+                            prefixIcon: Icon(
+                              Icons.person_outline,
+                              color: primaryColor,
+                            ),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: BorderSide(
+                                color: isDark
+                                    ? colorScheme.outline.withOpacity(0.2)
+                                    : Colors.grey.shade300,
+                              ),
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: BorderSide(
+                                color: isDark
+                                    ? colorScheme.outline.withOpacity(0.2)
+                                    : Colors.grey.shade300,
+                              ),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: BorderSide(
+                                color: primaryColor,
+                                width: 2,
+                              ),
+                            ),
+                            filled: true,
+                            fillColor: isDark
+                                ? colorScheme.surfaceContainerHighest
+                                : Colors.grey.shade50,
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 20,
+                              vertical: 18,
+                            ),
+                            labelStyle: TextStyle(
+                              color: isDark
+                                  ? colorScheme.onSurface.withOpacity(0.7)
+                                  : Colors.grey.shade700,
+                            ),
+                            hintStyle: TextStyle(
+                              color: isDark
+                                  ? colorScheme.onSurface.withOpacity(0.5)
+                                  : Colors.grey.shade400,
+                            ),
+                          ),
+                          textDirection: TextDirection.ltr,
+                          textInputAction: TextInputAction.next,
+                          onFieldSubmitted: (_) {
+                            FocusScope.of(
+                              context,
+                            ).requestFocus(_passwordFocusNode);
+                          },
+                          validator: (value) {
+                            if (value == null || value.trim().isEmpty) {
+                              return l10n?.pleaseEnterUsername ??
+                                  'Please enter username';
+                            }
+                            return null;
+                          },
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 20),
+
+                    // فیلد رمز عبور
+                    Builder(
+                      builder: (context) {
+                        final l10n = AppLocalizations.of(context);
+                        return TextFormField(
+                          controller: _passwordController,
+                          focusNode: _passwordFocusNode,
+                          decoration: InputDecoration(
+                            labelText: l10n?.password ?? 'Password',
+                            hintText:
+                                l10n?.enterPassword ?? 'Enter your password',
+                            prefixIcon: Icon(
+                              Icons.lock_outline,
+                              color: primaryColor,
+                            ),
+                            suffixIcon: IconButton(
+                              icon: Icon(
+                                _obscurePassword
+                                    ? Icons.visibility_outlined
+                                    : Icons.visibility_off_outlined,
+                                color: isDark
+                                    ? colorScheme.onSurface.withOpacity(0.6)
+                                    : Colors.grey.shade600,
+                              ),
+                              onPressed: () {
+                                setState(() {
+                                  _obscurePassword = !_obscurePassword;
+                                });
+                              },
+                            ),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: BorderSide(
+                                color: isDark
+                                    ? colorScheme.outline.withOpacity(0.2)
+                                    : Colors.grey.shade300,
+                              ),
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: BorderSide(
+                                color: isDark
+                                    ? colorScheme.outline.withOpacity(0.2)
+                                    : Colors.grey.shade300,
+                              ),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: BorderSide(
+                                color: primaryColor,
+                                width: 2,
+                              ),
+                            ),
+                            filled: true,
+                            fillColor: isDark
+                                ? colorScheme.surfaceContainerHighest
+                                : Colors.grey.shade50,
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 20,
+                              vertical: 18,
+                            ),
+                            labelStyle: TextStyle(
+                              color: isDark
+                                  ? colorScheme.onSurface.withOpacity(0.7)
+                                  : Colors.grey.shade700,
+                            ),
+                            hintStyle: TextStyle(
+                              color: isDark
+                                  ? colorScheme.onSurface.withOpacity(0.5)
+                                  : Colors.grey.shade400,
+                            ),
+                          ),
+                          obscureText: _obscurePassword,
+                          textDirection: TextDirection.ltr,
+                          textInputAction: TextInputAction.done,
+                          onFieldSubmitted: (_) => _handleLogin(),
+                          validator: (value) {
+                            final l10n = AppLocalizations.of(context);
+                            if (value == null || value.isEmpty) {
+                              return l10n?.pleaseEnterPassword ??
+                                  'Please enter password';
+                            }
+                            return null;
+                          },
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 16),
+
+                    // مرا به خاطر بسپار
+                    Builder(
+                      builder: (context) {
+                        final l10n = AppLocalizations.of(context);
+                        return Material(
+                          color: Colors.transparent,
+                          child: InkWell(
+                            onTap: () {
+                              setState(() {
+                                _rememberMe = !_rememberMe;
+                              });
+                            },
+                            borderRadius: BorderRadius.circular(12),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 4,
+                                vertical: 10,
+                              ),
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: _rememberMe
+                                      ? primaryColor.withOpacity(0.45)
+                                      : (isDark
+                                            ? colorScheme.outline.withOpacity(
+                                                0.2,
+                                              )
+                                            : Colors.grey.shade200),
+                                ),
+                                color: _rememberMe
+                                    ? primaryColor.withOpacity(
+                                        isDark ? 0.12 : 0.06,
+                                      )
+                                    : (isDark
+                                          ? colorScheme.surfaceContainerHighest
+                                                .withOpacity(0.5)
+                                          : Colors.grey.shade50),
+                              ),
+                              child: Row(
+                                children: [
+                                  AnimatedContainer(
+                                    duration: const Duration(milliseconds: 200),
+                                    width: 24,
+                                    height: 24,
+                                    margin: const EdgeInsetsDirectional.only(
+                                      start: 12,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      borderRadius: BorderRadius.circular(6),
+                                      color: _rememberMe
+                                          ? primaryColor
+                                          : Colors.transparent,
+                                      border: Border.all(
+                                        color: _rememberMe
+                                            ? primaryColor
+                                            : (isDark
+                                                  ? colorScheme.onSurface
+                                                        .withOpacity(0.4)
+                                                  : Colors.grey.shade400),
+                                        width: 2,
+                                      ),
+                                    ),
+                                    child: _rememberMe
+                                        ? const Icon(
+                                            Icons.check_rounded,
+                                            size: 16,
+                                            color: Colors.white,
+                                          )
+                                        : null,
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Text(
+                                      l10n?.rememberMe ?? 'Remember me',
+                                      style: TextStyle(
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.w600,
+                                        color: _rememberMe
+                                            ? primaryColor
+                                            : (isDark
+                                                  ? colorScheme.onSurface
+                                                        .withOpacity(0.85)
+                                                  : Colors.grey.shade800),
+                                      ),
+                                    ),
+                                  ),
+                                  Icon(
+                                    _rememberMe
+                                        ? Icons.bookmark_rounded
+                                        : Icons.bookmark_outline_rounded,
+                                    size: 22,
+                                    color: _rememberMe
+                                        ? primaryColor
+                                        : (isDark
+                                              ? colorScheme.onSurface
+                                                    .withOpacity(0.35)
+                                              : Colors.grey.shade400),
+                                  ),
+                                  const SizedBox(width: 12),
+                                ],
+                              ),
+                            ),
                           ),
                         );
                       },
                     ),
-                  ),
-                  // const SizedBox(height: 24),
-
-                  // عنوان
-                  const SizedBox(height: 8),
-                  Builder(
-                    builder: (context) {
-                      final l10n = AppLocalizations.of(context);
-                      return Text(
-                        l10n?.pleaseEnterRouterInfo ??
-                            'Please enter your router information',
-                        style: TextStyle(
-                          fontSize: 16,
-                          color: isDark
-                              ? colorScheme.onSurface.withOpacity(0.7)
-                              : Colors.grey.shade600,
-                        ),
-                        textAlign: TextAlign.center,
-                      );
-                    },
-                  ),
-                  const SizedBox(height: 32),
-
-                  // فیلد نام کاربری
-                  Builder(
-                    builder: (context) {
-                      final l10n = AppLocalizations.of(context);
-                      return TextFormField(
-                        controller: _usernameController,
-                        focusNode: _usernameFocusNode,
-                        decoration: InputDecoration(
-                          labelText: l10n?.username ?? 'Username',
-                          hintText: 'username',
-                          prefixIcon: Icon(
-                            Icons.person_outline,
-                            color: primaryColor,
-                          ),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide(
-                              color: isDark
-                                  ? colorScheme.outline.withOpacity(0.2)
-                                  : Colors.grey.shade300,
-                            ),
-                          ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide(
-                              color: isDark
-                                  ? colorScheme.outline.withOpacity(0.2)
-                                  : Colors.grey.shade300,
-                            ),
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide(
-                              color: primaryColor,
-                              width: 2,
-                            ),
-                          ),
-                          filled: true,
-                          fillColor: isDark
-                              ? colorScheme.surfaceContainerHighest
-                              : Colors.grey.shade50,
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 20,
-                            vertical: 18,
-                          ),
-                          labelStyle: TextStyle(
-                            color: isDark
-                                ? colorScheme.onSurface.withOpacity(0.7)
-                                : Colors.grey.shade700,
-                          ),
-                          hintStyle: TextStyle(
-                            color: isDark
-                                ? colorScheme.onSurface.withOpacity(0.5)
-                                : Colors.grey.shade400,
-                          ),
-                        ),
-                        textDirection: TextDirection.ltr,
-                        textInputAction: TextInputAction.next,
-                        onFieldSubmitted: (_) {
-                          FocusScope.of(
-                            context,
-                          ).requestFocus(_passwordFocusNode);
-                        },
-                        validator: (value) {
-                          if (value == null || value.trim().isEmpty) {
-                            return l10n?.pleaseEnterUsername ??
-                                'Please enter username';
-                          }
-                          return null;
-                        },
-                      );
-                    },
-                  ),
-                  const SizedBox(height: 20),
-
-                  // فیلد رمز عبور
-                  Builder(
-                    builder: (context) {
-                      final l10n = AppLocalizations.of(context);
-                      return TextFormField(
-                        controller: _passwordController,
-                        focusNode: _passwordFocusNode,
-                        decoration: InputDecoration(
-                          labelText: l10n?.password ?? 'Password',
-                          hintText:
-                              l10n?.enterPassword ?? 'Enter your password',
-                          prefixIcon: Icon(
-                            Icons.lock_outline,
-                            color: primaryColor,
-                          ),
-                          suffixIcon: IconButton(
-                            icon: Icon(
-                              _obscurePassword
-                                  ? Icons.visibility_outlined
-                                  : Icons.visibility_off_outlined,
-                              color: isDark
-                                  ? colorScheme.onSurface.withOpacity(0.6)
-                                  : Colors.grey.shade600,
-                            ),
-                            onPressed: () {
-                              setState(() {
-                                _obscurePassword = !_obscurePassword;
-                              });
-                            },
-                          ),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide(
-                              color: isDark
-                                  ? colorScheme.outline.withOpacity(0.2)
-                                  : Colors.grey.shade300,
-                            ),
-                          ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide(
-                              color: isDark
-                                  ? colorScheme.outline.withOpacity(0.2)
-                                  : Colors.grey.shade300,
-                            ),
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide(
-                              color: primaryColor,
-                              width: 2,
-                            ),
-                          ),
-                          filled: true,
-                          fillColor: isDark
-                              ? colorScheme.surfaceContainerHighest
-                              : Colors.grey.shade50,
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 20,
-                            vertical: 18,
-                          ),
-                          labelStyle: TextStyle(
-                            color: isDark
-                                ? colorScheme.onSurface.withOpacity(0.7)
-                                : Colors.grey.shade700,
-                          ),
-                          hintStyle: TextStyle(
-                            color: isDark
-                                ? colorScheme.onSurface.withOpacity(0.5)
-                                : Colors.grey.shade400,
-                          ),
-                        ),
-                        obscureText: _obscurePassword,
-                        textDirection: TextDirection.ltr,
-                        textInputAction: TextInputAction.done,
-                        onFieldSubmitted: (_) => _handleLogin(),
-                        validator: (value) {
-                          final l10n = AppLocalizations.of(context);
-                          if (value == null || value.isEmpty) {
-                            return l10n?.pleaseEnterPassword ??
-                                'Please enter password';
-                          }
-                          return null;
-                        },
-                      );
-                    },
-                  ),
-                  const SizedBox(height: 16),
-
-                  // مرا به خاطر بسپار
-                  Builder(
-                    builder: (context) {
-                      final l10n = AppLocalizations.of(context);
-                      return Material(
-                        color: Colors.transparent,
-                        child: InkWell(
-                          onTap: () {
-                            setState(() {
-                              _rememberMe = !_rememberMe;
-                            });
-                          },
-                          borderRadius: BorderRadius.circular(12),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 4,
-                              vertical: 10,
-                            ),
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(
-                                color: _rememberMe
-                                    ? primaryColor.withOpacity(0.45)
-                                    : (isDark
-                                        ? colorScheme.outline.withOpacity(0.2)
-                                        : Colors.grey.shade200),
-                              ),
-                              color: _rememberMe
-                                  ? primaryColor.withOpacity(
-                                      isDark ? 0.12 : 0.06,
-                                    )
-                                  : (isDark
-                                      ? colorScheme.surfaceContainerHighest
-                                          .withOpacity(0.5)
-                                      : Colors.grey.shade50),
-                            ),
-                            child: Row(
-                              children: [
-                                AnimatedContainer(
-                                  duration: const Duration(milliseconds: 200),
-                                  width: 24,
-                                  height: 24,
-                                  margin: const EdgeInsetsDirectional.only(
-                                    start: 12,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    borderRadius: BorderRadius.circular(6),
-                                    color: _rememberMe
-                                        ? primaryColor
-                                        : Colors.transparent,
-                                    border: Border.all(
-                                      color: _rememberMe
-                                          ? primaryColor
-                                          : (isDark
-                                              ? colorScheme.onSurface
-                                                  .withOpacity(0.4)
-                                              : Colors.grey.shade400),
-                                      width: 2,
-                                    ),
-                                  ),
-                                  child: _rememberMe
-                                      ? const Icon(
-                                          Icons.check_rounded,
-                                          size: 16,
-                                          color: Colors.white,
-                                        )
-                                      : null,
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Text(
-                                    l10n?.rememberMe ?? 'Remember me',
-                                    style: TextStyle(
-                                      fontSize: 15,
-                                      fontWeight: FontWeight.w600,
-                                      color: _rememberMe
-                                          ? primaryColor
-                                          : (isDark
-                                              ? colorScheme.onSurface
-                                                  .withOpacity(0.85)
-                                              : Colors.grey.shade800),
-                                    ),
-                                  ),
-                                ),
-                                Icon(
-                                  _rememberMe
-                                      ? Icons.bookmark_rounded
-                                      : Icons.bookmark_outline_rounded,
-                                  size: 22,
-                                  color: _rememberMe
-                                      ? primaryColor
-                                      : (isDark
-                                          ? colorScheme.onSurface
-                                              .withOpacity(0.35)
-                                          : Colors.grey.shade400),
-                                ),
-                                const SizedBox(width: 12),
-                              ],
-                            ),
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                  const SizedBox(height: 24),
-
-                  // دکمه ورود
-                  Container(
-                    height: 56,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(12),
-                      boxShadow: [
-                        BoxShadow(
-                          color: primaryColor.withOpacity(0.3),
-                          blurRadius: 12,
-                          offset: const Offset(0, 6),
-                        ),
-                      ],
-                    ),
-                    child: ElevatedButton(
-                      onPressed: _isConnecting ? null : _handleLogin,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: primaryColor,
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        elevation: 0,
-                      ),
-                      child: _isConnecting
-                          ? const SizedBox(
-                              width: 24,
-                              height: 24,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2.5,
-                                valueColor: AlwaysStoppedAnimation<Color>(
-                                  Colors.white,
-                                ),
-                              ),
-                            )
-                          : Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                const Icon(Icons.login, size: 22),
-                                const SizedBox(width: 12),
-                                Builder(
-                                  builder: (context) {
-                                    final l10n = AppLocalizations.of(context);
-                                    return Text(
-                                      l10n?.login ?? 'Login',
-                                      style: TextStyle(
-                                        fontSize: 18,
-                                        fontWeight: FontWeight.bold,
-                                        letterSpacing: 0.5,
-                                      ),
-                                    );
-                                  },
-                                ),
-                              ],
-                            ),
-                    ),
-                  ),
-
-                  // نمایش خطا
-                  if (_errorMessage != null) ...[
                     const SizedBox(height: 24),
+
+                    // دکمه ورود
                     Container(
-                      padding: const EdgeInsets.all(16),
+                      height: 56,
                       decoration: BoxDecoration(
-                        color: isDark
-                            ? Colors.red.shade900.withOpacity(0.3)
-                            : Colors.red.shade50,
                         borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: isDark
-                              ? Colors.red.shade700
-                              : Colors.red.shade200,
-                          width: 1.5,
-                        ),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(
-                            Icons.error_outline_rounded,
-                            color: isDark
-                                ? Colors.red.shade400
-                                : Colors.red.shade700,
-                            size: 24,
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Text(
-                              _errorMessage!,
-                              style: TextStyle(
-                                color: isDark
-                                    ? Colors.red.shade400
-                                    : Colors.red.shade700,
-                                fontSize: 14,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: primaryColor.withOpacity(0.3),
+                            blurRadius: 12,
+                            offset: const Offset(0, 6),
                           ),
                         ],
                       ),
+                      child: ElevatedButton(
+                        onPressed: _isConnecting ? null : _handleLogin,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: primaryColor,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          elevation: 0,
+                        ),
+                        child: _isConnecting
+                            ? const SizedBox(
+                                width: 24,
+                                height: 24,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2.5,
+                                  valueColor: AlwaysStoppedAnimation<Color>(
+                                    Colors.white,
+                                  ),
+                                ),
+                              )
+                            : Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  const Icon(Icons.login, size: 22),
+                                  const SizedBox(width: 12),
+                                  Builder(
+                                    builder: (context) {
+                                      final l10n = AppLocalizations.of(context);
+                                      return Text(
+                                        l10n?.login ?? 'Login',
+                                        style: TextStyle(
+                                          fontSize: 18,
+                                          fontWeight: FontWeight.bold,
+                                          letterSpacing: 0.5,
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                ],
+                              ),
+                      ),
                     ),
-                  ],
 
-                  const SizedBox(height: 40),
-                ],
+                    // نمایش خطا
+                    if (_errorMessage != null) ...[
+                      const SizedBox(height: 24),
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: isDark
+                              ? Colors.red.shade900.withOpacity(0.3)
+                              : Colors.red.shade50,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: isDark
+                                ? Colors.red.shade700
+                                : Colors.red.shade200,
+                            width: 1.5,
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.error_outline_rounded,
+                              color: isDark
+                                  ? Colors.red.shade400
+                                  : Colors.red.shade700,
+                              size: 24,
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                _errorMessage!,
+                                style: TextStyle(
+                                  color: isDark
+                                      ? Colors.red.shade400
+                                      : Colors.red.shade700,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+
+                    const SizedBox(height: 40),
+                  ],
+                ),
               ),
             ),
           ),

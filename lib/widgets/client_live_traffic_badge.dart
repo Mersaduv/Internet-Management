@@ -4,7 +4,7 @@ import 'package:provider/provider.dart';
 import '../models/client_info.dart';
 import '../providers/clients_provider.dart';
 import '../utils/app_theme.dart';
-import '../utils/format_traffic_rate.dart';
+import '../utils/traffic_instant_display.dart';
 
 /// Immutable slice for [Selector] — only rebuilds when these values change.
 class ClientTrafficUiState {
@@ -12,12 +12,14 @@ class ClientTrafficUiState {
   final int? txBps;
   final bool showPlaceholder;
   final bool measured;
+  final bool inViewport;
 
   const ClientTrafficUiState({
     required this.rxBps,
     required this.txBps,
     required this.showPlaceholder,
     required this.measured,
+    this.inViewport = false,
   });
 
   @override
@@ -26,11 +28,13 @@ class ClientTrafficUiState {
         other.rxBps == rxBps &&
         other.txBps == txBps &&
         other.showPlaceholder == showPlaceholder &&
-        other.measured == measured;
+        other.measured == measured &&
+        other.inViewport == inViewport;
   }
 
   @override
-  int get hashCode => Object.hash(rxBps, txBps, showPlaceholder, measured);
+  int get hashCode =>
+      Object.hash(rxBps, txBps, showPlaceholder, measured, inViewport);
 }
 
 /// Minimal live-traffic badge for device list rows.
@@ -65,6 +69,7 @@ class ClientLiveTrafficBadge extends StatelessWidget {
         txBps: null,
         showPlaceholder: false,
         measured: false,
+        inViewport: false,
       );
     }
 
@@ -74,16 +79,31 @@ class ClientLiveTrafficBadge extends StatelessWidget {
         txBps: null,
         showPlaceholder: true,
         measured: false,
+        inViewport: false,
       );
     }
 
+    final inPollTarget = provider.isTrafficPollTarget(ip);
     final measured = provider.trafficMeasuredForIp(ip);
     final sample = provider.trafficForIp(ip);
+    final timedOut = provider.trafficAwaitingTimedOut(ip);
+
+    if (!inPollTarget) {
+      return const ClientTrafficUiState(
+        rxBps: null,
+        txBps: null,
+        showPlaceholder: false,
+        measured: false,
+        inViewport: false,
+      );
+    }
+
     return ClientTrafficUiState(
       rxBps: sample?.rxBps,
       txBps: sample?.txBps,
-      showPlaceholder: !measured,
-      measured: measured,
+      showPlaceholder: inPollTarget && !measured && !timedOut,
+      measured: measured || timedOut,
+      inViewport: inPollTarget,
     );
   }
 
@@ -101,6 +121,12 @@ class ClientLiveTrafficBadge extends StatelessWidget {
       selector: (_, provider) => _selectState(provider, ip),
       shouldRebuild: (previous, next) => previous != next,
       builder: (context, state, _) {
+        if (!state.inViewport && !state.measured) {
+          return fixedSlot
+              ? const _TrafficSlot(child: SizedBox.shrink())
+              : const SizedBox.shrink();
+        }
+
         if (state.showPlaceholder) {
           return fixedSlot
               ? const _TrafficSlot(child: _TrafficSkeleton())
@@ -149,7 +175,6 @@ class _TrafficBadgeBody extends StatelessWidget {
     final border = colorScheme.outline.withValues(alpha: isDark ? 0.18 : 0.12);
 
     return Container(
-      width: 72,
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
       decoration: BoxDecoration(
         color: bg,
@@ -158,19 +183,19 @@ class _TrafficBadgeBody extends StatelessWidget {
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _RateLine(
             icon: Icons.arrow_downward_rounded,
             color: downloadColor,
-            label: formatTrafficRateCompact(rxBps, measured: measured),
+            label: TrafficInstantDisplay.compact(rxBps, measured: measured),
             bold: emphasize && (rxBps ?? 0) > 0,
           ),
           const SizedBox(height: 2),
           _RateLine(
             icon: Icons.arrow_upward_rounded,
             color: uploadColor,
-            label: formatTrafficRateCompact(txBps, measured: measured),
+            label: TrafficInstantDisplay.compact(txBps, measured: measured),
             bold: emphasize && (txBps ?? 0) > 0,
           ),
         ],
@@ -200,12 +225,9 @@ class _TrafficSlot extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: 72,
-      child: Align(
-        alignment: Alignment.centerRight,
-        child: child,
-      ),
+    return Align(
+      alignment: Alignment.centerRight,
+      child: child,
     );
   }
 }
@@ -230,12 +252,14 @@ class _RateLine extends StatelessWidget {
       children: [
         Icon(icon, size: 11, color: color),
         const SizedBox(width: 3),
-        Expanded(
+        SizedBox(
+          width: 76,
           child: Text(
             label,
             maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            textAlign: TextAlign.end,
+            softWrap: false,
+            overflow: TextOverflow.clip,
+            textAlign: TextAlign.right,
             style: TextStyle(
               fontSize: 11,
               height: 1.1,
@@ -257,7 +281,7 @@ class _TrafficSkeleton extends StatelessWidget {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     return Container(
-      width: 72,
+      width: 96,
       height: 36,
       decoration: BoxDecoration(
         color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
@@ -267,7 +291,7 @@ class _TrafficSkeleton extends StatelessWidget {
   }
 }
 
-/// Detail screen row — same formatting rules as the list badge.
+/// Detail screen — same selector, badge, and numbers as the connected list.
 class ClientLiveTrafficDetailRow extends StatelessWidget {
   const ClientLiveTrafficDetailRow({
     super.key,
@@ -282,55 +306,36 @@ class ClientLiveTrafficDetailRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final ip = client?.ipAddress ?? ipAddress;
-    return Selector<ClientsProvider, ClientTrafficUiState>(
-      selector: (_, provider) =>
-          ClientLiveTrafficBadge._selectState(provider, ip),
-      shouldRebuild: (previous, next) => previous != next,
-      builder: (context, state, _) {
-        if (state.showPlaceholder) {
-          return const SizedBox.shrink();
-        }
-
-        return Padding(
-          padding: const EdgeInsets.only(bottom: 8),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                flex: 2,
-                child: Text(
-                  label,
-                  style: TextStyle(
-                    color: Theme.of(context)
-                        .colorScheme
-                        .onSurface
-                        .withValues(alpha: 0.7),
-                    fontSize: 14,
-                  ),
-                ),
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          SizedBox(
+            width: 120,
+            child: Text(
+              label,
+              style: TextStyle(
+                color: theme.brightness == Brightness.dark
+                    ? colorScheme.onSurface.withValues(alpha: 0.7)
+                    : Colors.grey.shade600,
+                fontSize: 14,
               ),
-              Expanded(
-                flex: 3,
-                child: Text(
-                  formatTrafficPair(
-                    state.rxBps,
-                    state.txBps,
-                    measured: state.measured,
-                  ),
-                  textAlign: TextAlign.end,
-                  style: TextStyle(
-                    fontWeight: FontWeight.w600,
-                    fontSize: 14,
-                    color: Theme.of(context).colorScheme.primary,
-                    fontFeatures: const [FontFeature.tabularFigures()],
-                  ),
-                ),
-              ),
-            ],
+            ),
           ),
-        );
-      },
+          Expanded(
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: ClientLiveTrafficBadge(
+                client: client,
+                ipAddress: ipAddress,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

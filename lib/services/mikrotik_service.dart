@@ -10,6 +10,7 @@ import 'routeros_client_v2.dart' show RouterOSClientV2;
 import 'mikrotik_timeouts.dart';
 import '../models/client_traffic_rate.dart';
 import '../models/traffic_rates_snapshot.dart';
+import '../utils/client_display_name.dart';
 import '../utils/traffic_rate_parser.dart';
 
 /// سرویس برای مدیریت اتصال و عملیات MikroTik RouterOS
@@ -212,24 +213,7 @@ class MikroTikService {
     if (lease == null) {
       return null;
     }
-
-    var comment = lease['comment']?.trim() ?? '';
-    if (comment.isNotEmpty) {
-      comment = _withoutMarker(comment, _banMarker);
-      comment = _withoutMarker(comment, _staticMarker);
-      if (comment.isNotEmpty &&
-          !comment.startsWith('Auto-banned:') &&
-          comment != 'Banned via Flutter App') {
-        return comment;
-      }
-    }
-
-    final hostName = lease['host-name']?.trim();
-    if (hostName != null && hostName.isNotEmpty) {
-      return hostName;
-    }
-
-    return null;
+    return ClientDisplayName.displayNameFromLease(lease);
   }
 
   String _commandSummary(List<String> command) {
@@ -1870,6 +1854,20 @@ class MikroTikService {
       '/ip/arp/print',
       _proplist(['address', 'mac-address', 'interface', 'complete']),
     ], timeout: _phaseTalkTimeout);
+  }
+
+  /// Phase 2b2 — MNDP/CDP neighbor identities keyed by MAC.
+  Future<List<Map<String, String>>> getPhase2NeighborDiscovery() async {
+    await _requireConnection();
+    try {
+      return await _talk([
+        '/ip/neighbor/print',
+        _proplist(['identity', 'mac-address', 'address', 'interface']),
+      ], timeout: _phaseTalkTimeout);
+    } catch (e) {
+      print('[PROGRESSIVE_LOAD] phase2 neighbor discovery skipped: $e');
+      return [];
+    }
   }
 
   /// ARP table with complete flag — online/offline status refresh.

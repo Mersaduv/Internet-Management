@@ -10,15 +10,14 @@ import 'mikrotik_timeouts.dart';
 import 'routeros_client_v2.dart';
 import 'traffic_monitor_queue_sync.dart';
 
-/// Multi-source live traffic sampler used by ISP management apps (Mikhmon,
-/// Home Assistant Mikrotik Router, Mikrocount).
+/// Adaptive live traffic sampler for home and company RouterOS boards.
 ///
-/// Priority:
-/// 1. `/queue/simple/print =stats=` — instant router-side rate
+/// Never writes queues or changes router config. Reads whatever already exists:
+/// 1. Dedicated host Simple Queue (`ip/32`) instant `rate` when non-zero
 /// 2. `/ip/kid-control/device/print` — RouterOS v7+ per-MAC counters
-/// 3. `/ip/accounting/snapshot` — per-IP WAN/LAN counters (RouterOS v6 style)
+/// 3. `/ip/accounting/snapshot` — if accounting is already enabled
 /// 4. `/ip/hotspot/active/print` — hotspot byte delta
-/// 5. `/ip/firewall/connection/print` — per-IP byte delta (works for dynamic/pending leases)
+/// 5. `/ip/firewall/connection/print` — per-IP byte delta (PCQ/group/pending)
 class LiveTrafficEngine {
   RouterOSClientV2? _client;
   MikroTikConnection? _connection;
@@ -27,7 +26,9 @@ class LiveTrafficEngine {
   bool _capsProbed = false;
   bool _warmupPending = true;
   DateTime? _lastSampleAt;
+  int _sampleFailures = 0;
 
+  final Map<String, DateTime> _byteBaselineAt = {};
   final Map<String, ({int rxBytes, int txBytes})> _prevQueueBytes = {};
   final Map<String, ({int bytesUp, int bytesDown})> _prevKidBytes = {};
   final Map<String, ({int bytesIn, int bytesOut})> _prevHotspotBytes = {};
@@ -36,6 +37,8 @@ class LiveTrafficEngine {
 
   LiveTrafficCapabilities get capabilities => _caps;
   bool get isReady => _client?.isConnected ?? false;
+  bool get usesInstantQueueRates =>
+      _caps.queueStats && _caps.primary == LiveTrafficSource.queueStats;
 
   Future<void> connect(MikroTikConnection connection) async {
     if (_connection == connection && (_client?.isConnected ?? false)) {
@@ -73,6 +76,8 @@ class LiveTrafficEngine {
     required Set<String> trackedIps,
     required Map<String, String> macToIp,
   }) async {
+    _dropBaselinesNotIn(trackedIps);
+
     final client = _client;
     if (client == null || !client.isConnected || trackedIps.isEmpty) {
       return {};
@@ -86,23 +91,6 @@ class LiveTrafficEngine {
       debugPrint('[LIVE_TRAFFIC] primary=${_caps.primary}');
     }
 
-    await _queueSync.ensureMonitorQueues(
-      client: client,
-      trackedIps: trackedIps,
-    );
-    if (_caps.queueStats == false) {
-      _caps = LiveTrafficCapabilities(
-        primary: LiveTrafficSource.queueStats,
-        queueStats: true,
-        kidControl: _caps.kidControl,
-        ipAccounting: _caps.ipAccounting,
-        hotspotActive: _caps.hotspotActive,
-        firewallConnection: _caps.firewallConnection,
-        accountingLocalTraffic: _caps.accountingLocalTraffic,
-        localNetworkCidrs: _caps.localNetworkCidrs,
-      );
-    }
-
     final now = DateTime.now();
     final elapsed = _lastSampleAt == null ? null : now.difference(_lastSampleAt!);
     _lastSampleAt = now;
@@ -114,73 +102,89 @@ class LiveTrafficEngine {
         macToIp,
         pollTimeout,
       );
+      _touchBaselines(trackedIps, now);
       _warmupPending = false;
-      return {};
     }
 
-    if (elapsed == null || elapsed.inMilliseconds < 300) {
+    if (elapsed != null && elapsed.inMilliseconds < 200) {
       return {};
     }
 
     final sampledAt = now;
     final rates = <String, ClientTrafficRate>{};
+    final allowByteDelta =
+        elapsed != null &&
+        elapsed.inMilliseconds >= TrafficRateParser.minDeltaElapsedMs;
 
     try {
-      switch (_caps.primary) {
-        case LiveTrafficSource.queueStats:
-          await _mergeQueueStats(
-            client,
-            trackedIps,
-            elapsed,
-            sampledAt,
-            rates,
-            pollTimeout,
-          );
-        case LiveTrafficSource.kidControl:
-          await _mergeKidControl(client, macToIp, elapsed, sampledAt, rates);
-        case LiveTrafficSource.ipAccounting:
-          await _mergeAccounting(
-            client,
-            trackedIps,
-            elapsed,
-            sampledAt,
-            rates,
-            pollTimeout,
-          );
-        case LiveTrafficSource.hotspotActive:
-          await _mergeHotspot(client, trackedIps, elapsed, sampledAt, rates);
-        case LiveTrafficSource.firewallConnection:
-          await _mergeConnectionTracking(
-            client,
-            trackedIps,
-            elapsed,
-            sampledAt,
-            rates,
-            pollTimeout: pollTimeout,
-          );
-        case LiveTrafficSource.none:
-          break;
+      final canUsePrimary = allowByteDelta ||
+          _caps.primary == LiveTrafficSource.queueStats ||
+          _caps.primary == LiveTrafficSource.none;
+      if (canUsePrimary) {
+        switch (_caps.primary) {
+          case LiveTrafficSource.queueStats:
+            await _mergeQueueStats(
+              client,
+              trackedIps,
+              sampledAt,
+              rates,
+              pollTimeout,
+            );
+          case LiveTrafficSource.kidControl:
+            await _mergeKidControl(
+              client,
+              macToIp,
+              sampledAt,
+              rates,
+            );
+          case LiveTrafficSource.ipAccounting:
+            await _mergeAccounting(
+              client,
+              trackedIps,
+              elapsed ?? const Duration(milliseconds: 500),
+              sampledAt,
+              rates,
+              pollTimeout,
+            );
+          case LiveTrafficSource.hotspotActive:
+            await _mergeHotspot(
+              client,
+              trackedIps,
+              sampledAt,
+              rates,
+            );
+          case LiveTrafficSource.firewallConnection:
+            await _mergeConnectionTracking(
+              client,
+              trackedIps,
+              sampledAt,
+              rates,
+              pollTimeout: pollTimeout,
+            );
+          case LiveTrafficSource.none:
+            break;
+        }
       }
 
-      await _mergeSecondarySources(
-        client,
-        trackedIps,
-        macToIp,
-        elapsed,
-        sampledAt,
-        rates,
-        pollTimeout,
-      );
-
-      for (final ip in trackedIps) {
-        rates.putIfAbsent(
-          ip,
-          () => ClientTrafficRate(rxBps: 0, txBps: 0, sampledAt: sampledAt),
+      final missingIps = trackedIps.where((ip) => _needsFallbackRate(rates, ip));
+      if (missingIps.isNotEmpty && allowByteDelta) {
+        await _mergeSecondarySources(
+          client,
+          missingIps.toSet(),
+          macToIp,
+          elapsed,
+          sampledAt,
+          rates,
+          pollTimeout,
         );
       }
+      _sampleFailures = 0;
     } catch (e) {
       debugPrint('[LIVE_TRAFFIC] sample failed: $e');
-      await disconnect();
+      _sampleFailures++;
+      if (_sampleFailures >= 3) {
+        await disconnect();
+      }
       return {};
     }
 
@@ -200,14 +204,20 @@ class LiveTrafficEngine {
       await _mergeQueueStats(
         client,
         trackedIps,
-        elapsed,
         sampledAt,
         rates,
         pollTimeout,
+        onlyMissing: true,
       );
     }
     if (_caps.primary != LiveTrafficSource.kidControl && _caps.kidControl) {
-      await _mergeKidControl(client, macToIp, elapsed, sampledAt, rates);
+      await _mergeKidControl(
+        client,
+        macToIp,
+        sampledAt,
+        rates,
+        onlyMissing: true,
+      );
     }
     if (_caps.primary != LiveTrafficSource.ipAccounting && _caps.ipAccounting) {
       await _mergeAccounting(
@@ -217,39 +227,40 @@ class LiveTrafficEngine {
         sampledAt,
         rates,
         pollTimeout,
+        onlyMissing: true,
       );
     }
     if (_caps.primary != LiveTrafficSource.hotspotActive && _caps.hotspotActive) {
-      await _mergeHotspot(client, trackedIps, elapsed, sampledAt, rates);
+      await _mergeHotspot(
+        client,
+        trackedIps,
+        sampledAt,
+        rates,
+        onlyMissing: true,
+      );
     }
     if (_caps.firewallConnection) {
       await _mergeConnectionTracking(
         client,
         trackedIps,
-        elapsed,
         sampledAt,
         rates,
         pollTimeout: pollTimeout,
-        onlyMissing: false,
+        onlyMissing: true,
       );
     }
   }
 
-  void _upsertPeakRate(
+  void _setInstantRate(
     Map<String, ClientTrafficRate> rates,
     String ip,
     ClientTrafficRate incoming,
   ) {
-    final existing = rates[ip];
-    if (existing == null) {
-      rates[ip] = incoming;
+    if (incoming.rxBps > TrafficRateParser.maxReasonableBps ||
+        incoming.txBps > TrafficRateParser.maxReasonableBps) {
       return;
     }
-    final existingTotal = existing.rxBps + existing.txBps;
-    final incomingTotal = incoming.rxBps + incoming.txBps;
-    if (incomingTotal >= existingTotal) {
-      rates[ip] = incoming;
-    }
+    rates[ip] = incoming;
   }
 
   bool _needsFallbackRate(Map<String, ClientTrafficRate> rates, String ip) {
@@ -257,6 +268,7 @@ class LiveTrafficEngine {
     if (existing == null) {
       return true;
     }
+    // Host-queue `rate` is often 0 while real traffic is on a parent PCQ.
     return existing.rxBps == 0 && existing.txBps == 0;
   }
 
@@ -318,30 +330,30 @@ class LiveTrafficEngine {
   Future<void> _mergeQueueStats(
     RouterOSClientV2 client,
     Set<String> trackedIps,
-    Duration elapsed,
     DateTime sampledAt,
     Map<String, ClientTrafficRate> rates,
-    Duration pollTimeout,
-  ) async {
+    Duration pollTimeout, {
+    bool onlyMissing = false,
+  }) async {
     final rows = await _fetchQueueStats(client, pollTimeout);
     for (final row in rows) {
+      if (!TrafficRateParser.isDedicatedHostQueueTarget(row['target'])) {
+        continue;
+      }
       final ip = TrafficRateParser.ipFromQueueTarget(row['target']);
       if (ip == null || !trackedIps.contains(ip)) {
         continue;
       }
+      if (onlyMissing && !_needsFallbackRate(rates, ip)) {
+        _storeQueueBytes(ip, row['bytes']);
+        continue;
+      }
 
-      var parsed = TrafficRateParser.fromQueueStatsRow(row);
-      parsed ??= TrafficRateParser.fromQueueBytesDelta(
-        bytesField: row['bytes'],
-        prevRxBytes: _prevQueueBytes[ip]?.rxBytes ?? 0,
-        prevTxBytes: _prevQueueBytes[ip]?.txBytes ?? 0,
-        elapsed: elapsed,
-      );
+      final parsed = TrafficRateParser.fromQueueStatsRow(row);
+      final prevBytes = _prevQueueBytes[ip];
 
-      _storeQueueBytes(ip, row['bytes']);
-
-      if (parsed != null) {
-        _upsertPeakRate(
+      if (parsed != null && (parsed.rxBps > 0 || parsed.txBps > 0)) {
+        _setInstantRate(
           rates,
           ip,
           ClientTrafficRate(
@@ -350,6 +362,32 @@ class LiveTrafficEngine {
             sampledAt: sampledAt,
           ),
         );
+        _storeQueueBytes(ip, row['bytes']);
+        continue;
+      }
+
+      final parts = row['bytes']?.split('/');
+      if (parts != null && parts.length >= 2) {
+        final txBytes = int.tryParse(parts[0].trim()) ?? 0;
+        final rxBytes = int.tryParse(parts[1].trim()) ?? 0;
+        final commit = _emitOrRecaptureByteDelta(
+          rates: rates,
+          ip: ip,
+          sampledAt: sampledAt,
+          prevRxBytes: prevBytes?.rxBytes,
+          prevTxBytes: prevBytes?.txBytes,
+          rxBytes: rxBytes,
+          txBytes: txBytes,
+        );
+        if (commit) {
+          _storeQueueBytes(ip, row['bytes']);
+        }
+      }
+
+      // Idle host queues must not hide PCQ/connection traffic.
+      final stamped = rates[ip];
+      if (stamped != null && stamped.rxBps == 0 && stamped.txBps == 0) {
+        rates.remove(ip);
       }
     }
   }
@@ -357,10 +395,10 @@ class LiveTrafficEngine {
   Future<void> _mergeKidControl(
     RouterOSClientV2 client,
     Map<String, String> macToIp,
-    Duration elapsed,
     DateTime sampledAt,
-    Map<String, ClientTrafficRate> rates,
-  ) async {
+    Map<String, ClientTrafficRate> rates, {
+    bool onlyMissing = false,
+  }) async {
     final rows = await _fetchKidControlDevices(client);
     for (final row in rows) {
       final mac = _normalizeMac(row['mac-address']);
@@ -371,33 +409,29 @@ class LiveTrafficEngine {
       if (ip == null) {
         continue;
       }
+      if (onlyMissing && !_needsFallbackRate(rates, ip)) {
+        _prevKidBytes[ip] = (
+          bytesUp: int.tryParse(row['bytes-up'] ?? '') ?? 0,
+          bytesDown: int.tryParse(row['bytes-down'] ?? '') ?? 0,
+        );
+        continue;
+      }
 
       final bytesUp = int.tryParse(row['bytes-up'] ?? '') ?? 0;
       final bytesDown = int.tryParse(row['bytes-down'] ?? '') ?? 0;
       final prev = _prevKidBytes[ip];
-
-      if (prev != null) {
-        final delta = TrafficRateParser.fromByteDelta(
-          prevRxBytes: prev.bytesDown,
-          prevTxBytes: prev.bytesUp,
-          rxBytes: bytesDown,
-          txBytes: bytesUp,
-          elapsed: elapsed,
-        );
-        if (delta != null) {
-          _upsertPeakRate(
-            rates,
-            ip,
-            ClientTrafficRate(
-              rxBps: delta.rxBps,
-              txBps: delta.txBps,
-              sampledAt: sampledAt,
-            ),
-          );
-        }
+      final commit = _emitOrRecaptureByteDelta(
+        rates: rates,
+        ip: ip,
+        sampledAt: sampledAt,
+        prevRxBytes: prev?.bytesDown,
+        prevTxBytes: prev?.bytesUp,
+        rxBytes: bytesDown,
+        txBytes: bytesUp,
+      );
+      if (commit) {
+        _prevKidBytes[ip] = (bytesUp: bytesUp, bytesDown: bytesDown);
       }
-
-      _prevKidBytes[ip] = (bytesUp: bytesUp, bytesDown: bytesDown);
     }
   }
 
@@ -407,8 +441,13 @@ class LiveTrafficEngine {
     Duration elapsed,
     DateTime sampledAt,
     Map<String, ClientTrafficRate> rates,
-    Duration pollTimeout,
-  ) async {
+    Duration pollTimeout, {
+    bool onlyMissing = false,
+  }) async {
+    if (onlyMissing && trackedIps.every((ip) => !_needsFallbackRate(rates, ip))) {
+      return;
+    }
+
     await _takeAccountingSnapshot(client, pollTimeout);
     final rows = await _fetchAccountingSnapshot(client, pollTimeout);
     final totals = TrafficRateParser.aggregateAccountingRows(
@@ -423,13 +462,20 @@ class LiveTrafficEngine {
     }
 
     for (final ip in trackedIps) {
+      if (onlyMissing && !_needsFallbackRate(rates, ip)) {
+        continue;
+      }
       final current = totals[ip];
       if (current == null) {
         continue;
       }
       final rxBps = (current.rxBytes * 8 / seconds).round();
       final txBps = (current.txBytes * 8 / seconds).round();
-      _upsertPeakRate(
+      if (rxBps > TrafficRateParser.maxReasonableBps ||
+          txBps > TrafficRateParser.maxReasonableBps) {
+        continue;
+      }
+      _setInstantRate(
         rates,
         ip,
         ClientTrafficRate(
@@ -444,41 +490,42 @@ class LiveTrafficEngine {
   Future<void> _mergeHotspot(
     RouterOSClientV2 client,
     Set<String> trackedIps,
-    Duration elapsed,
     DateTime sampledAt,
-    Map<String, ClientTrafficRate> rates,
-  ) async {
+    Map<String, ClientTrafficRate> rates, {
+    bool onlyMissing = false,
+  }) async {
     final rows = await _fetchHotspotActive(client);
     for (final row in rows) {
       final ip = row['address']?.trim();
-      if (ip == null || !trackedIps.contains(ip) || rates.containsKey(ip)) {
+      if (ip == null || !trackedIps.contains(ip)) {
+        continue;
+      }
+      if (onlyMissing && !_needsFallbackRate(rates, ip)) {
+        _prevHotspotBytes[ip] = (
+          bytesIn: int.tryParse(row['bytes-in'] ?? '') ?? 0,
+          bytesOut: int.tryParse(row['bytes-out'] ?? '') ?? 0,
+        );
+        continue;
+      }
+      if (!onlyMissing && rates.containsKey(ip)) {
         continue;
       }
 
       final bytesIn = int.tryParse(row['bytes-in'] ?? '') ?? 0;
       final bytesOut = int.tryParse(row['bytes-out'] ?? '') ?? 0;
       final prev = _prevHotspotBytes[ip];
-      if (prev != null) {
-        final delta = TrafficRateParser.fromHotspotByteDelta(
-          prevBytesIn: prev.bytesIn,
-          prevBytesOut: prev.bytesOut,
-          bytesIn: bytesIn,
-          bytesOut: bytesOut,
-          elapsed: elapsed,
-        );
-        if (delta != null) {
-          _upsertPeakRate(
-            rates,
-            ip,
-            ClientTrafficRate(
-              rxBps: delta.rxBps,
-              txBps: delta.txBps,
-              sampledAt: sampledAt,
-            ),
-          );
-        }
+      final commit = _emitOrRecaptureByteDelta(
+        rates: rates,
+        ip: ip,
+        sampledAt: sampledAt,
+        prevRxBytes: prev?.bytesIn,
+        prevTxBytes: prev?.bytesOut,
+        rxBytes: bytesIn,
+        txBytes: bytesOut,
+      );
+      if (commit) {
+        _prevHotspotBytes[ip] = (bytesIn: bytesIn, bytesOut: bytesOut);
       }
-      _prevHotspotBytes[ip] = (bytesIn: bytesIn, bytesOut: bytesOut);
     }
   }
 
@@ -500,13 +547,16 @@ class LiveTrafficEngine {
   Future<void> _mergeConnectionTracking(
     RouterOSClientV2 client,
     Set<String> trackedIps,
-    Duration elapsed,
     DateTime sampledAt,
     Map<String, ClientTrafficRate> rates, {
     bool onlyMissing = false,
     required Duration pollTimeout,
   }) async {
-    final totals = await _aggregateConnectionBytes(client, trackedIps, pollTimeout);
+    final totals = await _aggregateConnectionBytes(
+      client,
+      trackedIps,
+      pollTimeout,
+    );
 
     for (final ip in trackedIps) {
       if (onlyMissing && !_needsFallbackRate(rates, ip)) {
@@ -523,28 +573,18 @@ class LiveTrafficEngine {
       }
 
       final prev = _prevConnectionBytes[ip];
-      if (prev != null) {
-        final delta = TrafficRateParser.fromByteDelta(
-          prevRxBytes: prev.rxBytes,
-          prevTxBytes: prev.txBytes,
-          rxBytes: current.rxBytes,
-          txBytes: current.txBytes,
-          elapsed: elapsed,
-        );
-        if (delta != null) {
-          _upsertPeakRate(
-            rates,
-            ip,
-            ClientTrafficRate(
-              rxBps: delta.rxBps,
-              txBps: delta.txBps,
-              sampledAt: sampledAt,
-            ),
-          );
-        }
+      final commit = _emitOrRecaptureByteDelta(
+        rates: rates,
+        ip: ip,
+        sampledAt: sampledAt,
+        prevRxBytes: prev?.rxBytes,
+        prevTxBytes: prev?.txBytes,
+        rxBytes: current.rxBytes,
+        txBytes: current.txBytes,
+      );
+      if (commit) {
+        _prevConnectionBytes[ip] = current;
       }
-
-      _prevConnectionBytes[ip] = current;
     }
   }
 
@@ -595,52 +635,58 @@ class LiveTrafficEngine {
     var accountingLocalTraffic = false;
     final localNetworks = <String>[];
 
-    try {
-      final queueRows = await _fetchQueueStats(client, pollTimeout);
-      queueStats = queueRows.isNotEmpty;
-    } catch (_) {}
+    final probeResults = await Future.wait<Object?>([
+      _fetchQueueStats(client, pollTimeout).then((rows) {
+        queueStats = rows.isNotEmpty;
+        return null;
+      }).catchError((_) => null),
+      _fetchKidControlDevices(client).then((rows) {
+        kidControl = rows.isNotEmpty;
+        return null;
+      }).catchError((_) => null),
+      client
+          .talk(
+            [
+              '/ip/accounting/print',
+              '=.proplist=enabled,account-local-traffic',
+            ],
+            timeout: MikrotikTimeouts.trafficPoll,
+          )
+          .then((accounting) {
+            for (final row in accounting) {
+              final enabled = row['enabled']?.toLowerCase();
+              ipAccounting = enabled == 'true' || enabled == 'yes';
+              final local = row['account-local-traffic']?.toLowerCase();
+              accountingLocalTraffic = local == 'true' || local == 'yes';
+            }
+            return null;
+          })
+          .catchError((_) => null),
+      client
+          .talk(
+            [
+              '/ip/dhcp-server/network/print',
+              '=.proplist=address',
+            ],
+            timeout: MikrotikTimeouts.trafficPoll,
+          )
+          .then((networks) {
+            for (final row in networks) {
+              final cidr = row['address']?.trim();
+              if (cidr != null && cidr.isNotEmpty) {
+                localNetworks.add(cidr);
+              }
+            }
+            return null;
+          })
+          .catchError((_) => null),
+      _fetchHotspotActive(client).then((hotspot) {
+        hotspotActive = hotspot.isNotEmpty;
+        return null;
+      }).catchError((_) => null),
+    ]);
 
-    try {
-      final kidRows = await _fetchKidControlDevices(client);
-      kidControl = kidRows.isNotEmpty;
-    } catch (_) {}
-
-    try {
-      final accounting = await client.talk(
-        [
-          '/ip/accounting/print',
-          '=.proplist=enabled,account-local-traffic',
-        ],
-        timeout: MikrotikTimeouts.trafficPoll,
-      );
-      for (final row in accounting) {
-        final enabled = row['enabled']?.toLowerCase();
-        ipAccounting = enabled == 'true' || enabled == 'yes';
-        final local = row['account-local-traffic']?.toLowerCase();
-        accountingLocalTraffic = local == 'true' || local == 'yes';
-      }
-    } catch (_) {}
-
-    try {
-      final networks = await client.talk(
-        [
-          '/ip/dhcp-server/network/print',
-          '=.proplist=address',
-        ],
-        timeout: MikrotikTimeouts.trafficPoll,
-      );
-      for (final row in networks) {
-        final cidr = row['address']?.trim();
-        if (cidr != null && cidr.isNotEmpty) {
-          localNetworks.add(cidr);
-        }
-      }
-    } catch (_) {}
-
-    try {
-      final hotspot = await _fetchHotspotActive(client);
-      hotspotActive = hotspot.isNotEmpty;
-    } catch (_) {}
+    assert(probeResults.length == 5);
 
     try {
       await _fetchFirewallConnections(client, pollTimeout);
@@ -768,7 +814,82 @@ class LiveTrafficEngine {
     );
   }
 
+  void _touchBaselines(Set<String> ips, DateTime at) {
+    for (final ip in ips) {
+      _byteBaselineAt[ip] = at;
+    }
+  }
+
+  void _dropBaselinesNotIn(Set<String> trackedIps) {
+    final known = {
+      ..._byteBaselineAt.keys,
+      ..._prevQueueBytes.keys,
+      ..._prevKidBytes.keys,
+      ..._prevHotspotBytes.keys,
+      ..._prevConnectionBytes.keys,
+    };
+    for (final ip in known.difference(trackedIps)) {
+      _byteBaselineAt.remove(ip);
+      _prevQueueBytes.remove(ip);
+      _prevKidBytes.remove(ip);
+      _prevHotspotBytes.remove(ip);
+      _prevConnectionBytes.remove(ip);
+    }
+  }
+
+  /// Emits a rate only inside the instant window. Returns whether counters
+  /// should be replaced (false = interval too short, keep previous baseline).
+  bool _emitOrRecaptureByteDelta({
+    required Map<String, ClientTrafficRate> rates,
+    required String ip,
+    required DateTime sampledAt,
+    required int? prevRxBytes,
+    required int? prevTxBytes,
+    required int rxBytes,
+    required int txBytes,
+  }) {
+    if (prevRxBytes == null || prevTxBytes == null) {
+      _byteBaselineAt[ip] = sampledAt;
+      return true;
+    }
+
+    final baselineAt = _byteBaselineAt[ip];
+    final instant = TrafficRateParser.instantElapsed(baselineAt, sampledAt);
+    if (instant != null) {
+      final delta = TrafficRateParser.fromByteDelta(
+        prevRxBytes: prevRxBytes,
+        prevTxBytes: prevTxBytes,
+        rxBytes: rxBytes,
+        txBytes: txBytes,
+        elapsed: instant,
+      );
+      if (delta != null) {
+        _setInstantRate(
+          rates,
+          ip,
+          ClientTrafficRate(
+            rxBps: delta.rxBps,
+            txBps: delta.txBps,
+            sampledAt: sampledAt,
+          ),
+        );
+      }
+      _byteBaselineAt[ip] = sampledAt;
+      return true;
+    }
+
+    if (baselineAt != null &&
+        sampledAt.difference(baselineAt).inMilliseconds <
+            TrafficRateParser.minDeltaElapsedMs) {
+      return false;
+    }
+
+    _byteBaselineAt[ip] = sampledAt;
+    return true;
+  }
+
   void _clearBaselines() {
+    _byteBaselineAt.clear();
     _prevQueueBytes.clear();
     _prevKidBytes.clear();
     _prevHotspotBytes.clear();
@@ -785,6 +906,7 @@ class LiveTrafficEngine {
     _capsProbed = false;
     _warmupPending = true;
     _lastSampleAt = null;
+    _sampleFailures = 0;
     _queueSync.reset();
     _clearBaselines();
   }

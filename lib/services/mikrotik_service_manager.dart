@@ -169,6 +169,15 @@ class MikroTikServiceManager {
     return service.ensureConnected(forceHealthCheck: true);
   }
 
+  /// Ping the main API socket and reconnect if it died (common after extra logins).
+  Future<bool> ensureSessionHealthy() async {
+    final service = _service;
+    if (service == null) {
+      return false;
+    }
+    return service.ensureConnected(forceHealthCheck: true);
+  }
+
   /// Router info cache is fresh if younger than 5 minutes.
   bool hasValidCachedRouterInfo() {
     if (_routerInfo == null || _routerInfoCacheTime == null) {
@@ -275,6 +284,13 @@ class MikroTikServiceManager {
       throw Exception('Connection is not established');
     }
     return _service!.getPhase2ArpTable();
+  }
+
+  Future<List<Map<String, String>>> getPhase2NeighborDiscovery() async {
+    if (_service == null || !isConnected) {
+      throw Exception('Connection is not established');
+    }
+    return _service!.getPhase2NeighborDiscovery();
   }
 
   Future<List<Map<String, String>>> getArpTable() async {
@@ -451,10 +467,11 @@ class MikroTikServiceManager {
       );
     } catch (e) {
       debugPrint('[TRAFFIC] poll failed: $e');
-      await _trafficMonitor.disconnect();
       return {};
     }
   }
+
+  bool get trafficUsesInstantQueueRates => _trafficMonitor.usesInstantQueueRates;
 
   Future<void> disconnectTrafficMonitor() async {
     await _trafficMonitor.disconnect();

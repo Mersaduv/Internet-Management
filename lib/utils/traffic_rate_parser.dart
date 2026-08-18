@@ -1,5 +1,16 @@
 /// Parses MikroTik queue / hotspot counters into bit-per-second rates.
 abstract final class TrafficRateParser {
+  /// Minimum interval for byte-delta rate math (avoids spike on short polls).
+  static const int minDeltaElapsedMs = 350;
+
+  /// Deltas older than this are a new baseline, not an instant rate.
+  ///
+  /// Must cover a slow `/ip/firewall/connection/print` on busy routers
+  /// (several seconds). Off-viewport IPs already drop their baseline.
+  static const int maxInstantElapsedMs = 20000;
+
+  /// Ignore absurd delta spikes from counter resets or bad intervals.
+  static const int maxReasonableBps = 500000000;
   /// Extract host IP from queue target, connection endpoint, or accounting row.
   ///
   /// Handles `192.168.1.5/32`, `192.168.1.5:443`, and bare IPv4.
@@ -37,17 +48,44 @@ abstract final class TrafficRateParser {
   }
 
   /// Extract IPv4 from queue target like `192.168.1.5/32`.
+  ///
+  /// Group / subnet targets are not a single host — use
+  /// [isDedicatedHostQueueTarget] before mapping a rate to one client.
   static String? ipFromQueueTarget(String? target) {
     final value = target?.trim();
     if (value == null || value.isEmpty) {
       return null;
     }
-    final slash = value.indexOf('/');
-    final ip = slash >= 0 ? value.substring(0, slash) : value;
+    final first = value.split(',').first.trim();
+    final slash = first.indexOf('/');
+    final ip = slash >= 0 ? first.substring(0, slash) : first;
     if (ip.isEmpty || ip == '0.0.0.0') {
       return null;
     }
     return ip;
+  }
+
+  /// True only for a single host queue (`1.2.3.4` or `1.2.3.4/32`).
+  ///
+  /// Skips PCQ/subnet (`172.16.0.0/24`) and department group targets
+  /// (`ip/32,ip/32,...`) so their shared rate is not shown on one client.
+  static bool isDedicatedHostQueueTarget(String? target) {
+    final value = target?.trim();
+    if (value == null || value.isEmpty || value.contains(',')) {
+      return false;
+    }
+
+    final slash = value.indexOf('/');
+    if (slash < 0) {
+      return hostFromEndpoint(value) != null;
+    }
+
+    final prefix = value.substring(slash + 1).trim();
+    if (prefix != '32') {
+      return false;
+    }
+    final ip = value.substring(0, slash).trim();
+    return ip.isNotEmpty && ip != '0.0.0.0' && ip.contains('.');
   }
 
   /// Queue `print stats` row → download (rx) / upload (tx) in bps.
@@ -85,7 +123,7 @@ abstract final class TrafficRateParser {
     required int bytesOut,
     required Duration elapsed,
   }) {
-    if (elapsed.inMilliseconds <= 0) {
+    if (elapsed.inMilliseconds < minDeltaElapsedMs) {
       return null;
     }
     final seconds = elapsed.inMilliseconds / 1000.0;
@@ -123,6 +161,19 @@ abstract final class TrafficRateParser {
     );
   }
 
+  /// Valid window for instant byte-delta math, or null to recapture baseline.
+  static Duration? instantElapsed(DateTime? baselineAt, DateTime now) {
+    if (baselineAt == null) {
+      return null;
+    }
+    final elapsed = now.difference(baselineAt);
+    final ms = elapsed.inMilliseconds;
+    if (ms < minDeltaElapsedMs || ms > maxInstantElapsedMs) {
+      return null;
+    }
+    return elapsed;
+  }
+
   static ({int rxBps, int txBps})? fromByteDelta({
     required int prevRxBytes,
     required int prevTxBytes,
@@ -130,12 +181,15 @@ abstract final class TrafficRateParser {
     required int txBytes,
     required Duration elapsed,
   }) {
-    if (elapsed.inMilliseconds <= 0) {
+    if (elapsed.inMilliseconds < minDeltaElapsedMs) {
       return null;
     }
     final seconds = elapsed.inMilliseconds / 1000.0;
     final rx = ((rxBytes - prevRxBytes).clamp(0, 1 << 62) * 8 / seconds).round();
     final tx = ((txBytes - prevTxBytes).clamp(0, 1 << 62) * 8 / seconds).round();
+    if (rx > maxReasonableBps || tx > maxReasonableBps) {
+      return null;
+    }
     return (rxBps: rx, txBps: tx);
   }
 

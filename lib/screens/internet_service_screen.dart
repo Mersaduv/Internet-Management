@@ -1,5 +1,6 @@
 import 'dart:collection';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import '../services/settings_service.dart';
@@ -68,6 +69,12 @@ class _InternetServiceScreenState extends State<InternetServiceScreen> {
   bool _canGoForward = false;
   String? _errorMessage;
   bool _showError = false;
+
+  bool get _preferDesktopExperience =>
+      !kIsWeb &&
+      (defaultTargetPlatform == TargetPlatform.windows ||
+          defaultTargetPlatform == TargetPlatform.linux ||
+          defaultTargetPlatform == TargetPlatform.macOS);
 
   @override
   void initState() {
@@ -293,8 +300,9 @@ class _InternetServiceScreenState extends State<InternetServiceScreen> {
                 // پشتیبانی از File Access
                 allowsBackForwardNavigationGestures: true,
                 // تنظیمات User Agent
-                userAgent:
-                    'Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.120 Mobile Safari/537.36',
+                userAgent: _preferDesktopExperience
+                    ? null
+                    : 'Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.120 Mobile Safari/537.36',
                 // زوم با دو انگشت (pinch) — روی اندروید builtInZoomControls باید true باشد
                 supportZoom: true,
                 builtInZoomControls: true,
