@@ -316,7 +316,7 @@ class _WifiNativeSettingsScreenState extends State<WifiNativeSettingsScreen> {
       }
       final connection = MikroTikConnection(
         host: settings['host'] as String? ?? '192.168.88.1',
-        port: settings['port'] as int? ?? 2752,
+        port: MikroTikConnection.apiPort,
         username: credentials['username']!,
         password: credentials['password']!,
         useSsl: settings['useSsl'] as bool? ?? false,

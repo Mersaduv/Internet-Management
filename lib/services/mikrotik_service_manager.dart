@@ -5,7 +5,10 @@ import 'package:flutter/foundation.dart';
 import '../models/mikrotik_connection.dart';
 import 'connection_heartbeat.dart';
 import 'mikrotik_service.dart';
+import 'mikrotik_timeouts.dart';
 import 'settings_service.dart';
+import 'traffic_monitor_service.dart';
+import '../models/client_traffic_rate.dart';
 
 /// مدیر سرویس MikroTik - Singleton برای نگه‌داری اتصال در کل برنامه
 class MikroTikServiceManager {
@@ -19,6 +22,8 @@ class MikroTikServiceManager {
   Map<String, dynamic>? _routerInfo;
   DateTime? _routerInfoCacheTime;
   ConnectionHeartbeat? _heartbeat;
+  final TrafficMonitorService _trafficMonitor = TrafficMonitorService();
+  bool _progressiveLoadActive = false;
 
   static const Duration _routerInfoCacheTtl = Duration(minutes: 5);
 
@@ -56,7 +61,7 @@ class MikroTikServiceManager {
       final settings = await settingsService.getAllSettings();
       final connection = MikroTikConnection(
         host: settings['host'] as String? ?? '192.168.88.1',
-        port: settings['port'] as int? ?? 2752,
+        port: MikroTikConnection.apiPort,
         username: credentials['username']!,
         password: credentials['password']!,
         useSsl: settings['useSsl'] as bool? ?? false,
@@ -95,18 +100,24 @@ class MikroTikServiceManager {
         _heartbeat?.stop();
         _heartbeat = ConnectionHeartbeat(
           healthCheck: () async {
+            if (_progressiveLoadActive) {
+              return true;
+            }
             final service = _service;
             if (service == null) {
               return false;
             }
-            return service.ensureConnected();
+            return service.isConnected &&
+                await service.ensureConnected(forceHealthCheck: true);
           },
           reconnect: () async {
-            final service = _service;
-            if (service == null) {
+            final connection = _currentConnection;
+            if (connection == null) {
               return false;
             }
-            return service.ensureConnected();
+            debugPrint('[HEARTBEAT] full reconnect');
+            disconnect();
+            return connect(connection);
           },
         );
         _heartbeat!.start();
@@ -123,19 +134,27 @@ class MikroTikServiceManager {
   void disconnect() {
     _heartbeat?.stop();
     _heartbeat = null;
+    unawaited(_trafficMonitor.disconnect());
     _service?.disconnect();
     _service = null;
     _currentConnection = null;
     _routerInfo = null;
     _routerInfoCacheTime = null;
+    _progressiveLoadActive = false;
   }
 
   void beginProgressiveLoad() {
+    _progressiveLoadActive = true;
+    _heartbeat?.stop();
     _service?.beginProgressiveLoad();
   }
 
   void endProgressiveLoad() {
+    _progressiveLoadActive = false;
     _service?.endProgressiveLoad();
+    if (_service != null && isConnected) {
+      _heartbeat?.start();
+    }
   }
 
   /// Ensures the API session is usable (reconnects if the socket was dropped).
@@ -242,6 +261,13 @@ class MikroTikServiceManager {
       throw Exception('Connection is not established');
     }
     return _service!.getPhase2ManagedBanRawRules();
+  }
+
+  Future<int> getBannedDeviceCount() async {
+    if (_service == null || !isConnected) {
+      return 0;
+    }
+    return _service!.getBannedDeviceCount();
   }
 
   Future<List<Map<String, String>>> getPhase2ArpTable() async {
@@ -394,7 +420,7 @@ class MikroTikServiceManager {
     try {
       final connected = await speedService
           .connect(connection)
-          .timeout(const Duration(seconds: 8), onTimeout: () => false);
+          .timeout(MikrotikTimeouts.isolatedConnect, onTimeout: () => false);
       if (!connected) {
         return null;
       }
@@ -405,5 +431,32 @@ class MikroTikServiceManager {
     } finally {
       speedService.disconnect();
     }
+  }
+
+  /// Poll live traffic on an isolated API socket (does not block main queue).
+  Future<Map<String, ClientTrafficRate>> pollTrafficRates({
+    required Set<String> trackedIps,
+    required Map<String, String> macToIp,
+  }) async {
+    final connection = _currentConnection;
+    if (connection == null || !isConnected) {
+      return {};
+    }
+
+    try {
+      await _trafficMonitor.ensureConnected(connection);
+      return await _trafficMonitor.sampleRates(
+        trackedIps: trackedIps,
+        macToIp: macToIp,
+      );
+    } catch (e) {
+      debugPrint('[TRAFFIC] poll failed: $e');
+      await _trafficMonitor.disconnect();
+      return {};
+    }
+  }
+
+  Future<void> disconnectTrafficMonitor() async {
+    await _trafficMonitor.disconnect();
   }
 }

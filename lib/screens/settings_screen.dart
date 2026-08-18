@@ -282,13 +282,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                     onChanged: (value) {
                                       setState(() {
                                         _useSsl = value ?? false;
-                                        if (_useSsl &&
-                                            _portController.text == '2752') {
-                                          _portController.text = '8729';
-                                        } else if (!_useSsl &&
-                                            _portController.text == '8729') {
-                                          _portController.text = '2752';
-                                        }
                                       });
                                     },
                                     controlAffinity:

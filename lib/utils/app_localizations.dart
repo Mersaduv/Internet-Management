@@ -341,6 +341,8 @@ class AppLocalizations {
       locale.languageCode == 'en' ? 'Download Speed' : 'سرعت دانلود';
   String get uploadSpeed =>
       locale.languageCode == 'en' ? 'Upload Speed' : 'سرعت آپلود';
+  String get liveTraffic =>
+      locale.languageCode == 'en' ? 'Live Traffic' : 'ترافیک لحظه‌ای';
   String get value => locale.languageCode == 'en' ? 'Value' : 'مقدار';
   String get unit => locale.languageCode == 'en' ? 'Unit' : 'واحد';
   String get pleaseEnterNumber => locale.languageCode == 'en'

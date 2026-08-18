@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:network_info_plus/network_info_plus.dart';
 
+import '../utils/windows_default_gateway.dart';
 import 'mikrotik_service_manager.dart';
 
 /// منبع تشخیص Default Gateway دستگاه (کلاینت)
@@ -32,6 +33,10 @@ class NetworkInfoService {
 
   final NetworkInfo _networkInfo = NetworkInfo();
 
+  WindowsDefaultRoute? _windowsRouteCache;
+  DateTime? _windowsRouteCacheAt;
+  static const Duration _windowsRouteCacheTtl = Duration(seconds: 5);
+
   static final RegExp _ipv4Regex = RegExp(
     r'^(?:\d{1,3}\.){3}\d{1,3}$',
   );
@@ -58,11 +63,24 @@ class NetworkInfoService {
     return value;
   }
 
+  bool get _isWindows {
+    if (kIsWeb) {
+      return false;
+    }
+    try {
+      return Platform.isWindows;
+    } catch (_) {
+      return false;
+    }
+  }
+
   /// Default Gateway واقعی اینترنت دستگاه از OS
   /// (نه حدس subnet و نه route WAN روتر MikroTik)
   Future<DeviceGatewayDiscovery> discoverDeviceDefaultGateway() async {
     if (kIsWeb) {
-      return const DeviceGatewayDiscovery(source: DeviceGatewaySource.unavailable);
+      return const DeviceGatewayDiscovery(
+        source: DeviceGatewaySource.unavailable,
+      );
     }
 
     try {
@@ -74,7 +92,18 @@ class NetworkInfoService {
         );
       }
     } catch (_) {
-      // ignore
+      // روی ویندوز Ethernet معمولاً از WLAN API خالی برمی‌گردد
+    }
+
+    if (_isWindows) {
+      final windowsRoute = await _windowsDefaultRoute();
+      final gateway = normalizeIpv4(windowsRoute?.gateway);
+      if (gateway != null) {
+        return DeviceGatewayDiscovery(
+          ip: gateway,
+          source: DeviceGatewaySource.system,
+        );
+      }
     }
 
     return const DeviceGatewayDiscovery(source: DeviceGatewaySource.unavailable);
@@ -84,6 +113,36 @@ class NetworkInfoService {
   /// این متد IP محلی دستگاه را از interface های فعال برمی‌گرداند
   Future<String?> getDeviceIPv4Address() async {
     try {
+      if (_isWindows) {
+        final windowsRoute = await _windowsDefaultRoute();
+        final interfaceIp = normalizeIpv4(windowsRoute?.interfaceIp);
+        if (interfaceIp != null && _isPrivateLanIp(interfaceIp)) {
+          return interfaceIp;
+        }
+
+        final gateway = windowsRoute?.gateway;
+        final interfaces = await NetworkInterface.list(
+          type: InternetAddressType.IPv4,
+          includeLinkLocal: false,
+        );
+        String? fallbackPrivate;
+        for (var interface in interfaces) {
+          for (var addr in interface.addresses) {
+            if (!addr.isLoopback && addr.type == InternetAddressType.IPv4) {
+              final ip = addr.address;
+              if (_isPrivateLanIp(ip)) {
+                fallbackPrivate ??= ip;
+                if (gateway != null &&
+                    WindowsDefaultGatewayParser.sameSlash24(ip, gateway)) {
+                  return ip;
+                }
+              }
+            }
+          }
+        }
+        return fallbackPrivate;
+      }
+
       final interfaces = await NetworkInterface.list(
         type: InternetAddressType.IPv4,
         includeLinkLocal: false,
@@ -93,20 +152,8 @@ class NetworkInfoService {
         for (var addr in interface.addresses) {
           if (!addr.isLoopback && addr.type == InternetAddressType.IPv4) {
             final ip = addr.address;
-            // بررسی اینکه آیا IP در subnet محلی است (192.168.x.x, 10.x.x.x, 172.16-31.x.x)
-            final parts = ip.split('.');
-            if (parts.length == 4) {
-              final firstOctet = int.tryParse(parts[0]);
-              if (firstOctet != null) {
-                if ((firstOctet == 192 && int.tryParse(parts[1]) == 168) ||
-                    firstOctet == 10 ||
-                    (firstOctet == 172 &&
-                        int.tryParse(parts[1]) != null &&
-                        int.tryParse(parts[1])! >= 16 &&
-                        int.tryParse(parts[1])! <= 31)) {
-                  return ip;
-                }
-              }
+            if (_isPrivateLanIp(ip)) {
+              return ip;
             }
           }
         }
@@ -114,6 +161,85 @@ class NetworkInfoService {
       return null;
     } catch (e) {
       return null;
+    }
+  }
+
+  bool _isPrivateLanIp(String ip) {
+    return WindowsDefaultGatewayParser.isPrivateIpv4(ip);
+  }
+
+  Future<WindowsDefaultRoute?> _windowsDefaultRoute() async {
+    final now = DateTime.now();
+    if (_windowsRouteCache != null &&
+        _windowsRouteCacheAt != null &&
+        now.difference(_windowsRouteCacheAt!) < _windowsRouteCacheTtl) {
+      return _windowsRouteCache;
+    }
+
+    final localIps = await _localPrivateIpv4s();
+
+    try {
+      final routePrint = await Process.run(
+        'route',
+        const ['print', '-4'],
+        runInShell: true,
+      ).timeout(const Duration(seconds: 4));
+      final stdoutText = '${routePrint.stdout}';
+      final routes = WindowsDefaultGatewayParser.parseRoutePrint(stdoutText);
+      final best = WindowsDefaultGatewayParser.selectBestRoute(
+        routes,
+        localIps: localIps,
+      );
+      if (best != null) {
+        _windowsRouteCache = best;
+        _windowsRouteCacheAt = now;
+        return best;
+      }
+    } catch (_) {
+      // fallback to ipconfig
+    }
+
+    try {
+      final ipconfig = await Process.run(
+        'ipconfig',
+        const [],
+        runInShell: true,
+      ).timeout(const Duration(seconds: 4));
+      final gateway = WindowsDefaultGatewayParser.parseIpconfig(
+        '${ipconfig.stdout}',
+      );
+      if (gateway != null) {
+        final best = WindowsDefaultRoute(gateway: gateway);
+        _windowsRouteCache = best;
+        _windowsRouteCacheAt = now;
+        return best;
+      }
+    } catch (_) {
+      // ignore
+    }
+
+    return null;
+  }
+
+  Future<List<String>> _localPrivateIpv4s() async {
+    try {
+      final interfaces = await NetworkInterface.list(
+        type: InternetAddressType.IPv4,
+        includeLinkLocal: false,
+      );
+      final ips = <String>[];
+      for (final interface in interfaces) {
+        for (final addr in interface.addresses) {
+          if (!addr.isLoopback &&
+              addr.type == InternetAddressType.IPv4 &&
+              _isPrivateLanIp(addr.address)) {
+            ips.add(addr.address);
+          }
+        }
+      }
+      return ips;
+    } catch (_) {
+      return const [];
     }
   }
 

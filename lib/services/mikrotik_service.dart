@@ -5,7 +5,12 @@ import '../models/mikrotik_connection.dart';
 import '../models/client_info.dart';
 import '../models/device_fingerprint.dart';
 import '../services/device_fingerprint_service.dart';
+import 'network_info_service.dart';
 import 'routeros_client_v2.dart' show RouterOSClientV2;
+import 'mikrotik_timeouts.dart';
+import '../models/client_traffic_rate.dart';
+import '../models/traffic_rates_snapshot.dart';
+import '../utils/traffic_rate_parser.dart';
 
 /// سرویس برای مدیریت اتصال و عملیات MikroTik RouterOS
 /// مشابه endpointهای /api/clients/* در پروژه Python
@@ -18,8 +23,8 @@ class MikroTikService {
   bool _reconnectInProgress = false;
   int _progressiveLoadDepth = 0;
 
-  static const Duration _apiTimeout = Duration(seconds: 10);
-  static const Duration _phaseTalkTimeout = Duration(seconds: 15);
+  static const Duration _apiTimeout = MikrotikTimeouts.defaultTalk;
+  static const Duration _phaseTalkTimeout = MikrotikTimeouts.phaseTalk;
   static const String _appPrefix = 'Ariyabod';
   static const String _banMarker = '[$_appPrefix BAN]';
   static const String _staticOnlyPool = 'static-only';
@@ -332,7 +337,7 @@ class MikroTikService {
     final summary = _commandSummary(command);
 
     try {
-      return await _client!.talk(command).timeout(timeout);
+      return await _client!.talk(command, timeout: timeout);
     } on TimeoutException catch (e) {
       _client?.invalidateConnection();
       throw Exception('Timeout در اجرای دستور MikroTik: $summary | $e');
@@ -469,7 +474,7 @@ class MikroTikService {
     } else if (normalizedMac != null) {
       command.add('=src-mac-address=$normalizedMac');
     }
-    await _talk(command);
+    await _client!.talk(command);
   }
 
   Future<List<Map<String, String>>> _accessListForMac(String macAddress) async {
@@ -516,7 +521,7 @@ class MikroTikService {
     ];
 
     try {
-      await _talk(command);
+      await _client!.talk(command);
     } catch (_) {
       await _talk([
         '/interface/wireless/access-list/add',
@@ -736,7 +741,7 @@ class MikroTikService {
 
     final ruleIp = rule['src-address']?.trim();
     final ruleMac = _normalizeMac(rule['src-mac-address']);
-    if (ruleIp != null && ruleIp.isNotEmpty && ruleIp == ipAddress) {
+    if (ruleIp != null && ruleIp.isNotEmpty && ipAddress.isNotEmpty && ruleIp == ipAddress) {
       return true;
     }
     if (macAddress != null &&
@@ -910,25 +915,34 @@ class MikroTikService {
     required String ipAddress,
     String? macAddress,
   }) async {
+    final normalizedIp = ipAddress.trim();
+    final hasIp = normalizedIp.isNotEmpty;
+
     for (final rule in await _rawRulesFor(
-      ipAddress: ipAddress,
+      ipAddress: hasIp ? normalizedIp : null,
       macAddress: macAddress,
     )) {
-      if (_isDropRuleForTarget(
+      if (!_isDropRuleForTarget(
         rule,
-        ipAddress: ipAddress,
+        ipAddress: hasIp ? normalizedIp : '',
         macAddress: macAddress,
       )) {
+        continue;
+      }
+      if (_isManagedBanComment(rule['comment']) ||
+          (rule['comment'] ?? '').contains(_banMarker)) {
         return true;
       }
     }
 
     final leases = await _collectDhcpLeasesForTarget(
-      ipAddress: ipAddress,
+      ipAddress: hasIp ? normalizedIp : null,
       macAddress: macAddress,
     );
     for (final lease in leases) {
-      if (_isTruthy(lease['block-access'])) {
+      if (_isTruthy(lease['block-access']) &&
+          ((lease['comment'] ?? '').contains(_banMarker) ||
+              _isManagedBanComment(lease['comment']))) {
         return true;
       }
     }
@@ -1307,7 +1321,7 @@ class MikroTikService {
       user: connection.username,
       password: connection.password,
       useSsl: connection.useSsl,
-      port: connection.actualPort,
+      port: MikroTikConnection.apiPort,
     );
 
     final success = await _client!.login();
@@ -1347,7 +1361,7 @@ class MikroTikService {
 
       // 1. Hotspot Active Users
       try {
-        final hotspotActive = await _client!.talk(['/ip/hotspot/active/print']);
+        final hotspotActive = await _talk(['/ip/hotspot/active/print']);
         for (var user in hotspotActive) {
           allClients.add(
             ClientInfo(
@@ -1373,7 +1387,7 @@ class MikroTikService {
       // 2. Wireless Clients
       if (wirelessFeaturesEnabled) {
         try {
-          final wirelessClients = await _client!.talk([
+          final wirelessClients = await _talk([
             '/interface/wireless/registration-table/print',
           ]);
           for (var client in wirelessClients) {
@@ -1397,7 +1411,7 @@ class MikroTikService {
 
       // 3. DHCP Leases (Bound)
       try {
-        final dhcpLeases = await _client!.talk(['/ip/dhcp-server/lease/print']);
+        final dhcpLeases = await _talk(['/ip/dhcp-server/lease/print']);
         for (var lease in dhcpLeases) {
           if (lease['status']?.toLowerCase() == 'bound') {
             // تشخیص Static/Dynamic از DHCP lease
@@ -1431,7 +1445,7 @@ class MikroTikService {
 
       // 4. PPP Active Users
       try {
-        final pppActive = await _client!.talk(['/ppp/active/print']);
+        final pppActive = await _talk(['/ppp/active/print']);
         for (var user in pppActive) {
           allClients.add(
             ClientInfo(
@@ -1843,6 +1857,12 @@ class MikroTikService {
     }
   }
 
+  /// Lightweight banned-device count (firewall raw rules only).
+  Future<int> getBannedDeviceCount() async {
+    final rules = await getPhase2ManagedBanRawRules();
+    return rules.length;
+  }
+
   /// Phase 2b — ARP table (compact).
   Future<List<Map<String, String>>> getPhase2ArpTable() async {
     await _requireConnection();
@@ -2010,6 +2030,15 @@ class MikroTikService {
           : comment.trim();
       final banComment = '$_banMarker $reason';
 
+      try {
+        await makeClientStatic(
+          ipAddress: ipAddress,
+          macAddress: macToUse,
+        );
+      } catch (e) {
+        print('[BAN] make-static before ban skipped/failed: $e');
+      }
+
       await _ensureRawDropRule(
         ipAddress: ipAddress,
         comment: '$banComment - IP',
@@ -2053,10 +2082,20 @@ class MikroTikService {
       ssid,
     );
 
+    final success = await unbanClient(ipAddress, macAddress: macAddress);
+    if (!success) {
+      return false;
+    }
+
     final fingerprintService = DeviceFingerprintService();
     await fingerprintService.removeBannedFingerprint(fingerprint);
-
-    return unbanClient(ipAddress, macAddress: macAddress);
+    await fingerprintService.removeBannedFingerprintsForTarget(
+      ipAddress: ipAddress,
+      macAddress: macAddress,
+      hostname: hostname,
+      ssid: ssid,
+    );
+    return true;
   }
 
   /// رفع مسدودیت کلاینت — raw + DHCP block-access + wireless access-list
@@ -2064,30 +2103,43 @@ class MikroTikService {
     await _requireConnection();
 
     final normalizedIp = ipAddress.trim();
-    if (normalizedIp.isEmpty) {
+    final macToUse = await _resolveMacForTarget(
+      ipAddress: normalizedIp.isEmpty ? null : normalizedIp,
+      macAddress: macAddress,
+    );
+
+    if (normalizedIp.isEmpty && macToUse == null) {
       return false;
     }
 
+    var targetIp = normalizedIp;
+    if (targetIp.isEmpty && macToUse != null) {
+      targetIp = await _findIpForMac(macToUse) ?? '';
+    }
+
     try {
-      final macToUse = await _resolveMacForTarget(
-        ipAddress: normalizedIp,
-        macAddress: macAddress,
-      );
-
       print(
-        '[UNBAN] target ip=$normalizedIp mac=${macToUse ?? macAddress ?? "unknown"}',
+        '[UNBAN] target ip=$targetIp mac=${macToUse ?? macAddress ?? "unknown"}',
       );
 
-      final rawRemoved = await _removeRawBanRulesForTarget(
-        ipAddress: normalizedIp,
-        macAddress: macToUse,
-      );
-      print('[UNBAN] raw rules removed: $rawRemoved');
+      if (targetIp.isNotEmpty) {
+        final rawRemoved = await _removeRawBanRulesForTarget(
+          ipAddress: targetIp,
+          macAddress: macToUse,
+        );
+        print('[UNBAN] raw rules removed: $rawRemoved');
+      } else if (macToUse != null) {
+        final rawRemoved = await _removeRawBanRulesForTarget(
+          ipAddress: '',
+          macAddress: macToUse,
+        );
+        print('[UNBAN] raw rules removed by mac: $rawRemoved');
+      }
 
       var dhcpUnblocked = false;
       try {
         dhcpUnblocked = await _setDhcpBlockForTarget(
-          ipAddress: normalizedIp,
+          ipAddress: targetIp.isEmpty ? null : targetIp,
           macAddress: macToUse,
           block: false,
           allowLegacyUnblock: true,
@@ -2110,8 +2162,17 @@ class MikroTikService {
       }
       print('[UNBAN] wireless unblocked: $wirelessUnblocked');
 
+      if (targetIp.isEmpty && macToUse != null) {
+        final stillBanned = await _isTargetStillBanned(
+          ipAddress: '',
+          macAddress: macToUse,
+        );
+        print('[UNBAN] still banned after cleanup (mac-only): $stillBanned');
+        return !stillBanned;
+      }
+
       final stillBanned = await _isTargetStillBanned(
-        ipAddress: normalizedIp,
+        ipAddress: targetIp,
         macAddress: macToUse,
       );
       print('[UNBAN] still banned after cleanup: $stillBanned');
@@ -2384,9 +2445,144 @@ class MikroTikService {
     return getClientSpeed(target);
   }
 
+  /// Live throughput snapshot — queue stats (primary) + hotspot byte delta (fallback).
+  Future<TrafficRatesSnapshot> getTrafficRatesSnapshot({
+    Map<String, ({int bytesIn, int bytesOut})>? previousHotspotBytes,
+    Duration? elapsed,
+  }) async {
+    await _requireConnection();
+
+    final ratesByIp = <String, ClientTrafficRate>{};
+    final hotspotBytes = <String, ({int bytesIn, int bytesOut})>{};
+    final sampledAt = DateTime.now();
+
+    try {
+      final queueStats = await _talk([
+        '/queue/simple/print',
+        '=stats=',
+        _proplist(['target', 'rate', 'rx-rate', 'tx-rate', 'bytes']),
+      ], timeout: MikrotikTimeouts.trafficPoll);
+
+      for (final row in queueStats) {
+        final ip = TrafficRateParser.ipFromQueueTarget(row['target']);
+        if (ip == null) {
+          continue;
+        }
+        final parsed = TrafficRateParser.fromQueueStatsRow(row);
+        if (parsed == null) {
+          continue;
+        }
+        ratesByIp[ip] = ClientTrafficRate(
+          rxBps: parsed.rxBps,
+          txBps: parsed.txBps,
+          sampledAt: sampledAt,
+        );
+      }
+    } catch (e) {
+      print('[TRAFFIC] queue stats failed: $e');
+    }
+
+    try {
+      final hotspotActive = await _talk([
+        '/ip/hotspot/active/print',
+        _proplist(['address', 'bytes-in', 'bytes-out']),
+      ], timeout: MikrotikTimeouts.trafficPoll);
+
+      for (final row in hotspotActive) {
+        final ip = row['address']?.trim();
+        if (ip == null || ip.isEmpty) {
+          continue;
+        }
+
+        final bytesIn = int.tryParse(row['bytes-in'] ?? '') ?? 0;
+        final bytesOut = int.tryParse(row['bytes-out'] ?? '') ?? 0;
+        hotspotBytes[ip] = (bytesIn: bytesIn, bytesOut: bytesOut);
+
+        if (ratesByIp.containsKey(ip)) {
+          continue;
+        }
+
+        if (previousHotspotBytes != null &&
+            elapsed != null &&
+            previousHotspotBytes.containsKey(ip)) {
+          final prev = previousHotspotBytes[ip]!;
+          final delta = TrafficRateParser.fromHotspotByteDelta(
+            prevBytesIn: prev.bytesIn,
+            prevBytesOut: prev.bytesOut,
+            bytesIn: bytesIn,
+            bytesOut: bytesOut,
+            elapsed: elapsed,
+          );
+          if (delta != null) {
+            ratesByIp[ip] = ClientTrafficRate(
+              rxBps: delta.rxBps,
+              txBps: delta.txBps,
+              sampledAt: sampledAt,
+            );
+          }
+        }
+      }
+    } catch (e) {
+      print('[TRAFFIC] hotspot active failed: $e');
+    }
+
+    return TrafficRatesSnapshot(
+      ratesByIp: ratesByIp,
+      hotspotBytes: hotspotBytes,
+    );
+  }
+
+  Future<bool> _isIpKnownOnRouter(String ip) async {
+    if (_client == null) {
+      return false;
+    }
+
+    try {
+      final arpEntries = await _talk([
+        '/ip/arp/print',
+        '?=address=$ip',
+      ]);
+      if (arpEntries.isNotEmpty) {
+        return true;
+      }
+    } catch (_) {}
+
+    try {
+      final dhcpLeases = await _talk([
+        '/ip/dhcp-server/lease/print',
+        '?=address=$ip',
+      ]);
+      if (dhcpLeases.isNotEmpty) {
+        return true;
+      }
+    } catch (_) {}
+
+    return false;
+  }
+
   Future<String?> getDeviceIp() async {
     if (!await ensureConnected()) {
       return null;
+    }
+
+    try {
+      final osIp = await NetworkInfoService().getDeviceIPv4Address();
+      if (osIp != null && osIp.isNotEmpty) {
+        if (await _isIpKnownOnRouter(osIp)) {
+          return osIp;
+        }
+
+        final routerHost = _connection?.host.trim();
+        if (routerHost != null &&
+            routerHost.split('.').length == 4 &&
+            osIp.startsWith(
+              '${routerHost.split('.')[0]}.${routerHost.split('.')[1]}.${routerHost.split('.')[2]}.',
+            )) {
+          return osIp;
+        }
+      }
+    } catch (_) {
+      // Fall back to legacy detection below.
     }
 
     try {
@@ -2480,7 +2676,7 @@ class MikroTikService {
 
       try {
         // بررسی در ARP table
-        final arpEntries = await _client!.talk(['/ip/arp/print']);
+        final arpEntries = await _talk(['/ip/arp/print']);
         for (var arp in arpEntries) {
           if (arp['address']?.toString() == localDeviceIp) {
             return localDeviceIp;
@@ -2488,7 +2684,7 @@ class MikroTikService {
         }
 
         // بررسی در DHCP leases
-        final dhcpLeases = await _client!.talk(['/ip/dhcp-server/lease/print']);
+        final dhcpLeases = await _talk(['/ip/dhcp-server/lease/print']);
         for (var lease in dhcpLeases) {
           if (lease['address']?.toString() == localDeviceIp) {
             return localDeviceIp;
@@ -2513,7 +2709,7 @@ class MikroTikService {
             }
 
             // پیدا کردن IP در ARP table که در همان subnet است
-            final arpEntries = await _client!.talk(['/ip/arp/print']);
+            final arpEntries = await _talk(['/ip/arp/print']);
             for (var arp in arpEntries) {
               final arpIp = arp['address']?.toString();
               if (arpIp != null &&
@@ -2522,7 +2718,7 @@ class MikroTikService {
                   arp['dynamic']?.toString().toLowerCase() == 'true') {
                 // بررسی در DHCP lease
                 try {
-                  final dhcpLeases = await _client!.talk([
+                  final dhcpLeases = await _talk([
                     '/ip/dhcp-server/lease/print',
                   ]);
                   for (var lease in dhcpLeases) {
@@ -2546,7 +2742,7 @@ class MikroTikService {
 
       // روش 3: استفاده از DHCP leases (fallback)
       try {
-        final dhcpLeases = await _client!.talk(['/ip/dhcp-server/lease/print']);
+        final dhcpLeases = await _talk(['/ip/dhcp-server/lease/print']);
         // پیدا کردن اولین lease که bound است
         for (var lease in dhcpLeases) {
           final leaseIp = lease['address']?.toString();
@@ -2561,7 +2757,7 @@ class MikroTikService {
 
       // روش 4: استفاده از ARP table (fallback)
       try {
-        final arpEntries = await _client!.talk(['/ip/arp/print']);
+        final arpEntries = await _talk(['/ip/arp/print']);
         if (arpEntries.isNotEmpty) {
           // پیدا کردن اولین IP که dynamic است
           for (var arp in arpEntries) {
@@ -2626,7 +2822,7 @@ class MikroTikService {
       // دریافت همه rule های firewall فعلی (یک بار برای همه دستگاه‌ها)
       final existingRules = <String, Map<String, dynamic>>{};
       try {
-        final rawRules = await _client!.talk(['/ip/firewall/raw/print']);
+        final rawRules = await _talk(['/ip/firewall/raw/print']);
         for (var rule in rawRules) {
           final ruleIp = rule['src-address']?.toString();
           final ruleMac = rule['src-mac-address']?.toString();
@@ -2748,7 +2944,7 @@ class MikroTikService {
 
     try {
       // دریافت route table از RouterOS
-      final routes = await _client!.talk(['/ip/route/print']);
+      final routes = await _talk(['/ip/route/print']);
 
       // پیدا کردن route پیش‌فرض (0.0.0.0/0)
       for (var route in routes) {
@@ -2909,7 +3105,7 @@ class MikroTikService {
 
       // بررسی در ARP
       try {
-        final arpEntries = await _client!.talk(['/ip/arp/print']);
+        final arpEntries = await _talk(['/ip/arp/print']);
         for (var arp in arpEntries) {
           if (arp['address'] == ipAddress) {
             result['found'] = true;
@@ -2924,7 +3120,7 @@ class MikroTikService {
 
       // بررسی در DHCP leases
       try {
-        final dhcpLeases = await _client!.talk(['/ip/dhcp-server/lease/print']);
+        final dhcpLeases = await _talk(['/ip/dhcp-server/lease/print']);
         for (var lease in dhcpLeases) {
           if (lease['address'] == ipAddress) {
             result['found'] = true;
@@ -3161,7 +3357,7 @@ class MikroTikService {
         : ['/system/script/run', '=number=0'];
 
     unawaited(
-      _talk(runCommand).timeout(const Duration(seconds: 3)).catchError((Object e) {
+      _client!.talk(runCommand).timeout(const Duration(seconds: 3)).catchError((Object e) {
         debugPrint(
           '[WIFI_SETTINGS] ℹ️ Script triggered, connection may drop (expected): $e',
         );

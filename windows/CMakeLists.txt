@@ -53,6 +53,9 @@ add_subdirectory(${FLUTTER_MANAGED_DIR})
 # Application build; see runner/CMakeLists.txt.
 add_subdirectory("runner")
 
+# flutter_secure_storage_windows needs ATL (atlstr.h). Provide a small stub
+# so the app can build with Visual Studio Build Tools without the ATL workload.
+include_directories("${CMAKE_CURRENT_SOURCE_DIR}/third_party/atl_stub")
 
 # Generated plugin build rules, which manage building the plugins and adding
 # them to the application.

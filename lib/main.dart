@@ -23,6 +23,7 @@ import 'models/client_info.dart';
 import 'providers/clients_provider.dart';
 import 'utils/app_localizations.dart';
 import 'utils/app_theme.dart';
+import 'widgets/client_live_traffic_badge.dart';
 import 'utils/wifi_panel_url_resolver.dart';
 
 // 全局回调函数，用于从子组件通知主应用更改语言
@@ -476,7 +477,7 @@ class _MainScaffoldState extends State<MainScaffold>
 
     if (index == 0) {
       final provider = Provider.of<ClientsProvider>(context, listen: false);
-      unawaited(provider.refresh());
+      unawaited(provider.onHomeTabActivated());
     }
   }
 
@@ -639,18 +640,47 @@ class _HomePageState extends State<HomePage> with RouteAware {
   final MikroTikServiceManager _serviceManager = MikroTikServiceManager();
   int _selectedTab = 0; // 0: متصل, 1: مسدود
   bool _routeObserverSubscribed = false;
+  late final ScrollController _connectedScrollController;
+  late final ScrollController _bannedScrollController;
 
   @override
   void initState() {
     super.initState();
+    _connectedScrollController = ScrollController();
+    _bannedScrollController = ScrollController();
+    _connectedScrollController.addListener(_onConnectedScroll);
+    _bannedScrollController.addListener(_onBannedScroll);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final provider = Provider.of<ClientsProvider>(context, listen: false);
+      unawaited(provider.prefetchTabCounts());
       if (!provider.phase1Complete &&
           !provider.isLoading &&
           provider.clients.isEmpty) {
         provider.initialize();
       }
     });
+  }
+
+  void _onConnectedScroll() {
+    if (!_connectedScrollController.hasClients) {
+      return;
+    }
+    final provider = Provider.of<ClientsProvider>(context, listen: false);
+    final position = _connectedScrollController.position;
+    if (position.maxScrollExtent - position.pixels < 240) {
+      provider.loadMoreConnectedDevices();
+    }
+  }
+
+  void _onBannedScroll() {
+    if (!_bannedScrollController.hasClients) {
+      return;
+    }
+    final provider = Provider.of<ClientsProvider>(context, listen: false);
+    final position = _bannedScrollController.position;
+    if (position.maxScrollExtent - position.pixels < 240) {
+      provider.loadMoreBannedDevices();
+    }
   }
 
   @override
@@ -672,6 +702,10 @@ class _HomePageState extends State<HomePage> with RouteAware {
     if (_routeObserverSubscribed) {
       routeObserver.unsubscribe(this);
     }
+    _connectedScrollController.removeListener(_onConnectedScroll);
+    _bannedScrollController.removeListener(_onBannedScroll);
+    _connectedScrollController.dispose();
+    _bannedScrollController.dispose();
     super.dispose();
   }
 
@@ -686,11 +720,7 @@ class _HomePageState extends State<HomePage> with RouteAware {
     }
 
     final provider = Provider.of<ClientsProvider>(context, listen: false);
-    if (_selectedTab == 1) {
-      await provider.ensureBannedListLoaded(force: true);
-    } else {
-      await provider.refresh();
-    }
+    await provider.refreshAfterDetailReturn(bannedTab: _selectedTab == 1);
   }
 
   Widget _buildPullToRefresh({
@@ -1025,8 +1055,7 @@ class _HomePageState extends State<HomePage> with RouteAware {
                                         title:
                                             l10n?.connectedDevices ??
                                             'Connected Devices',
-                                        count:
-                                            provider.clientsForDisplay.length,
+                                        count: provider.connectedTabCount,
                                         icon: Icons.devices,
                                         isActive: _selectedTab == 0,
                                         onTap: () => _switchHomeTab(0),
@@ -1043,7 +1072,7 @@ class _HomePageState extends State<HomePage> with RouteAware {
                                         title:
                                             l10n?.bannedDevices ??
                                             'Banned Devices',
-                                        count: provider.bannedClients.length,
+                                        count: provider.bannedTabCount,
                                         icon: Icons.block,
                                         isActive: _selectedTab == 1,
                                         onTap: () => _switchHomeTab(1),
@@ -1311,13 +1340,20 @@ class _HomePageState extends State<HomePage> with RouteAware {
     return _buildPullToRefresh(
       onRefresh: provider.refresh,
       child: ListView.builder(
+        controller: _connectedScrollController,
         cacheExtent: 500,
         physics: const BouncingScrollPhysics(
           parent: AlwaysScrollableScrollPhysics(),
         ),
-        itemCount: provider.clientsForDisplay.length,
+        itemCount: _connectedListItemCount(provider),
         itemBuilder: (context, index) {
-          final client = provider.clientsForDisplay[index];
+          final clients = provider.clientsForDisplay;
+          if (index >= clients.length) {
+            return _buildConnectedListFooter(provider);
+          }
+
+          provider.maybePrefetchConnectedAtIndex(index);
+          final client = clients[index];
           final stableKey =
               client.macAddress ?? client.ipAddress ?? index.toString();
           return RepaintBoundary(
@@ -1325,11 +1361,42 @@ class _HomePageState extends State<HomePage> with RouteAware {
             child: _buildClientCard(
               context,
               client,
-              provider.deviceIp,
               provider,
             ),
           );
         },
+      ),
+    );
+  }
+
+  int _connectedListItemCount(ClientsProvider provider) {
+    var count = provider.clientsForDisplay.length;
+    if (provider.hasMoreConnectedToShow || provider.isLoadingMoreConnected) {
+      count += 1;
+    }
+    return count;
+  }
+
+  Widget _buildConnectedListFooter(ClientsProvider provider) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 16),
+      child: Center(
+        child: provider.isLoadingMoreConnected
+            ? const SizedBox(
+                width: 24,
+                height: 24,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            : Text(
+                '${provider.clientsForDisplay.length} / ${provider.totalConnectedCount}',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Theme.of(context)
+                      .colorScheme
+                      .onSurface
+                      .withValues(alpha: 0.55),
+                ),
+              ),
       ),
     );
   }
@@ -1454,14 +1521,52 @@ class _HomePageState extends State<HomePage> with RouteAware {
     return _buildPullToRefresh(
       onRefresh: () => provider.ensureBannedListLoaded(force: true),
       child: ListView.builder(
+        controller: _bannedScrollController,
         physics: const BouncingScrollPhysics(
           parent: AlwaysScrollableScrollPhysics(),
         ),
-        itemCount: provider.bannedClients.length,
+        itemCount: _bannedListItemCount(provider),
         itemBuilder: (context, index) {
-          final banned = provider.bannedClients[index];
-          return _buildBannedClientCard(banned);
+          final bannedItems = provider.bannedClientsForDisplay;
+          if (index >= bannedItems.length) {
+            return _buildBannedListFooter(provider);
+          }
+
+          provider.maybePrefetchBannedAtIndex(index);
+          return _buildBannedClientCard(bannedItems[index]);
         },
+      ),
+    );
+  }
+
+  int _bannedListItemCount(ClientsProvider provider) {
+    var count = provider.bannedClientsForDisplay.length;
+    if (provider.hasMoreBannedToShow || provider.isLoadingMoreBanned) {
+      count += 1;
+    }
+    return count;
+  }
+
+  Widget _buildBannedListFooter(ClientsProvider provider) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 16),
+      child: Center(
+        child: provider.isLoadingMoreBanned
+            ? const SizedBox(
+                width: 24,
+                height: 24,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            : Text(
+                '${provider.bannedClientsForDisplay.length} / ${provider.bannedTabCount}',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Theme.of(context)
+                      .colorScheme
+                      .onSurface
+                      .withValues(alpha: 0.55),
+                ),
+              ),
       ),
     );
   }
@@ -1603,8 +1708,12 @@ class _HomePageState extends State<HomePage> with RouteAware {
                         ),
                         tooltip: l10n?.unbanDeviceTooltip ?? 'Unban Device',
                         onPressed: () async {
-                          if (ipAddress == null) return;
+                          if (ipAddress == null &&
+                              (macAddress == null || macAddress.isEmpty)) {
+                            return;
+                          }
 
+                          final targetLabel = ipAddress ?? macAddress!;
                           final confirmed = await showDialog<bool>(
                             context: context,
                             builder: (context) => AlertDialog(
@@ -1614,8 +1723,8 @@ class _HomePageState extends State<HomePage> with RouteAware {
                                 style: TextStyle(color: colorScheme.onSurface),
                               ),
                               content: Text(
-                                l10n?.unbanDeviceConfirmTextWithIP(ipAddress) ??
-                                    'Are you sure you want to unban device $ipAddress?',
+                                l10n?.unbanDeviceConfirmTextWithIP(targetLabel) ??
+                                    'Are you sure you want to unban device $targetLabel?',
                                 style: TextStyle(color: colorScheme.onSurface),
                               ),
                               actions: [
@@ -1648,7 +1757,7 @@ class _HomePageState extends State<HomePage> with RouteAware {
                                 listen: false,
                               );
                               final success = await provider.unbanClient(
-                                ipAddress,
+                                ipAddress ?? '',
                                 macAddress: macAddress,
                                 hostname: hostName?.toString(),
                                 ssid: banned['ssid']?.toString(),
@@ -1761,32 +1870,12 @@ class _HomePageState extends State<HomePage> with RouteAware {
   Widget _buildClientCard(
     BuildContext context,
     ClientInfo client,
-    String? deviceIp,
     ClientsProvider provider,
   ) {
     const typeColor = Color(0xFF4CAF50);
     const typeIcon = Icons.wifi;
-    final String typeLabel;
-    final bool isCurrentDevice =
-        deviceIp != null && client.ipAddress == deviceIp;
+    final bool isCurrentDevice = provider.isCurrentDevice(client);
     final showPhase2Skeleton = !provider.phase2Complete;
-
-    switch (client.type) {
-      case 'wireless':
-        typeLabel = 'Wireless';
-        break;
-      case 'dhcp':
-        typeLabel = 'DHCP';
-        break;
-      case 'hotspot':
-        typeLabel = 'Hotspot';
-        break;
-      case 'ppp':
-        typeLabel = 'PPP';
-        break;
-      default:
-        typeLabel = AppLocalizations.of(context)?.unknown ?? 'Unknown';
-    }
 
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
@@ -1832,7 +1921,7 @@ class _HomePageState extends State<HomePage> with RouteAware {
         setState(() {
           _selectedTab = 0;
         });
-        unawaited(provider.loadClients(showLoading: false));
+        unawaited(provider.refreshConnectedFast());
         return;
       }
     }
@@ -2126,23 +2215,17 @@ class _HomePageState extends State<HomePage> with RouteAware {
                         const SizedBox(height: 4),
                         if (client.ipAddress != null)
                           Text(
-                            'IP: ${client.ipAddress}',
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: theme.brightness == Brightness.dark
-                                  ? colorScheme.onSurface.withOpacity(0.7)
-                                  : Colors.grey.shade600,
-                            ),
-                          ),
-                        if (client.macAddress != null)
-                          Text(
-                            'MAC: ${client.macAddress}',
+                            client.macAddress != null
+                                ? '${client.ipAddress} · ${client.macAddress}'
+                                : 'IP: ${client.ipAddress}',
                             style: TextStyle(
                               fontSize: 12,
                               color: theme.brightness == Brightness.dark
-                                  ? colorScheme.onSurface.withOpacity(0.6)
-                                  : Colors.grey.shade500,
+                                  ? colorScheme.onSurface.withOpacity(0.65)
+                                  : Colors.grey.shade600,
                             ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
                         if (showPhase2Skeleton) ...[
                           const SizedBox(height: 6),
@@ -2178,29 +2261,17 @@ class _HomePageState extends State<HomePage> with RouteAware {
                   const SizedBox(width: 8),
                   Row(
                     mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 4,
-                        ),
-                        decoration: BoxDecoration(
-                          color: typeColor.withOpacity(0.2),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Text(
-                          typeLabel,
-                          style: TextStyle(
-                            color: typeColor,
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
+                      ClientLiveTrafficBadge(
+                        client: client,
+                        fixedSlot: true,
                       ),
                       if (!isPendingApproval) ...[
-                        const SizedBox(width: 8),
+                        const SizedBox(width: 2),
                         Icon(
                           Icons.chevron_right,
+                          size: 20,
                           color: theme.brightness == Brightness.dark
                               ? colorScheme.onSurface.withOpacity(0.4)
                               : Colors.grey,

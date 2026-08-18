@@ -27,7 +27,7 @@ void main() {
     expect(ClientDisplayPolicy.shouldAllowDeviceActions(client), isTrue);
   });
 
-  test('only confirmed online shown in connected UI', () {
+  test('all clients with IP shown in connected UI (pending included)', () {
     final offline = ClientInfo(
       type: 'dhcp',
       source: 'dhcp_lease',
@@ -51,8 +51,8 @@ void main() {
       isOnline: true,
       rawData: const {},
     );
-    expect(ClientDisplayPolicy.shouldShowInConnectedListUi(offline), isFalse);
-    expect(ClientDisplayPolicy.shouldShowInConnectedListUi(unknown), isFalse);
+    expect(ClientDisplayPolicy.shouldShowInConnectedListUi(offline), isTrue);
+    expect(ClientDisplayPolicy.shouldShowInConnectedListUi(unknown), isTrue);
     expect(ClientDisplayPolicy.shouldShowInConnectedListUi(online), isTrue);
   });
 

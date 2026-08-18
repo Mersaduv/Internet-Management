@@ -1,5 +1,8 @@
 /// مدل اتصال به MikroTik RouterOS
 class MikroTikConnection {
+  /// پورت ثابت RouterOS API در این پروژه
+  static const int apiPort = 2752;
+
   final String host;
   final int port;
   final String username;
@@ -8,18 +11,13 @@ class MikroTikConnection {
 
   MikroTikConnection({
     required this.host,
-    this.port = 2752,
+    this.port = apiPort,
     required this.username,
     required this.password,
     this.useSsl = false,
   });
 
-  /// پورت واقعی با توجه به SSL
-  int get actualPort {
-    if (useSsl && port == 2752) {
-      return 8729;
-    }
-    return port;
-  }
+  /// پورت TCP واقعی برای اتصال API — همیشه 2752
+  int get actualPort => apiPort;
 }
 

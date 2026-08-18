@@ -3,6 +3,9 @@ import 'dart:io';
 
 import 'package:router_os_client/router_os_client.dart';
 
+import '../models/mikrotik_connection.dart';
+import 'mikrotik_timeouts.dart';
+
 /// Client wrapper for MikroTik RouterOS API v6.
 class RouterOSClientV2 {
   final String address;
@@ -20,7 +23,7 @@ class RouterOSClientV2 {
     required this.user,
     required this.password,
     this.useSsl = false,
-    this.port = 2752,
+    this.port = MikroTikConnection.apiPort,
   });
 
   Future<bool> login() async {
@@ -33,7 +36,9 @@ class RouterOSClientV2 {
         port: port,
       );
 
-      final ok = await _client!.login();
+      final ok = await _client!
+          .login()
+          .timeout(MikrotikTimeouts.login, onTimeout: () => false);
       if (ok) {
         _loggedIn = true;
         _commandQueue = Future<void>.value();
@@ -76,7 +81,10 @@ class RouterOSClientV2 {
     return completer.future;
   }
 
-  Future<List<Map<String, String>>> talk(List<String> command) {
+  Future<List<Map<String, String>>> talk(
+    List<String> command, {
+    Duration timeout = MikrotikTimeouts.defaultTalk,
+  }) {
     if (_client == null || !_loggedIn) {
       throw Exception('اتصال برقرار نشده یا احراز هویت انجام نشده');
     }
@@ -98,7 +106,7 @@ class RouterOSClientV2 {
 
         // The RouterOS API socket is sequential; overlapping talk() calls can
         // corrupt response matching and leave a command waiting until timeout.
-        final result = await _client!.talk(command);
+        final result = await _client!.talk(command).timeout(timeout);
 
         final List<Map<String, String>> convertedResult = [];
 

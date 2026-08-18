@@ -55,7 +55,7 @@ class _ConnectionTestScreenState extends State<ConnectionTestScreen> {
       // ایجاد اتصال
       final connection = MikroTikConnection(
         host: _hostController.text.trim(),
-        port: int.tryParse(_portController.text.trim()) ?? 2752,
+        port: MikroTikConnection.apiPort,
         username: _usernameController.text.trim(),
         password: _passwordController.text,
         useSsl: _useSsl,
@@ -268,17 +268,14 @@ class _ConnectionTestScreenState extends State<ConnectionTestScreen> {
 
               // Checkbox SSL
               CheckboxListTile(
-                title: const Text('استفاده از SSL (پورت 8729)'),
-                subtitle: const Text('برای اتصال امن از SSL استفاده کنید'),
+                title: const Text('استفاده از SSL'),
+                subtitle: const Text(
+                  'برای اتصال امن از SSL روی پورت 2752 استفاده کنید',
+                ),
                 value: _useSsl,
                 onChanged: (value) {
                   setState(() {
                     _useSsl = value ?? false;
-                    if (_useSsl && _portController.text == '2752') {
-                      _portController.text = '8729';
-                    } else if (!_useSsl && _portController.text == '8729') {
-                      _portController.text = '2752';
-                    }
                   });
                 },
                 controlAffinity: ListTileControlAffinity.leading,

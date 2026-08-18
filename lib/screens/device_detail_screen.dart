@@ -7,6 +7,7 @@ import '../providers/clients_provider.dart';
 import '../services/mikrotik_service_manager.dart';
 import '../utils/app_localizations.dart';
 import '../utils/app_theme.dart';
+import '../widgets/client_live_traffic_badge.dart';
 import '../utils/smart_text_direction.dart';
 import '../utils/client_display_policy.dart';
 
@@ -196,11 +197,14 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
 
     if (!mounted || _isDisposed) return;
 
-    final currentLimit = _currentSpeedLimit ?? '10M/10M';
-    final parts = currentLimit.split('/');
-    final uploadPart = _speedPartForInput(parts.isNotEmpty ? parts[0] : '10M');
+    // اگر هیچ سرعتی از قبل تعیین نشده باشد، فیلدها باید خالی باشند.
+    final currentLimit = (_currentSpeedLimit ?? '').trim();
+    final parts = currentLimit.isNotEmpty ? currentLimit.split('/') : <String>[];
+
+    final uploadPart =
+        _speedPartForInput(parts.isNotEmpty ? parts[0] : '');
     final downloadPart = _speedPartForInput(
-      parts.length > 1 ? parts[1] : '10M',
+      parts.length > 1 ? parts[1] : '',
     );
 
     final downloadValueController = TextEditingController(
@@ -675,7 +679,7 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
                                   labelText:
                                       AppLocalizations.of(context)?.value ??
                                       'Value',
-                                  hintText: '10',
+                                  hintText: '',
                                   border: OutlineInputBorder(
                                     borderRadius: BorderRadius.circular(12),
                                   ),
@@ -790,7 +794,7 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
                                   labelText:
                                       AppLocalizations.of(context)?.value ??
                                       'Value',
-                                  hintText: '10',
+                                  hintText: '',
                                   border: OutlineInputBorder(
                                     borderRadius: BorderRadius.circular(12),
                                   ),
@@ -1774,8 +1778,14 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
   }
 
   Future<void> _unbanDevice() async {
-    if (_isDisposed || widget.device.ipAddress == null) return;
+    if (_isDisposed) return;
+    if (widget.device.ipAddress == null &&
+        (widget.device.macAddress == null || widget.device.macAddress!.isEmpty)) {
+      return;
+    }
 
+    final targetLabel =
+        widget.device.ipAddress ?? widget.device.macAddress ?? '';
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) {
@@ -1783,8 +1793,8 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
         return AlertDialog(
           title: Text(l10n?.unbanDeviceTitle ?? 'Unban Device'),
           content: Text(
-            l10n?.unbanDeviceConfirmTextWithIP(widget.device.ipAddress ?? '') ??
-                'Are you sure you want to unban device ${widget.device.ipAddress}?',
+            l10n?.unbanDeviceConfirmTextWithIP(targetLabel) ??
+                'Are you sure you want to unban device $targetLabel?',
           ),
           actions: [
             TextButton(
@@ -1831,7 +1841,7 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
 
       // اجرای عملیات رفع مسدودیت
       final success = await provider.unbanClient(
-        widget.device.ipAddress!,
+        widget.device.ipAddress ?? '',
         macAddress: widget.device.macAddress,
         hostname: _displayHostName ?? widget.device.hostName,
         ssid: widget.device.ssid,
@@ -2081,6 +2091,18 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
                                   return _buildInfoRow(
                                     l10n?.ipAddress ?? 'IP Address',
                                     widget.device.ipAddress!,
+                                  );
+                                },
+                              ),
+                            if (widget.device.ipAddress != null &&
+                                !widget.isBanned)
+                              Builder(
+                                builder: (context) {
+                                  final l10n = AppLocalizations.of(context);
+                                  return ClientLiveTrafficDetailRow(
+                                    client: widget.device,
+                                    ipAddress: widget.device.ipAddress!,
+                                    label: l10n?.liveTraffic ?? 'Live Traffic',
                                   );
                                 },
                               ),

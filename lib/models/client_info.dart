@@ -27,6 +27,12 @@ class ClientInfo {
   /// null = unknown (grace period or not yet evaluated).
   bool? isOnline;
 
+  /// Instant download rate (bits/s) from queue stats or hotspot delta.
+  int? rxRateBps;
+
+  /// Instant upload rate (bits/s) from queue stats or hotspot delta.
+  int? txRateBps;
+
   /// Legacy field — unused; kept for API compatibility.
   int missedPollCount;
 
@@ -54,6 +60,8 @@ class ClientInfo {
     this.isStaticLease,
     required this.rawData,
     this.isOnline,
+    this.rxRateBps,
+    this.txRateBps,
     this.missedPollCount = 0,
   });
 
@@ -135,6 +143,8 @@ class ClientInfo {
     bool? isStaticLease,
     Map<String, dynamic>? rawData,
     bool? isOnline,
+    int? rxRateBps,
+    int? txRateBps,
     int? missedPollCount,
   }) {
     return ClientInfo(
@@ -161,6 +171,8 @@ class ClientInfo {
       isStaticLease: isStaticLease ?? this.isStaticLease,
       rawData: rawData ?? this.rawData,
       isOnline: isOnline ?? this.isOnline,
+      rxRateBps: rxRateBps ?? this.rxRateBps,
+      txRateBps: txRateBps ?? this.txRateBps,
       missedPollCount: missedPollCount ?? this.missedPollCount,
     );
   }

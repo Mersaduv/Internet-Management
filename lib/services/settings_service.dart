@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../models/mikrotik_connection.dart';
+
 /// سرویس برای مدیریت تنظیمات اتصال MikroTik
 class SettingsService {
   static final SettingsService _instance = SettingsService._internal();
@@ -27,7 +29,6 @@ class SettingsService {
 
   // مقادیر پیش‌فرض
   static const String _defaultHost = '192.168.88.1';
-  static const int _defaultPort = 2752;
   static const bool _defaultUseSsl = false;
   static const String _defaultServiceUrl = 'http://user.ariyabod.af/users';
   static const String _defaultLanguage = 'fa'; // 默认语言：波斯语
@@ -69,29 +70,32 @@ class SettingsService {
     }
   }
 
-  /// دریافت Port
+  /// دریافت Port — همیشه پورت API پروژه (2752)
   Future<int> getPort() async {
-    if (_cachedPort != null) {
-      return _cachedPort!;
+    if (_cachedPort == MikroTikConnection.apiPort) {
+      return MikroTikConnection.apiPort;
     }
-    
+
     try {
       final prefs = await SharedPreferences.getInstance();
-      _cachedPort = prefs.getInt(_keyPort) ?? _defaultPort;
-      return _cachedPort!;
-    } catch (e) {
-      // در صورت خطا، از مقدار پیش‌فرض استفاده کن
-      _cachedPort = _defaultPort;
-      return _defaultPort;
+      final stored = prefs.getInt(_keyPort);
+      if (stored != MikroTikConnection.apiPort) {
+        await prefs.setInt(_keyPort, MikroTikConnection.apiPort);
+      }
+    } catch (_) {
+      // اگر shared_preferences کار نکرد، همان پورت ثابت را برگردان
     }
+
+    _cachedPort = MikroTikConnection.apiPort;
+    return MikroTikConnection.apiPort;
   }
 
-  /// ذخیره Port
+  /// ذخیره Port — پورت API همیشه 2752 است
   Future<void> setPort(int port) async {
-    _cachedPort = port;
+    _cachedPort = MikroTikConnection.apiPort;
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setInt(_keyPort, port);
+      await prefs.setInt(_keyPort, MikroTikConnection.apiPort);
     } catch (e) {
       // اگر shared_preferences کار نکرد، فقط در حافظه نگه دار
     }

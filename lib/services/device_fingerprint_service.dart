@@ -93,6 +93,52 @@ class DeviceFingerprintService {
     }
   }
 
+  /// Removes any stored fingerprint that matches IP/MAC/hostname/ssid loosely.
+  Future<void> removeBannedFingerprintsForTarget({
+    String? ipAddress,
+    String? macAddress,
+    String? hostname,
+    String? ssid,
+  }) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final bannedList = await getBannedFingerprints();
+      final normalizedIp = ipAddress?.trim();
+      final normalizedMac = macAddress?.trim().toUpperCase();
+      final normalizedHost = hostname?.trim().toLowerCase();
+
+      bannedList.removeWhere((existing) {
+        if (normalizedIp != null &&
+            normalizedIp.isNotEmpty &&
+            existing.ipAddress?.trim() == normalizedIp) {
+          return true;
+        }
+        if (normalizedMac != null &&
+            normalizedMac.isNotEmpty &&
+            existing.macAddress?.trim().toUpperCase() == normalizedMac) {
+          return true;
+        }
+        if (normalizedHost != null &&
+            normalizedHost.isNotEmpty &&
+            existing.hostname?.trim().toLowerCase() == normalizedHost) {
+          return true;
+        }
+        final probe = DeviceFingerprint.fromClientInfo(
+          ipAddress,
+          macAddress,
+          hostname,
+          ssid,
+        );
+        return probe.matches(existing) || existing.matches(probe);
+      });
+
+      final jsonList = bannedList.map((f) => f.toMap()).toList();
+      await prefs.setString(_bannedFingerprintsKey, jsonEncode(jsonList));
+    } catch (e) {
+      // ignore errors
+    }
+  }
+
   /// بررسی اینکه آیا یک دستگاه مسدود شده است یا نه
   /// 
   /// این تابع Device Fingerprint دستگاه را محاسبه می‌کند و

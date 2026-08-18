@@ -4,6 +4,8 @@ import 'dart:typed_data';
 import 'dart:convert';
 import 'package:crypto/crypto.dart';
 
+import '../models/mikrotik_connection.dart';
+
 /// کلاینت برای اتصال به MikroTik RouterOS API v6
 /// از پروتکل Binary API استفاده می‌کند
 class RouterOSClient {
@@ -25,14 +27,14 @@ class RouterOSClient {
     required this.user,
     required this.password,
     this.useSsl = false,
-    this.port = 2752,
+    this.port = MikroTikConnection.apiPort,
   });
 
   /// اتصال و احراز هویت
   Future<bool> login() async {
     try {
-      // اتصال TCP Socket
-      final actualPort = useSsl && port == 2752 ? 8729 : port;
+      // اتصال TCP Socket — پورت API همیشه 2752
+      final actualPort = MikroTikConnection.apiPort;
 
       // اگر SSL استفاده می‌شود، از SecureSocket استفاده می‌کنیم
       if (useSsl) {

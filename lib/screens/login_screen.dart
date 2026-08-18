@@ -138,7 +138,7 @@ class _LoginScreenState extends State<LoginScreen> {
       // ایجاد اتصال با اطلاعات وارد شده و تنظیمات ذخیره شده
       final connection = MikroTikConnection(
         host: settings['host'] as String,
-        port: settings['port'] as int,
+        port: MikroTikConnection.apiPort,
         username: _usernameController.text.trim(),
         password: _passwordController.text,
         useSsl: settings['useSsl'] as bool,
