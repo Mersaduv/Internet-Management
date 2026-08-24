@@ -279,6 +279,13 @@ class MikroTikServiceManager {
     return _service!.getBannedDeviceCount();
   }
 
+  Future<List<Map<String, dynamic>>> getBannedClientsFast() async {
+    if (_service == null || !isConnected) {
+      return const [];
+    }
+    return _service!.getBannedClientsFast();
+  }
+
   Future<List<Map<String, String>>> getPhase2ArpTable() async {
     if (_service == null || !isConnected) {
       throw Exception('Connection is not established');

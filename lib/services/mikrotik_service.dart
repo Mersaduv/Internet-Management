@@ -103,7 +103,9 @@ class MikroTikService {
     // During progressive load, skip wireless until router board is known (CPE = DHCP only).
     if (_inProgressiveLoad) {
       if (_routerInfoCache != null) {
-        _wirelessFeaturesEnabled = !_isWirelessUnsupportedRouter(_routerInfoCache);
+        _wirelessFeaturesEnabled = !_isWirelessUnsupportedRouter(
+          _routerInfoCache,
+        );
         return _wirelessFeaturesEnabled!;
       }
       return false;
@@ -175,7 +177,10 @@ class MikroTikService {
         .trim();
   }
 
-  String _leaseCommentWithDisplayName(String? existingComment, String displayName) {
+  String _leaseCommentWithDisplayName(
+    String? existingComment,
+    String displayName,
+  ) {
     final value = existingComment?.trim() ?? '';
     final preserved = <String>[];
     if (value.contains(_staticMarker)) {
@@ -189,7 +194,9 @@ class MikroTikService {
     return parts.where((part) => part.isNotEmpty).join(' ').trim();
   }
 
-  Map<String, String>? _pickPreferredDhcpLease(List<Map<String, String>> leases) {
+  Map<String, String>? _pickPreferredDhcpLease(
+    List<Map<String, String>> leases,
+  ) {
     if (leases.isEmpty) {
       return null;
     }
@@ -254,9 +261,7 @@ class MikroTikService {
     }
 
     try {
-      final alive = await client.isAlive(
-        timeout: const Duration(seconds: 3),
-      );
+      final alive = await client.isAlive(timeout: const Duration(seconds: 3));
       if (!alive) {
         print('[SERVICE] ensureConnected: isAlive=false, reconnecting');
         return _tryReconnect();
@@ -282,7 +287,9 @@ class MikroTikService {
       for (var attempt = 1; attempt <= 3; attempt++) {
         if (attempt > 1) {
           final delayMs = 500 * attempt;
-          print('[SERVICE] reconnect backoff ${delayMs}ms before attempt $attempt');
+          print(
+            '[SERVICE] reconnect backoff ${delayMs}ms before attempt $attempt',
+          );
           await Future<void>.delayed(Duration(milliseconds: delayMs));
         }
         print('[SERVICE] reconnect attempt $attempt/3');
@@ -307,8 +314,7 @@ class MikroTikService {
   Future<List<Map<String, String>>> talk(
     List<String> command, {
     Duration timeout = _apiTimeout,
-  }) =>
-      _talk(command, timeout: timeout);
+  }) => _talk(command, timeout: timeout);
 
   Future<List<Map<String, String>>> _talk(
     List<String> command, {
@@ -725,12 +731,13 @@ class MikroTikService {
 
     final ruleIp = rule['src-address']?.trim();
     final ruleMac = _normalizeMac(rule['src-mac-address']);
-    if (ruleIp != null && ruleIp.isNotEmpty && ipAddress.isNotEmpty && ruleIp == ipAddress) {
+    if (ruleIp != null &&
+        ruleIp.isNotEmpty &&
+        ipAddress.isNotEmpty &&
+        ruleIp == ipAddress) {
       return true;
     }
-    if (macAddress != null &&
-        ruleMac != null &&
-        ruleMac == macAddress) {
+    if (macAddress != null && ruleMac != null && ruleMac == macAddress) {
       return true;
     }
     return false;
@@ -938,7 +945,8 @@ class MikroTikService {
         final comment = rule['comment'];
         final managedDeny =
             _isManagedBanComment(comment) ||
-            ((comment == null || comment.isEmpty) && _isDenyLikeAccessRule(rule));
+            ((comment == null || comment.isEmpty) &&
+                _isDenyLikeAccessRule(rule));
         if (_isDenyLikeAccessRule(rule) && managedDeny) {
           return true;
         }
@@ -1818,7 +1826,9 @@ class MikroTikService {
           'comment',
         ]),
       ], timeout: _phaseTalkTimeout);
-      return rules.where((rule) => _isManagedBanComment(rule['comment'])).toList();
+      return rules
+          .where((rule) => _isManagedBanComment(rule['comment']))
+          .toList();
     } catch (e) {
       print('[PROGRESSIVE_LOAD] phase2a drop filter failed: $e');
       final rules = await _talk([
@@ -1841,10 +1851,78 @@ class MikroTikService {
     }
   }
 
-  /// Lightweight banned-device count (firewall raw rules only).
-  Future<int> getBannedDeviceCount() async {
+  /// Unique banned devices from managed firewall raw drop rules (one API call).
+  List<Map<String, dynamic>> _groupBannedFromRawRules(
+    List<Map<String, String>> rawRules,
+  ) {
+    final grouped = <String, Map<String, dynamic>>{};
+
+    for (final rule in rawRules) {
+      final action = rule['action']?.toLowerCase();
+      final chain = rule['chain'];
+      if (action != null && action != 'drop') {
+        continue;
+      }
+      if (chain != null && chain != 'prerouting') {
+        continue;
+      }
+      if (!_isManagedBanComment(rule['comment'])) {
+        continue;
+      }
+
+      final ip = rule['src-address']?.trim();
+      final mac = _normalizeMac(rule['src-mac-address']);
+      final commentKey = _managedBanCommentGroupKey(rule['comment']);
+      final key = commentKey.isNotEmpty
+          ? 'comment:$commentKey'
+          : (mac != null
+                ? 'mac:$mac'
+                : 'ip:${(ip != null && ip.isNotEmpty) ? ip : rule['.id']}');
+
+      final item = grouped.putIfAbsent(key, () {
+        return {
+          'address': (ip != null && ip.isNotEmpty) ? ip : null,
+          'mac_address': mac,
+          'chains': <String>[],
+          'rule_ids': <String>[],
+          'comment': rule['comment'] ?? '',
+          'raw_blocked': true,
+          'dhcp_blocked': false,
+          'wireless_blocked': false,
+        };
+      });
+
+      if ((item['address'] == null || item['address'] == '') &&
+          ip != null &&
+          ip.isNotEmpty) {
+        item['address'] = ip;
+      }
+      if ((item['mac_address'] == null || item['mac_address'] == '') &&
+          mac != null) {
+        item['mac_address'] = mac;
+      }
+      if (chain != null && !(item['chains'] as List).contains(chain)) {
+        (item['chains'] as List).add(chain);
+      }
+      final id = rule['.id'];
+      if (id != null && !(item['rule_ids'] as List).contains(id)) {
+        (item['rule_ids'] as List).add(id);
+      }
+    }
+
+    return grouped.values.toList();
+  }
+
+  /// Fast banned list: unique devices from raw drop rules only.
+  Future<List<Map<String, dynamic>>> getBannedClientsFast() async {
     final rules = await getPhase2ManagedBanRawRules();
-    return rules.length;
+    return _groupBannedFromRawRules(rules);
+  }
+
+  /// Unique banned-device count (same source as the fast list).
+  Future<int> getBannedDeviceCount() async {
+    final clients = await getBannedClientsFast();
+    return clients.length;
   }
 
   /// Phase 2b — ARP table (compact).
@@ -1965,8 +2043,7 @@ class MikroTikService {
         'uptime': resourceData['uptime'] ?? 'Unknown',
         'version': resourceData['version'] ?? 'Unknown',
         'build-time': resourceData['build-time'] ?? 'Unknown',
-        'board-name':
-            boardName ?? resourceData['board-name'] ?? 'Unknown',
+        'board-name': boardName ?? resourceData['board-name'] ?? 'Unknown',
         'model': model ?? 'Unknown',
         'platform': resourceData['platform'] ?? 'Unknown',
         'cpu-load': resourceData['cpu-load'] ?? '0',
@@ -2029,10 +2106,7 @@ class MikroTikService {
       final banComment = '$_banMarker $reason';
 
       try {
-        await makeClientStatic(
-          ipAddress: ipAddress,
-          macAddress: macToUse,
-        );
+        await makeClientStatic(ipAddress: ipAddress, macAddress: macToUse);
       } catch (e) {
         print('[BAN] make-static before ban skipped/failed: $e');
       }
@@ -2268,6 +2342,33 @@ class MikroTikService {
       }
 
       final grouped = <String, Map<String, dynamic>>{};
+
+      Map<String, dynamic> getOrCreateGroup({
+        String? ip,
+        String? mac,
+        String? fallbackKey,
+      }) {
+        final normalizedMac = _normalizeMac(mac);
+        final normalizedIp = ip?.trim();
+        final key = normalizedMac != null
+            ? 'mac:$normalizedMac'
+            : (normalizedIp != null && normalizedIp.isNotEmpty
+                  ? 'ip:$normalizedIp'
+                  : 'id:${fallbackKey ?? DateTime.now().microsecondsSinceEpoch}');
+        return grouped.putIfAbsent(key, () {
+          return {
+            'address': normalizedIp,
+            'mac_address': normalizedMac,
+            'chains': <String>[],
+            'rule_ids': <String>[],
+            'comment': '',
+            'raw_blocked': false,
+            'dhcp_blocked': false,
+            'wireless_blocked': false,
+          };
+        });
+      }
+
       for (final rule in rawRules) {
         if (rule['chain'] != 'prerouting' ||
             rule['action'] != 'drop' ||
@@ -2286,16 +2387,11 @@ class MikroTikService {
           ip = dhcpByMac[mac]?['address'] ?? arpByMac[mac]?['address'];
         }
 
-        final key = mac != null ? 'mac:$mac' : 'ip:${ip ?? rule['.id']}';
-        final item = grouped.putIfAbsent(key, () {
-          return {
-            'address': ip,
-            'mac_address': mac,
-            'chains': <String>[],
-            'rule_ids': <String>[],
-            'comment': rule['comment'] ?? '',
-          };
-        });
+        final item = getOrCreateGroup(
+          ip: ip,
+          mac: mac,
+          fallbackKey: rule['.id'],
+        );
 
         if ((item['address'] == null || item['address'] == '') && ip != null) {
           item['address'] = ip;
@@ -2303,6 +2399,12 @@ class MikroTikService {
         if ((item['mac_address'] == null || item['mac_address'] == '') &&
             mac != null) {
           item['mac_address'] = mac;
+        }
+        item['raw_blocked'] = true;
+        final comment = rule['comment'] ?? '';
+        if ((item['comment']?.toString().isEmpty ?? true) &&
+            comment.isNotEmpty) {
+          item['comment'] = comment;
         }
 
         final chain = rule['chain'];
@@ -2312,6 +2414,48 @@ class MikroTikService {
         final id = rule['.id'];
         if (id != null && !(item['rule_ids'] as List).contains(id)) {
           (item['rule_ids'] as List).add(id);
+        }
+      }
+
+      // Include bans that exist only in DHCP block-access (even without raw rules).
+      for (final lease in dhcpByIp.values) {
+        if (!_isTruthy(lease['block-access'])) {
+          continue;
+        }
+        final ip = lease['address']?.trim();
+        final mac = _normalizeMac(lease['mac-address']);
+        final item = getOrCreateGroup(
+          ip: ip,
+          mac: mac,
+          fallbackKey: lease['.id'],
+        );
+        item['dhcp_blocked'] = true;
+        item['host_name'] = _displayNameFromLease(lease);
+        item['dhcp_status'] = lease['status'];
+        if ((item['comment']?.toString().isEmpty ?? true) &&
+            (lease['comment']?.isNotEmpty ?? false)) {
+          item['comment'] = lease['comment'];
+        }
+      }
+
+      // Include bans that exist only in wireless access-list deny rules.
+      for (final entry in accessByMac.entries) {
+        final mac = entry.key;
+        final rule = entry.value;
+        if (!_isDenyLikeAccessRule(rule)) {
+          continue;
+        }
+        final ip = dhcpByMac[mac]?['address'] ?? arpByMac[mac]?['address'];
+        final item = getOrCreateGroup(
+          ip: ip,
+          mac: mac,
+          fallbackKey: rule['.id'],
+        );
+        item['wireless_blocked'] = true;
+        final comment = rule['comment'] ?? '';
+        if ((item['comment']?.toString().isEmpty ?? true) &&
+            comment.isNotEmpty) {
+          item['comment'] = comment;
         }
       }
 
@@ -2536,10 +2680,7 @@ class MikroTikService {
     }
 
     try {
-      final arpEntries = await _talk([
-        '/ip/arp/print',
-        '?=address=$ip',
-      ]);
+      final arpEntries = await _talk(['/ip/arp/print', '?=address=$ip']);
       if (arpEntries.isNotEmpty) {
         return true;
       }
@@ -3232,11 +3373,8 @@ class MikroTikService {
       'security_profile_name': profileName,
       'security_profile_id': profile['.id'] ?? '',
       'password':
-          profile['wpa2-pre-shared-key'] ??
-          profile['wpa-pre-shared-key'] ??
-          '',
-      'authentication_types':
-          profile['authentication-types'] ?? 'wpa2-psk',
+          profile['wpa2-pre-shared-key'] ?? profile['wpa-pre-shared-key'] ?? '',
+      'authentication_types': profile['authentication-types'] ?? 'wpa2-psk',
       'interfaces': interfaces
           .map(
             (i) => <String, dynamic>{
@@ -3288,9 +3426,7 @@ class MikroTikService {
       'hide-ssid=$hideSsidValue',
     );
 
-    buffer.writeln(
-      '/system script remove [find name="$scriptName"]',
-    );
+    buffer.writeln('/system script remove [find name="$scriptName"]');
 
     final scriptSource = buffer.toString().trim();
     debugPrint('[WIFI_SETTINGS] Script source:\n$scriptSource');
@@ -3355,7 +3491,9 @@ class MikroTikService {
         : ['/system/script/run', '=number=0'];
 
     unawaited(
-      _client!.talk(runCommand).timeout(const Duration(seconds: 3)).catchError((Object e) {
+      _client!.talk(runCommand).timeout(const Duration(seconds: 3)).catchError((
+        Object e,
+      ) {
         debugPrint(
           '[WIFI_SETTINGS] ℹ️ Script triggered, connection may drop (expected): $e',
         );
@@ -3363,7 +3501,9 @@ class MikroTikService {
     );
 
     await Future<void>.delayed(const Duration(milliseconds: 300));
-    debugPrint('[WIFI_SETTINGS] ✅ All changes dispatched. Wireless will restart.');
+    debugPrint(
+      '[WIFI_SETTINGS] ✅ All changes dispatched. Wireless will restart.',
+    );
   }
 
   String _escapeRouterOsString(String value) {

@@ -1093,9 +1093,10 @@ class _HomePageState extends State<HomePage> with RouteAware {
                                     builder: (context) {
                                       final l10n = AppLocalizations.of(context);
                                       return _buildTabButton(
-                                        title:
-                                            l10n?.connectedDevices ??
-                                            'Connected Devices',
+                                        title: l10n?.locale.languageCode == 'fa'
+                                            ? 'متصل'
+                                            : (l10n?.connectedDevices ??
+                                                  'Connected'),
                                         count: provider.connectedTabCount,
                                         icon: Icons.devices,
                                         isActive: _selectedTab == 0,
@@ -1110,9 +1111,9 @@ class _HomePageState extends State<HomePage> with RouteAware {
                                     builder: (context) {
                                       final l10n = AppLocalizations.of(context);
                                       return _buildTabButton(
-                                        title:
-                                            l10n?.bannedDevices ??
-                                            'Banned Devices',
+                                        title: l10n?.locale.languageCode == 'fa'
+                                            ? 'مسدود'
+                                            : (l10n?.bannedDevices ?? 'Banned'),
                                         count: provider.bannedTabCount,
                                         icon: Icons.block,
                                         isActive: _selectedTab == 1,
@@ -1517,7 +1518,7 @@ class _HomePageState extends State<HomePage> with RouteAware {
   }
 
   Widget _buildBannedDevicesTab(ClientsProvider provider) {
-    if (provider.isBannedListLoading && provider.bannedClients.isEmpty) {
+    if (provider.showBannedLoadingSkeleton && provider.bannedClients.isEmpty) {
       return ListView.builder(
         itemCount: 4,
         itemBuilder: (context, index) => _buildSkeletonCard(),
