@@ -1,0 +1,57 @@
+name: Build iOS IPA
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [master]
+    paths:
+      - 'lib/**'
+      - 'pubspec.yaml'
+      - 'pubspec.lock'
+      - 'ios/**'
+      - '.github/workflows/ios-ipa.yml'
+
+jobs:
+  build-ios-ipa:
+    runs-on: macos-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Build iOS app (unsigned)
+        run: flutter build ios --release --no-codesign
+
+      - name: Read version
+        id: version
+        run: |
+          VERSION=$(grep '^version:' pubspec.yaml | sed 's/version: //' | tr -d ' ')
+          echo "app_version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Package IPA
+        run: |
+          VERSION="${{ steps.version.outputs.app_version }}"
+          OUT="Abar_Tawseeh_ICT-${VERSION}.ipa"
+          mkdir -p build/ipa/Payload
+          cp -R build/ios/iphoneos/Runner.app build/ipa/Payload/
+          cd build/ipa
+          zip -r "../${OUT}" Payload
+          cd ../..
+          mv "build/${OUT}" .
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Abar_Tawseeh_ICT-ipa
+          path: Abar_Tawseeh_ICT-*.ipa
+          retention-days: 90

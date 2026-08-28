@@ -1,4 +1,4 @@
-# مستندات کامل پروژه Ariyabod (Internet Management)
+﻿# مستندات کامل پروژه Abar Tawseeh ICT (شرکت خدمات تکنالوژی ابر توسعه)
 
 > **نسخه برنامه:** 1.0.0+1  
 > **توسعه‌دهنده:** Mersad Karimi  
@@ -28,7 +28,7 @@
 
 ## 1. معرفی و قابلیت‌ها
 
-**Ariyabod** یک اپلیکیشن موبایل/دسکتاپ Flutter است که از طریق **RouterOS API** (پورت ۸۷۲۸ یا SSL روی ۸۷۲۹) به روتر MikroTik متصل می‌شود و عملیات مدیریت شبکه را انجام می‌دهد.
+**Abar Tawseeh ICT** یک اپلیکیشن موبایل/دسکتاپ Flutter است که از طریق **RouterOS API** (پورت ۸۷۲۸ یا SSL روی ۸۷۲۹) به روتر MikroTik متصل می‌شود و عملیات مدیریت شبکه را انجام می‌دهد.
 
 ### قابلیت‌های اصلی
 
@@ -118,7 +118,7 @@ internet_management/
 ┌───────────────────────────▼─────────────────────────────────┐
 │  Transport Layer                                             │
 │  RouterOSClientV2 → package:router_os_client                  │
-│  TCP 2752 / SSL 8729 — Binary API v6                         │
+│  TCP 8728 / SSL 8729 — Binary API v6                         │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -174,7 +174,7 @@ flowchart TB
 | **Provider / ChangeNotifier** | `ClientsProvider` برای لیست دستگاه‌ها |
 | **Facade** | `MikroTikServiceManager` روی `MikroTikService` |
 | **Command Queue** | `RouterOSClientV2._commandQueue` — سریال‌سازی `talk()` |
-| **Marker در comment** | `[Ariyabod BAN]`, `[Ariyabod STATIC]` روی lease و firewall |
+| **Marker در comment** | `[AbarTawseeh BAN]`, `[AbarTawseeh STATIC]` روی lease و firewall |
 
 ---
 
@@ -185,14 +185,14 @@ flowchart TB
 ```dart
 MikroTikConnection(
   host: '192.168.88.1',
-  port: 2752,              // پیش‌فرض
+  port: 8728,              // پیش‌فرض
   username: 'admin',
   password: '***',
   useSsl: false,
 )
 ```
 
-- اگر `useSsl == true` و `port == 2752` → پورت واقعی **8729** (`actualPort` getter).
+- اگر `useSsl == true` و `port == 8728` → پورت واقعی **8729** (`actualPort` getter).
 
 ### 4.2 فرآیند برقراری اتصال (Login)
 
@@ -333,9 +333,9 @@ Socket RouterOS API ترتیبی است؛ دو `talk()` هم‌زمان پاسخ
 #### ثابت‌های مهم
 
 ```dart
-static const String _appPrefix = 'Ariyabod';
-static const String _banMarker = '[Ariyabod BAN]';
-static const String _staticMarker = '[Ariyabod STATIC]';
+static const String _appPrefix = 'AbarTawseeh';
+static const String _banMarker = '[AbarTawseeh BAN]';
+static const String _staticMarker = '[AbarTawseeh STATIC]';
 static const String _staticOnlyPool = 'static-only';
 static const Duration _apiTimeout = Duration(seconds: 10);
 ```
@@ -385,7 +385,7 @@ static const Duration _apiTimeout = Duration(seconds: 10);
 | کلید | پیش‌فرض | کاربرد |
 |------|---------|--------|
 | `mikrotik_host` | `192.168.88.1` | IP روتر |
-| `mikrotik_port` | `2752` | پورت API |
+| `mikrotik_port` | `8728` | پورت API |
 | `mikrotik_use_ssl` | `false` | SSL |
 | `internet_service_url` | `http://user.ariyabod.af/users` | WebView |
 | `login_timestamp` | — | انقضای 14 روزه |
@@ -693,7 +693,7 @@ Phase 3: routerInfo + deviceIp + lock
 
 ### 10.2 مسدودسازی — `banClient`
 
-سه لایه (هر کدام با comment مدیریت‌شده `[Ariyabod BAN]`):
+سه لایه (هر کدام با comment مدیریت‌شده `[AbarTawseeh BAN]`):
 
 | لایه | RouterOS | شرط |
 |------|----------|-----|
@@ -742,7 +742,7 @@ Phase 3: routerInfo + deviceIp + lock
 - جستجوی lease با IP/MAC
 - اگر dynamic: `/ip/dhcp-server/lease/make-static`
 - یا `lease add` در صورت نیاز
-- marker `[Ariyabod STATIC]` در comment
+- marker `[AbarTawseeh STATIC]` در comment
 
 **Auto-static:** `ClientsProvider._ensureCurrentDeviceStatic` — IP دستگاه کاربر را یک‌بار static می‌کند.
 
@@ -763,7 +763,7 @@ Phase 3: routerInfo + deviceIp + lock
 ### 10.8 نام نمایشی — `setDhcpLeaseDisplayName`
 
 - به‌روزرسانی `comment` lease
-- حفظ markerهای `[Ariyabod BAN]` و `[Ariyabod STATIC]` در comment
+- حفظ markerهای `[AbarTawseeh BAN]` و `[AbarTawseeh STATIC]` در comment
 
 ---
 
@@ -887,7 +887,7 @@ Cache در `_routerInfoCache` تا reconnect بعدی.
 
 ### 14.3 پیش‌نیازهای روتر
 
-- API RouterOS فعال (پورت 2752/8729)
+- API RouterOS فعال (پورت 8728/8729)
 - کاربر با دسترسی مناسب (DHCP, firewall raw, wireless در صورت نیاز)
 - برای قفل اتصال: DHCP server با address-pool قابل تغییر
 
@@ -969,3 +969,4 @@ sequenceDiagram
 ---
 
 *این مستند بر اساس بررسی سورس‌کد پروژه در مسیر `lib/` تهیه شده است. برای به‌روزرسانی پس از تغییرات معماری، بخش‌های 4، 6، 8، 10 و 11 را اولویت دهید.*
+

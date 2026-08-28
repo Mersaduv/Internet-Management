@@ -2,8 +2,8 @@ import '../models/client_info.dart';
 
 /// Resolves human-readable device labels consistently across list and detail UI.
 abstract final class ClientDisplayName {
-  static const String banMarker = '[Ariyabod BAN]';
-  static const String staticMarker = '[Ariyabod STATIC]';
+  static const String banMarker = '[AbarTawseeh BAN]';
+  static const String staticMarker = '[AbarTawseeh STATIC]';
 
   /// Best known friendly name, or null when only IP/MAC fallbacks remain.
   static String? resolveHostName(ClientInfo client) {

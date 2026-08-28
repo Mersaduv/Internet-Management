@@ -33,7 +33,7 @@ class RouterOSClient {
   /// اتصال و احراز هویت
   Future<bool> login() async {
     try {
-      // اتصال TCP Socket — پورت API همیشه 2752
+      // اتصال TCP Socket — پورت API همیشه 8728
       final actualPort = MikroTikConnection.apiPort;
 
       // اگر SSL استفاده می‌شود، از SecureSocket استفاده می‌کنیم

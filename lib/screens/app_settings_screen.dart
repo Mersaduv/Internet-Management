@@ -7,7 +7,7 @@ import '../main.dart';
 import '../utils/app_localizations.dart';
 import '../utils/app_theme.dart';
 
-/// 应用设置页面
+/// ??????
 class AppSettingsScreen extends StatefulWidget {
   const AppSettingsScreen({super.key});
 
@@ -22,7 +22,8 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
   String _selectedLanguageCode = 'fa';
   bool _isLoading = true;
 
-  static const Color _primaryColor = AppTheme.primary;
+  Color get _primaryColor =>
+      AppTheme.primaryFor(Theme.of(context).brightness);
 
   @override
   void initState() {
@@ -30,13 +31,13 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
     _loadSettings();
   }
 
-  /// 加载当前设置（语言和主题）
+  /// ??????(?????)
   Future<void> _loadSettings() async {
     try {
-      // 加载语言设置
+      // ??????
       final languageCode = await _settingsService.getLanguage();
 
-      // 加载主题设置
+      // ??????
       final themeMode = await _settingsService.getThemeModeEnum();
 
       setState(() {
@@ -53,7 +54,7 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
     }
   }
 
-  /// 更改语言
+  /// ????
   Future<void> _changeLanguage(String languageCode) async {
     if (_isLoading) return;
 
@@ -62,15 +63,15 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
     });
 
     try {
-      // 保存语言设置
+      // ??????
       await _settingsService.setLanguage(languageCode);
 
-      // 通知主应用更改语言
+      // ?????????
       final newLocale = languageCode == 'en'
           ? const Locale('en', 'US')
           : const Locale('fa', 'IR');
 
-      // 使用全局回调通知主应用
+      // ???????????
       if (onLanguageChanged != null) {
         onLanguageChanged!(newLocale);
       }
@@ -101,7 +102,7 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
     }
   }
 
-  /// 更改主题
+  /// ????
   Future<void> _changeTheme(ThemeMode themeMode) async {
     if (_isLoading) return;
 
@@ -110,10 +111,10 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
     });
 
     try {
-      // 保存主题设置
+      // ??????
       await _settingsService.setThemeModeEnum(themeMode);
 
-      // 通知主应用更改主题
+      // ?????????
       if (onThemeChanged != null) {
         onThemeChanged!(themeMode);
       }
@@ -146,7 +147,7 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
     }
   }
 
-  /// 获取主题模式名称
+  /// ????????
   String _getThemeModeName(ThemeMode mode, AppLocalizations? l10n) {
     switch (mode) {
       case ThemeMode.light:
@@ -158,7 +159,7 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
     }
   }
 
-  /// 显示主题选择对话框
+  /// ?????????
   void _showThemeSelector(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final theme = Theme.of(context);
@@ -176,7 +177,7 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // 标题
+            // ??
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
               child: Text(
@@ -189,7 +190,7 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
               ),
             ),
             const Divider(),
-            // 明亮模式选项
+            // ??????
             ListTile(
               leading: Icon(Icons.light_mode, color: primaryColor),
               title: Text(l10n?.light ?? 'Light'),
@@ -204,7 +205,7 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
                 }
               },
             ),
-            // 暗黑模式选项
+            // ??????
             ListTile(
               leading: Icon(Icons.dark_mode, color: primaryColor),
               title: Text(l10n?.dark ?? 'Dark'),
@@ -219,7 +220,7 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
                 }
               },
             ),
-            // 跟随系统选项
+            // ??????
             ListTile(
               leading: Icon(Icons.brightness_auto, color: primaryColor),
               title: Text(l10n?.system ?? 'System'),
@@ -241,7 +242,7 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
     );
   }
 
-  /// 显示语言选择对话框
+  /// ?????????
   void _showLanguageSelector(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final theme = Theme.of(context);
@@ -259,7 +260,7 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // 标题
+            // ??
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
               child: Text(
@@ -272,7 +273,7 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
               ),
             ),
             const Divider(),
-            // 波斯语选项
+            // ?????
             ListTile(
               leading: Icon(Icons.g_translate, color: primaryColor),
               title: Text(l10n?.persian ?? 'Persian'),
@@ -292,7 +293,7 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
                 }
               },
             ),
-            // 英语选项
+            // ????
             ListTile(
               leading: Icon(Icons.g_translate, color: primaryColor),
               title: Text(l10n?.english ?? 'English'),
@@ -326,7 +327,7 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
         preferredSize: const Size.fromHeight(kToolbarHeight),
         child: Container(
           decoration: BoxDecoration(
-            color: primaryColor,
+            color: AppTheme.appBarFor(theme.brightness),
             boxShadow: [
               BoxShadow(
                 color: theme.brightness == Brightness.dark
@@ -341,15 +342,12 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
             title: Text(
               l10n?.settings ?? 'Settings',
               style: TextStyle(
-                color: theme.brightness == Brightness.dark
-                    ? colorScheme.onSurface
-                    : Colors.white,
+                color: AppTheme.onAppBar(theme.brightness),
               ),
             ),
             backgroundColor: Colors.transparent,
-            foregroundColor: theme.brightness == Brightness.dark
-                ? colorScheme.onSurface
-                : Colors.white,
+            foregroundColor: AppTheme.onAppBar(theme.brightness),
+            iconTheme: IconThemeData(color: AppTheme.onAppBar(theme.brightness)),
             elevation: 0,
             shadowColor: Colors.transparent,
             surfaceTintColor: Colors.transparent,
@@ -361,7 +359,7 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            // 通用设置部分
+            // ??????
             Card(
               elevation: 2,
               color: colorScheme.surface,
@@ -373,30 +371,30 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
                   ListTile(
                     leading: Icon(Icons.wifi, color: primaryColor),
                     title: Text(
-                      l10n?.wifiSettings ?? 'تنظیمات وایفای',
+                      l10n?.wifiSettings ?? '??????? ??????',
                       style: const TextStyle(
                         fontWeight: FontWeight.bold,
                         fontSize: 16,
                       ),
                     ),
                     subtitle: Text(
-                      l10n?.wifiSettingsSubtitle ?? 'تغییر نام و رمز شبکه',
+                      l10n?.wifiSettingsSubtitle ?? '????? ??? ? ??? ????',
                       style: TextStyle(
                         color: Colors.grey.shade600,
                         fontSize: 14,
                       ),
                     ),
-                    trailing: const Icon(
+                    trailing: Icon(
                       Icons.arrow_forward_ios,
                       size: 16,
-                      color: AppTheme.primary,
+                      color: AppTheme.primaryFor(theme.brightness),
                     ),
                     onTap: () {
                       Navigator.of(context).pushNamed('/wifi-settings');
                     },
                   ),
                   const Divider(height: 1),
-                  // 语言选择
+                  // ????
                   ListTile(
                     leading: Icon(Icons.g_translate, color: primaryColor),
                     title: Text(
@@ -446,7 +444,7 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
                         : () => _showLanguageSelector(context),
                   ),
                   const Divider(height: 1),
-                  // 主题模式
+                  // ????
                   ListTile(
                     leading: Icon(
                       _selectedThemeMode == ThemeMode.dark
@@ -502,7 +500,7 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
               ),
             ),
             const SizedBox(height: 24),
-            // 退出按钮
+            // ????
             Card(
               elevation: 2,
               shape: RoundedRectangleBorder(

@@ -1,5 +1,5 @@
-import 'package:Ariyabod/models/client_info.dart';
-import 'package:Ariyabod/utils/current_device_policy.dart';
+﻿import 'package:abar_tawseeh_ict/models/client_info.dart';
+import 'package:abar_tawseeh_ict/utils/current_device_policy.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

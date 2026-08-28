@@ -1,11 +1,11 @@
 {
-    "name": "internet_management",
-    "short_name": "internet_management",
+    "name": "Abar Tawseeh ICT",
+    "short_name": "Abar Tawseeh",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#2D615A",
-    "theme_color": "#2D615A",
-    "description": "A tool that allow you to manage your internet - Developed by Mersad Karimi",
+    "background_color": "#FFFFFF",
+    "theme_color": "#00183C",
+    "description": "شرکت خدمات تکنالوژی ابر توسعه — Abar Tawseeh ICT",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

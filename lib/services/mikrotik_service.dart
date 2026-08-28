@@ -26,7 +26,7 @@ class MikroTikService {
 
   static const Duration _apiTimeout = MikrotikTimeouts.defaultTalk;
   static const Duration _phaseTalkTimeout = MikrotikTimeouts.phaseTalk;
-  static const String _appPrefix = 'Ariyabod';
+  static const String _appPrefix = 'AbarTawseeh';
   static const String _banMarker = '[$_appPrefix BAN]';
   static const String _staticOnlyPool = 'static-only';
   static const String _staticMarker = '[$_appPrefix STATIC]';

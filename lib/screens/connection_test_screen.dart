@@ -3,7 +3,7 @@ import '../models/mikrotik_connection.dart';
 import '../services/mikrotik_service.dart';
 import '../utils/app_theme.dart';
 
-/// صفحه تست اتصال به MikroTik RouterOS
+/// ???? ??? ????? ?? MikroTik RouterOS
 class ConnectionTestScreen extends StatefulWidget {
   const ConnectionTestScreen({super.key});
 
@@ -14,7 +14,7 @@ class ConnectionTestScreen extends StatefulWidget {
 class _ConnectionTestScreenState extends State<ConnectionTestScreen> {
   final _formKey = GlobalKey<FormState>();
   final _hostController = TextEditingController(text: '192.168.88.1');
-  final _portController = TextEditingController(text: '2752');
+  final _portController = TextEditingController(text: '8728');
   final _usernameController = TextEditingController(text: 'admin');
   final _passwordController = TextEditingController();
 
@@ -46,13 +46,13 @@ class _ConnectionTestScreenState extends State<ConnectionTestScreen> {
     });
 
     try {
-      // بستن اتصال قبلی اگر وجود دارد
+      // ???? ????? ???? ??? ???? ????
       _service?.disconnect();
 
-      // ایجاد سرویس جدید
+      // ????? ????? ????
       _service = MikroTikService();
 
-      // ایجاد اتصال
+      // ????? ?????
       final connection = MikroTikConnection(
         host: _hostController.text.trim(),
         port: MikroTikConnection.apiPort,
@@ -67,17 +67,17 @@ class _ConnectionTestScreenState extends State<ConnectionTestScreen> {
         _isConnecting = false;
         _isConnected = success;
         if (success) {
-          _connectionResult = 'اتصال با موفقیت برقرار شد! ✅';
+          _connectionResult = '????? ?? ?????? ?????? ??! ?';
         } else {
           _connectionResult =
-              'اتصال برقرار نشد. لطفاً اطلاعات را بررسی کنید. ❌';
+              '????? ?????? ???. ????? ??????? ?? ????? ????. ?';
         }
       });
     } catch (e) {
       setState(() {
         _isConnecting = false;
         _isConnected = false;
-        _connectionResult = 'خطا: $e';
+        _connectionResult = '???: $e';
       });
     }
   }
@@ -85,7 +85,7 @@ class _ConnectionTestScreenState extends State<ConnectionTestScreen> {
   Future<void> _testGetClients() async {
     if (_service == null || !_service!.isConnected) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('ابتدا اتصال را برقرار کنید')),
+        const SnackBar(content: Text('????? ????? ?? ?????? ????')),
       );
       return;
     }
@@ -105,9 +105,9 @@ class _ConnectionTestScreenState extends State<ConnectionTestScreen> {
         showDialog(
           context: context,
           builder: (context) => AlertDialog(
-            title: const Text('نتیجه تست'),
+            title: const Text('????? ???'),
             content: Text(
-              'تعداد کلاینت‌ها: ${result['total_count']}\n'
+              '????? ?????????: ${result['total_count']}\n'
               'Hotspot: ${result['by_type']['hotspot']}\n'
               'Wireless: ${result['by_type']['wireless']}\n'
               'DHCP: ${result['by_type']['dhcp']}\n'
@@ -116,7 +116,7 @@ class _ConnectionTestScreenState extends State<ConnectionTestScreen> {
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(context),
-                child: const Text('بستن'),
+                child: const Text('????'),
               ),
             ],
           ),
@@ -130,7 +130,7 @@ class _ConnectionTestScreenState extends State<ConnectionTestScreen> {
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('خطا: $e')));
+        ).showSnackBar(SnackBar(content: Text('???: $e')));
       }
     }
   }
@@ -146,7 +146,7 @@ class _ConnectionTestScreenState extends State<ConnectionTestScreen> {
         preferredSize: const Size.fromHeight(kToolbarHeight),
         child: Container(
           decoration: BoxDecoration(
-            color: primaryColor,
+            color: AppTheme.appBarFor(theme.brightness),
             boxShadow: [
               BoxShadow(
                 color: theme.brightness == Brightness.dark
@@ -159,17 +159,14 @@ class _ConnectionTestScreenState extends State<ConnectionTestScreen> {
           ),
           child: AppBar(
             title: Text(
-              'تست اتصال MikroTik',
+              '??? ????? MikroTik',
               style: TextStyle(
-                color: theme.brightness == Brightness.dark
-                    ? colorScheme.onSurface
-                    : Colors.white,
+                color: AppTheme.onAppBar(theme.brightness),
               ),
             ),
             backgroundColor: Colors.transparent,
-            foregroundColor: theme.brightness == Brightness.dark
-                ? colorScheme.onSurface
-                : Colors.white,
+            foregroundColor: AppTheme.onAppBar(theme.brightness),
+            iconTheme: IconThemeData(color: AppTheme.onAppBar(theme.brightness)),
             elevation: 0,
             shadowColor: Colors.transparent,
             surfaceTintColor: Colors.transparent,
@@ -186,11 +183,11 @@ class _ConnectionTestScreenState extends State<ConnectionTestScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // فیلد Host/IP
+                  // ???? Host/IP
                   TextFormField(
                     controller: _hostController,
                     decoration: const InputDecoration(
-                      labelText: 'آدرس IP یا Hostname',
+                      labelText: '???? IP ?? Hostname',
                       hintText: '192.168.88.1',
                       border: OutlineInputBorder(),
                       prefixIcon: Icon(Icons.router),
@@ -199,19 +196,19 @@ class _ConnectionTestScreenState extends State<ConnectionTestScreen> {
                     textDirection: TextDirection.ltr,
                     validator: (value) {
                       if (value == null || value.trim().isEmpty) {
-                        return 'لطفاً آدرس IP را وارد کنید';
+                        return '????? ???? IP ?? ???? ????';
                       }
                       return null;
                     },
                   ),
                   const SizedBox(height: 16),
 
-                  // فیلد Port
+                  // ???? Port
                   TextFormField(
                     controller: _portController,
                     decoration: const InputDecoration(
-                      labelText: 'پورت',
-                      hintText: '2752',
+                      labelText: '????',
+                      hintText: '8728',
                       border: OutlineInputBorder(),
                       prefixIcon: Icon(Icons.numbers),
                     ),
@@ -219,22 +216,22 @@ class _ConnectionTestScreenState extends State<ConnectionTestScreen> {
                     textDirection: TextDirection.ltr,
                     validator: (value) {
                       if (value == null || value.trim().isEmpty) {
-                        return 'لطفاً پورت را وارد کنید';
+                        return '????? ???? ?? ???? ????';
                       }
                       final port = int.tryParse(value.trim());
                       if (port == null || port < 1 || port > 65535) {
-                        return 'پورت باید عددی بین 1 تا 65535 باشد';
+                        return '???? ???? ???? ??? 1 ?? 65535 ????';
                       }
                       return null;
                     },
                   ),
                   const SizedBox(height: 16),
 
-                  // فیلد Username
+                  // ???? Username
                   TextFormField(
                     controller: _usernameController,
                     decoration: const InputDecoration(
-                      labelText: 'نام کاربری',
+                      labelText: '??? ??????',
                       hintText: 'admin',
                       border: OutlineInputBorder(),
                       prefixIcon: Icon(Icons.person),
@@ -242,19 +239,19 @@ class _ConnectionTestScreenState extends State<ConnectionTestScreen> {
                     textDirection: TextDirection.ltr,
                     validator: (value) {
                       if (value == null || value.trim().isEmpty) {
-                        return 'لطفاً نام کاربری را وارد کنید';
+                        return '????? ??? ?????? ?? ???? ????';
                       }
                       return null;
                     },
                   ),
                   const SizedBox(height: 16),
 
-                  // فیلد Password
+                  // ???? Password
                   TextFormField(
                     controller: _passwordController,
                     decoration: const InputDecoration(
-                      labelText: 'رمز عبور',
-                      hintText: 'رمز عبور را وارد کنید',
+                      labelText: '??? ????',
+                      hintText: '??? ???? ?? ???? ????',
                       border: OutlineInputBorder(),
                       prefixIcon: Icon(Icons.lock),
                     ),
@@ -262,7 +259,7 @@ class _ConnectionTestScreenState extends State<ConnectionTestScreen> {
                     textDirection: TextDirection.ltr,
                     validator: (value) {
                       if (value == null || value.isEmpty) {
-                        return 'لطفاً رمز عبور را وارد کنید';
+                        return '????? ??? ???? ?? ???? ????';
                       }
                       return null;
                     },
@@ -271,9 +268,9 @@ class _ConnectionTestScreenState extends State<ConnectionTestScreen> {
 
                   // Checkbox SSL
                   CheckboxListTile(
-                    title: const Text('استفاده از SSL'),
+                    title: const Text('??????? ?? SSL'),
                     subtitle: const Text(
-                      'برای اتصال امن از SSL روی پورت 2752 استفاده کنید',
+                      '???? ????? ??? ?? SSL ??? ???? 8729 ??????? ????',
                     ),
                     value: _useSsl,
                     onChanged: (value) {
@@ -285,7 +282,7 @@ class _ConnectionTestScreenState extends State<ConnectionTestScreen> {
                   ),
                   const SizedBox(height: 24),
 
-                  // دکمه تست اتصال
+                  // ???? ??? ?????
                   ElevatedButton.icon(
                     onPressed: _isConnecting ? null : _testConnection,
                     icon: _isConnecting
@@ -296,7 +293,7 @@ class _ConnectionTestScreenState extends State<ConnectionTestScreen> {
                           )
                         : const Icon(Icons.link),
                     label: Text(
-                      _isConnecting ? 'در حال اتصال...' : 'تست اتصال',
+                      _isConnecting ? '?? ??? ?????...' : '??? ?????',
                     ),
                     style: ElevatedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 16),
@@ -306,7 +303,7 @@ class _ConnectionTestScreenState extends State<ConnectionTestScreen> {
                   ),
                   const SizedBox(height: 16),
 
-                  // دکمه تست دریافت کلاینت‌ها (فقط اگر متصل باشد)
+                  // ???? ??? ?????? ????????? (??? ??? ???? ????)
                   if (_isConnected == true)
                     ElevatedButton.icon(
                       onPressed: _isConnecting ? null : _testGetClients,
@@ -319,8 +316,8 @@ class _ConnectionTestScreenState extends State<ConnectionTestScreen> {
                           : const Icon(Icons.people),
                       label: Text(
                         _isConnecting
-                            ? 'در حال دریافت...'
-                            : 'تست دریافت کلاینت‌ها',
+                            ? '?? ??? ??????...'
+                            : '??? ?????? ?????????',
                       ),
                       style: ElevatedButton.styleFrom(
                         padding: const EdgeInsets.symmetric(vertical: 16),
@@ -330,7 +327,7 @@ class _ConnectionTestScreenState extends State<ConnectionTestScreen> {
                     ),
                   if (_isConnected == true) const SizedBox(height: 16),
 
-                  // نمایش نتیجه
+                  // ????? ?????
                   if (_connectionResult != null)
                     Container(
                       padding: const EdgeInsets.all(16),

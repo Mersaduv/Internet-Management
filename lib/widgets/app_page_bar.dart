@@ -20,17 +20,17 @@ class AppPageBar extends StatelessWidget implements PreferredSizeWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-    final primaryColor = AppTheme.primaryFor(theme.brightness);
+    final appBarColor = AppTheme.appBarFor(theme.brightness);
+    final onBar = AppTheme.onAppBar(theme.brightness);
 
     return Container(
       decoration: BoxDecoration(
-        color: primaryColor,
+        color: appBarColor,
         boxShadow: [
           BoxShadow(
             color: theme.brightness == Brightness.dark
-                ? Colors.black.withOpacity(0.3)
-                : Colors.black.withOpacity(0.05),
+                ? Colors.black.withValues(alpha: 0.28)
+                : Colors.black.withValues(alpha: 0.05),
             blurRadius: 10,
             offset: const Offset(0, 2),
           ),
@@ -40,18 +40,14 @@ class AppPageBar extends StatelessWidget implements PreferredSizeWidget {
         title: Text(
           title,
           overflow: TextOverflow.ellipsis,
-          style: TextStyle(
-            color: theme.brightness == Brightness.dark
-                ? colorScheme.onSurface
-                : Colors.white,
-          ),
+          maxLines: 1,
+          style: TextStyle(color: onBar, fontSize: 17, fontWeight: FontWeight.w600),
         ),
         actions: actions,
         automaticallyImplyLeading: automaticallyImplyLeading,
         backgroundColor: Colors.transparent,
-        foregroundColor: theme.brightness == Brightness.dark
-            ? colorScheme.onSurface
-            : Colors.white,
+        foregroundColor: onBar,
+        iconTheme: IconThemeData(color: onBar),
         elevation: 0,
         shadowColor: Colors.transparent,
         surfaceTintColor: Colors.transparent,

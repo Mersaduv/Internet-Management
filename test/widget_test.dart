@@ -1,4 +1,4 @@
-// This is a basic Flutter widget test.
+﻿// This is a basic Flutter widget test.
 //
 // To perform an interaction with a widget in your test, use the WidgetTester
 // utility in the flutter_test package. For example, you can send tap and scroll
@@ -7,7 +7,7 @@
 
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:Ariyabod/main.dart';
+import 'package:abar_tawseeh_ict/main.dart';
 
 void main() {
   testWidgets('App starts smoke test', (WidgetTester tester) async {

@@ -3,7 +3,7 @@ import '../services/settings_service.dart';
 import '../utils/app_localizations.dart';
 import '../utils/app_theme.dart';
 
-/// صفحه تنظیمات اتصال MikroTik
+/// ???? ??????? ????? MikroTik
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
 
@@ -74,7 +74,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _successMessage = l10n?.settingsSaved ?? 'Settings saved successfully';
       });
 
-      // پاک کردن پیام موفقیت بعد از 3 ثانیه
+      // ??? ???? ???? ?????? ??? ?? 3 ?????
       Future.delayed(const Duration(seconds: 3), () {
         if (mounted) {
           setState(() {
@@ -147,7 +147,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         preferredSize: const Size.fromHeight(kToolbarHeight),
         child: Container(
           decoration: BoxDecoration(
-            color: primaryColor,
+            color: AppTheme.appBarFor(theme.brightness),
             boxShadow: [
               BoxShadow(
                 color: theme.brightness == Brightness.dark
@@ -165,15 +165,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 title: Text(
                   l10n?.connectionSettings ?? 'Connection Settings',
                   style: TextStyle(
-                    color: theme.brightness == Brightness.dark
-                        ? colorScheme.onSurface
-                        : Colors.white,
+                    color: AppTheme.onAppBar(theme.brightness),
                   ),
                 ),
                 backgroundColor: Colors.transparent,
-                foregroundColor: theme.brightness == Brightness.dark
-                    ? colorScheme.onSurface
-                    : Colors.white,
+                foregroundColor: AppTheme.onAppBar(theme.brightness),
+                iconTheme: IconThemeData(color: AppTheme.onAppBar(theme.brightness)),
                 elevation: 0,
                 shadowColor: Colors.transparent,
                 surfaceTintColor: Colors.transparent,
@@ -191,7 +188,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    // کارت تنظیمات
+                    // ???? ???????
                     Card(
                       elevation: 2,
                       color: colorScheme.surface,
@@ -216,7 +213,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             ),
                             const SizedBox(height: 24),
 
-                            // فیلد Host/IP
+                            // ???? Host/IP
                             TextFormField(
                               controller: _hostController,
                               decoration: InputDecoration(
@@ -240,7 +237,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             ),
                             const SizedBox(height: 16),
 
-                            // فیلد Port
+                            // ???? Port
                             Row(
                               children: [
                                 Expanded(
@@ -249,7 +246,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                     controller: _portController,
                                     decoration: InputDecoration(
                                       labelText: l10n?.port ?? 'Port',
-                                      hintText: '2752',
+                                      hintText: '8728',
                                       prefixIcon: const Icon(Icons.numbers),
                                       border: OutlineInputBorder(
                                         borderRadius: BorderRadius.circular(12),
@@ -298,7 +295,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
                     const SizedBox(height: 16),
 
-                    // پیام موفقیت
+                    // ???? ??????
                     if (_successMessage != null)
                       Container(
                         padding: const EdgeInsets.all(12),
@@ -333,7 +330,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         ),
                       ),
 
-                    // پیام خطا
+                    // ???? ???
                     if (_errorMessage != null)
                       Container(
                         padding: const EdgeInsets.all(12),
@@ -372,7 +369,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         ),
                       ),
 
-                    // دکمه ذخیره
+                    // ???? ?????
                     ElevatedButton.icon(
                       onPressed: _isSaving ? null : _saveSettings,
                       icon: _isSaving
@@ -399,7 +396,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
                     const SizedBox(height: 12),
 
-                    // دکمه بازنشانی
+                    // ???? ????????
                     OutlinedButton.icon(
                       onPressed: _resetToDefaults,
                       icon: const Icon(Icons.restore),

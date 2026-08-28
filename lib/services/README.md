@@ -21,7 +21,7 @@ final service = MikroTikService();
 
 final connection = MikroTikConnection(
   host: '192.168.88.1',
-  port: 2752,
+  port: 8728,
   username: 'admin',
   password: 'password',
   useSsl: false, // true برای SSL

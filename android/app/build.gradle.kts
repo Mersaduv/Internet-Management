@@ -43,11 +43,11 @@ android {
 
     // تنظیم نام خودکار فایل APK/AAB
     // Developer: Mersad Karimi <mersadkarimi001@gmail.com>
-    // فرمت خروجی: Ariyabod-v1.0.0(1)-release.apk
+    // فرمت خروجی: Abar_Tawseeh_ICT-v1.0.0(1)-release.apk
     // این کد به صورت خودکار نام فایل APK را بر اساس نام برنامه، نسخه و نوع build تنظیم می‌کند
     applicationVariants.all {
         val variant = this
-        val appName = "Ariyabod"
+        val appName = "Abar_Tawseeh_ICT"
         val versionName = variant.versionName
         val versionCode = variant.versionCode
         val buildType = variant.buildType.name

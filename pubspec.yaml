@@ -1,5 +1,5 @@
-name: Ariyabod
-description: "A tool that allow you to manage your internet"
+name: abar_tawseeh_ict
+description: "شرکت خدمات تکنالوژی ابر توسعه — Abar Tawseeh ICT internet management"
 # Developer Information
 # Developer: Mersad Karimi
 # Email: mersadkarimi001@gmail.com
@@ -89,10 +89,10 @@ flutter:
 
   # Assets
   assets:
-    - assets/images/logos/logo.png
-    - assets/images/logos/logo_dark.png
-    - assets/icons/logo_sm.png
-    - assets/icon/logo_sm.png
+    - assets/images/logos/Abar_Tawseeh_ICT_logo.png
+    - assets/images/logos/Abar_Tawseeh_ICT_logo_circle.png
+    - assets/icons/Abar_Tawseeh_ICT_logo_circle.png
+    - assets/icon/Abar_Tawseeh_ICT_logo_circle.png
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images
@@ -121,7 +121,16 @@ flutter:
 flutter_launcher_icons:
   android: true
   ios: true
-  image_path: "assets/icon/logo_sm.png"
+  web:
+    generate: true
+    image_path: "assets/icon/Abar_Tawseeh_ICT_logo_circle_launcher.png"
+    background_color: "#FFFFFF"
+    theme_color: "#00183C"
+  windows:
+    generate: true
+    image_path: "assets/icon/Abar_Tawseeh_ICT_logo_circle_launcher.png"
+    icon_size: 256
+  image_path: "assets/icon/Abar_Tawseeh_ICT_logo_circle_launcher.png"
   adaptive_icon_background: "#FFFFFF"
-  adaptive_icon_foreground: "assets/icon/logo_sm.png"
+  adaptive_icon_foreground: "assets/icon/Abar_Tawseeh_ICT_logo_circle_launcher.png"
   remove_alpha_ios: true  # حذف alpha channel برای iOS (مطابق با قوانین App Store)

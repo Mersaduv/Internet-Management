@@ -53,7 +53,8 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
   late final TextEditingController _leaseNameController;
   String? _displayHostName;
 
-  static const Color _primaryColor = AppTheme.primary;
+  Color get _primaryColor =>
+      AppTheme.primaryFor(Theme.of(context).brightness);
 
   bool get _allowDeviceActions =>
       ClientDisplayPolicy.shouldAllowDeviceActions(widget.device);
@@ -358,7 +359,7 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
                                   children: [
                                     Row(
                                       children: [
-                                        const Icon(
+                                        Icon(
                                           Icons.speed,
                                           color: _primaryColor,
                                           size: 28,
@@ -392,7 +393,7 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
                                                 selectedUploadUnit = value;
                                               }),
                                           icon: Icons.upload,
-                                          color: AppTheme.primary,
+                                          color: AppTheme.primaryFor(Theme.of(context).brightness),
                                           label: 'Upload',
                                         );
                                         final downloadField = speedField(
@@ -674,7 +675,7 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
                   // هدر
                   Row(
                     children: [
-                      const Icon(Icons.speed, color: _primaryColor, size: 32),
+                      Icon(Icons.speed, color: _primaryColor, size: 32),
                       const SizedBox(width: 12),
                       Expanded(
                         child: Builder(
@@ -818,9 +819,9 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
                         // فیلد سرعت آپلود
                         Row(
                           children: [
-                            const Icon(
+                            Icon(
                               Icons.upload,
-                              color: AppTheme.primary,
+                              color: AppTheme.primaryFor(Theme.of(context).brightness),
                               size: 20,
                             ),
                             const SizedBox(width: 8),
@@ -832,7 +833,7 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
                                   style: TextStyle(
                                     fontSize: 18,
                                     fontWeight: FontWeight.bold,
-                                    color: AppTheme.primary,
+                                    color: AppTheme.primaryFor(Theme.of(context).brightness),
                                   ),
                                 );
                               },
@@ -1170,7 +1171,7 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
                 ),
               ],
             ),
-            backgroundColor: AppTheme.primary,
+            backgroundColor: AppTheme.primaryFor(Theme.of(context).brightness),
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -1282,15 +1283,15 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
         await _clearSpeedLimitCache();
 
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Row(
+          SnackBar(
+            content: const Row(
               children: [
                 Icon(Icons.check_circle, color: Colors.white),
                 SizedBox(width: 8),
                 Expanded(child: Text('سرعت اختصاصی حذف شد')),
               ],
             ),
-            backgroundColor: AppTheme.primary,
+            backgroundColor: AppTheme.primaryFor(Theme.of(context).brightness),
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -1649,12 +1650,12 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
             decoration: BoxDecoration(
               color: theme.brightness == Brightness.dark
                   ? colorScheme.surfaceContainerHighest.withOpacity(0.35)
-                  : const Color(0xFFF4F7F6),
+                  : AppTheme.cableWhite,
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
                 color: theme.brightness == Brightness.dark
                     ? colorScheme.outline.withOpacity(0.25)
-                    : const Color(0xFFD7E5E1),
+                    : AppTheme.silver.withValues(alpha: 0.45),
               ),
             ),
             child: Column(
@@ -1853,7 +1854,7 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
             ElevatedButton(
               onPressed: () => Navigator.pop(context, true),
               style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.primary,
+                backgroundColor: AppTheme.primaryFor(Theme.of(context).brightness),
                 foregroundColor: Colors.white,
               ),
               child: Text(l10n?.unbanDevice ?? 'Unban Device'),
@@ -2047,7 +2048,7 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
                                     bottom: 0,
                                     child: Container(
                                       padding: const EdgeInsets.all(4),
-                                      decoration: const BoxDecoration(
+                                      decoration: BoxDecoration(
                                         color: _primaryColor,
                                         shape: BoxShape.circle,
                                       ),
@@ -2484,7 +2485,7 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
                                     backgroundColor:
                                         theme.brightness == Brightness.dark
                                         ? AppTheme.primaryDark
-                                        : AppTheme.primary,
+                                        : AppTheme.primaryFor(Theme.of(context).brightness),
                                     foregroundColor: Colors.white,
                                     padding: const EdgeInsets.symmetric(
                                       vertical: 16,
@@ -2592,9 +2593,9 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
                 if (showSpeedValues) ...[
                   Row(
                     children: [
-                      const Icon(
+                      Icon(
                         Icons.upload,
-                        color: AppTheme.primary,
+                        color: AppTheme.primaryFor(Theme.of(context).brightness),
                         size: 16,
                       ),
                       const SizedBox(width: 6),
@@ -2607,10 +2608,10 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
                       ),
                       Text(
                         uploadSpeed,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.w600,
-                          color: AppTheme.primary,
+                          color: AppTheme.primaryFor(Theme.of(context).brightness),
                         ),
                         textDirection: TextDirection.ltr,
                       ),

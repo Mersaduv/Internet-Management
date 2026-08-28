@@ -209,7 +209,7 @@ class _InternetServiceScreenState extends State<InternetServiceScreen> {
         preferredSize: const Size.fromHeight(kToolbarHeight),
         child: Container(
           decoration: BoxDecoration(
-            color: primaryColor,
+            color: AppTheme.appBarFor(theme.brightness),
             boxShadow: [
               BoxShadow(
                 color: theme.brightness == Brightness.dark
@@ -225,15 +225,12 @@ class _InternetServiceScreenState extends State<InternetServiceScreen> {
               _pageTitle ?? widget.defaultTitle ?? 'سرویس انترنت',
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
-                color: theme.brightness == Brightness.dark
-                    ? colorScheme.onSurface
-                    : Colors.white,
+                color: AppTheme.onAppBar(theme.brightness),
               ),
             ),
             backgroundColor: Colors.transparent,
-            foregroundColor: theme.brightness == Brightness.dark
-                ? colorScheme.onSurface
-                : Colors.white,
+            foregroundColor: AppTheme.onAppBar(theme.brightness),
+            iconTheme: IconThemeData(color: AppTheme.onAppBar(theme.brightness)),
             elevation: 0,
             shadowColor: Colors.transparent,
             surfaceTintColor: Colors.transparent,

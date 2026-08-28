@@ -26,8 +26,9 @@ class AppLocalizations {
       : 'خطا در تغییر زبان';
 
   // 应用标题
-  String get appTitle =>
-      locale.languageCode == 'en' ? 'Internet Management' : 'مدیریت انترنت';
+  String get appTitle => locale.languageCode == 'en'
+      ? 'Abar Tawseeh ICT'
+      : 'خدمات تکنالوژی ابر توسعه';
 
   // 设置页面
   String get settings => locale.languageCode == 'en' ? 'Settings' : 'تنظیمات';

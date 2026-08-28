@@ -136,11 +136,12 @@ class _WifiLoadingPlaceholderState extends State<_WifiLoadingPlaceholder> {
     }
 
     if (_errorMessage != null) {
+      final brightness = Theme.of(context).brightness;
       return Scaffold(
         appBar: AppBar(
           title: Text(l10n?.wifiSettings ?? 'تنظیمات وایفای'),
-          backgroundColor: primaryColor,
-          foregroundColor: Colors.white,
+          backgroundColor: AppTheme.appBarFor(brightness),
+          foregroundColor: AppTheme.onAppBar(brightness),
         ),
         body: Center(
           child: Padding(
@@ -161,11 +162,12 @@ class _WifiLoadingPlaceholderState extends State<_WifiLoadingPlaceholder> {
       );
     }
 
+    final brightness = Theme.of(context).brightness;
     return Scaffold(
       appBar: AppBar(
         title: Text(l10n?.wifiSettings ?? 'تنظیمات وایفای'),
-        backgroundColor: primaryColor,
-        foregroundColor: Colors.white,
+        backgroundColor: AppTheme.appBarFor(brightness),
+        foregroundColor: AppTheme.onAppBar(brightness),
       ),
       body: Center(
         child: Column(
@@ -441,8 +443,8 @@ class _WifiNativeSettingsScreenState extends State<WifiNativeSettingsScreen> {
               ? (l10n?.wifiSaveSuccessTitle ?? 'اطلاعات با موفقیت ذخیره شد')
               : (l10n?.wifiSettings ?? 'تنظیمات وایفای'),
         ),
-        backgroundColor: primaryColor,
-        foregroundColor: Colors.white,
+        backgroundColor: AppTheme.appBarFor(theme.brightness),
+        foregroundColor: AppTheme.onAppBar(theme.brightness),
         automaticallyImplyLeading: !isSuccess,
       ),
       body: _buildBody(l10n, theme),
@@ -736,7 +738,7 @@ class _WifiNativeSettingsScreenState extends State<WifiNativeSettingsScreen> {
                       decoration: BoxDecoration(
                         color: isDark
                             ? colorScheme.surfaceContainerHighest
-                            : const Color(0xFFF4F7F6),
+                            : AppTheme.cableWhite,
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(
                           color: colorScheme.outline.withOpacity(0.15),

@@ -1,6 +1,6 @@
-import 'package:flutter_test/flutter_test.dart';
-import 'package:Ariyabod/models/client_info.dart';
-import 'package:Ariyabod/utils/client_display_name.dart';
+﻿import 'package:flutter_test/flutter_test.dart';
+import 'package:abar_tawseeh_ict/models/client_info.dart';
+import 'package:abar_tawseeh_ict/utils/client_display_name.dart';
 
 void main() {
   group('ClientDisplayName', () {
@@ -46,12 +46,12 @@ void main() {
 
     test('ignores ban markers in lease comment', () {
       expect(
-        ClientDisplayName.displayNameFromLeaseComment('[Ariyabod BAN] Guest'),
+        ClientDisplayName.displayNameFromLeaseComment('[AbarTawseeh BAN] Guest'),
         isNull,
       );
       expect(
         ClientDisplayName.displayNameFromLease({
-          'comment': '[Ariyabod STATIC] Office PC',
+          'comment': '[AbarTawseeh STATIC] Office PC',
           'host-name': 'pc-01',
         }),
         'Office PC',

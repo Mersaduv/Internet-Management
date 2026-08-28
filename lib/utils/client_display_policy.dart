@@ -23,9 +23,9 @@ class ClientDisplayPolicy {
     return hasValidIp(client.ipAddress);
   }
 
-  /// Connected tab — every device with a usable IP (pending approval included).
+  /// Connected tab — فقط دستگاه‌هایی که آنلاین تشخیص داده شده‌اند.
   static bool shouldShowInConnectedListUi(ClientInfo client) {
-    return shouldShowInConnectedList(client);
+    return shouldShowInConnectedList(client) && client.isOnline == true;
   }
 
   /// Ban, speed, lease rename, etc. require a target IP.

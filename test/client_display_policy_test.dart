@@ -1,6 +1,6 @@
-import 'package:flutter_test/flutter_test.dart';
-import 'package:Ariyabod/models/client_info.dart';
-import 'package:Ariyabod/utils/client_display_policy.dart';
+﻿import 'package:flutter_test/flutter_test.dart';
+import 'package:abar_tawseeh_ict/models/client_info.dart';
+import 'package:abar_tawseeh_ict/utils/client_display_policy.dart';
 
 void main() {
   test('mac-only wireless hidden from list', () {
@@ -27,7 +27,7 @@ void main() {
     expect(ClientDisplayPolicy.shouldAllowDeviceActions(client), isTrue);
   });
 
-  test('all clients with IP shown in connected UI (pending included)', () {
+  test('connected UI shows only devices detected as online', () {
     final offline = ClientInfo(
       type: 'dhcp',
       source: 'dhcp_lease',
@@ -51,9 +51,11 @@ void main() {
       isOnline: true,
       rawData: const {},
     );
-    expect(ClientDisplayPolicy.shouldShowInConnectedListUi(offline), isTrue);
-    expect(ClientDisplayPolicy.shouldShowInConnectedListUi(unknown), isTrue);
+    expect(ClientDisplayPolicy.shouldShowInConnectedListUi(offline), isFalse);
+    expect(ClientDisplayPolicy.shouldShowInConnectedListUi(unknown), isFalse);
     expect(ClientDisplayPolicy.shouldShowInConnectedListUi(online), isTrue);
+    expect(ClientDisplayPolicy.shouldShowInConnectedList(offline), isTrue);
+    expect(ClientDisplayPolicy.shouldShowInConnectedList(unknown), isTrue);
   });
 
   test('CPE board skips wireless enrichment', () {

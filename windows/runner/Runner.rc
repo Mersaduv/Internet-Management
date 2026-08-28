@@ -89,13 +89,13 @@ BEGIN
     BEGIN
         BLOCK "040904e4"
         BEGIN
-            VALUE "CompanyName", "Ariyabod" "\0"
-            VALUE "FileDescription", "Ariyabod" "\0"
+            VALUE "CompanyName", "Abar Tawseeh ICT" "\0"
+            VALUE "FileDescription", "Abar Tawseeh ICT" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
-            VALUE "InternalName", "Ariyabod" "\0"
-            VALUE "LegalCopyright", "Copyright (C) 2026 Ariyabod. All rights reserved." "\0"
-            VALUE "OriginalFilename", "Ariyabod.exe" "\0"
-            VALUE "ProductName", "Ariyabod" "\0"
+            VALUE "InternalName", "Abar_Tawseeh_ICT" "\0"
+            VALUE "LegalCopyright", "Copyright (C) 2026 Abar Tawseeh ICT. All rights reserved." "\0"
+            VALUE "OriginalFilename", "Abar_Tawseeh_ICT.exe" "\0"
+            VALUE "ProductName", "Abar Tawseeh ICT" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END

@@ -28,7 +28,7 @@ class ClientsProvider extends ChangeNotifier {
   static const Duration _onlineRefreshTimeout = MikrotikTimeouts.onlineRefresh;
   static const Duration _unbanTimeout = Duration(seconds: 45);
   static const Duration _lockStatusCacheTtl = Duration(seconds: 30);
-  static const String _banMarker = '[Ariyabod BAN]';
+  static const String _banMarker = '[AbarTawseeh BAN]';
   static const int offlineThresholdSeconds = 300;
   static const Duration statusRefreshInterval =
       MikrotikTimeouts.statusRefreshInterval;
@@ -593,8 +593,8 @@ class ClientsProvider extends ChangeNotifier {
       _visibleClientLimit = _displayClientsCache.length;
     }
     if (_displayClientsCache.isNotEmpty && _visibleClientLimit == 0) {
-      _visibleClientLimit = DeviceListPagination.initialPageSize.clamp(
-        1,
+      _visibleClientLimit = DeviceListPagination.clampLimit(
+        DeviceListPagination.initialPageSize,
         _displayClientsCache.length,
       );
     }
@@ -1205,8 +1205,8 @@ class ClientsProvider extends ChangeNotifier {
         _displayClientsCache.length,
       );
     } else {
-      _visibleClientLimit = DeviceListPagination.initialPageSize.clamp(
-        1,
+      _visibleClientLimit = DeviceListPagination.clampLimit(
+        DeviceListPagination.initialPageSize,
         _displayClientsCache.length,
       );
     }
@@ -1505,6 +1505,8 @@ class ClientsProvider extends ChangeNotifier {
       }
     }
 
+    // کش لیست و شمارش تب همیشه با فیلتر آنلاین همگام شود
+    _rebuildDisplayCache();
     if (anyChanged) {
       notifyListeners();
     }
@@ -1755,6 +1757,7 @@ class ClientsProvider extends ChangeNotifier {
         }
       }
 
+      _rebuildDisplayCache();
       if (anyChanged) {
         notifyListeners();
       }

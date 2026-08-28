@@ -171,7 +171,7 @@ class _TrafficBadgeBody extends StatelessWidget {
     final uploadColor = colorScheme.onSurface.withValues(alpha: 0.45);
     final bg = isDark
         ? colorScheme.surfaceContainerHighest.withValues(alpha: 0.35)
-        : AppTheme.primary.withValues(alpha: 0.06);
+        : AppTheme.primaryFor(theme.brightness).withValues(alpha: 0.06);
     final border = colorScheme.outline.withValues(alpha: isDark ? 0.18 : 0.12);
 
     return Container(

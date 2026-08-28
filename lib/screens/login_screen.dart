@@ -217,27 +217,33 @@ class _LoginScreenState extends State<LoginScreen> {
                     // لوگو (بزرگ‌تر و کمی پایین‌تر تا به فیلدها نزدیک شود)
                     Center(
                       child: Image.asset(
-                        isDark
-                            ? 'assets/images/logos/logo_dark.png'
-                            : 'assets/images/logos/logo.png',
+                        'assets/images/logos/Abar_Tawseeh_ICT_logo.png',
                         height: logoSize,
-                        width: logoSize,
+                        fit: BoxFit.contain,
                         errorBuilder: (context, error, stackTrace) {
-                          // اگر لوگو پیدا نشد، از آیکون استفاده کن
-                          return Container(
-                            width: logoSize,
+                          // اگر لوگو پیدا نشد، از آیکون دایره‌ای استفاده کن
+                          return Image.asset(
+                            'assets/icons/Abar_Tawseeh_ICT_logo_circle.png',
                             height: logoSize,
-                            decoration: BoxDecoration(
-                              color: isDark
-                                  ? primaryColor.withOpacity(0.14)
-                                  : primaryColor.withOpacity(0.1),
-                              shape: BoxShape.circle,
-                            ),
-                            child: Icon(
-                              Icons.router,
-                              size: logoSize * 0.39,
-                              color: primaryColor,
-                            ),
+                            width: logoSize,
+                            fit: BoxFit.contain,
+                            errorBuilder: (context, error, stackTrace) {
+                              return Container(
+                                width: logoSize,
+                                height: logoSize,
+                                decoration: BoxDecoration(
+                                  color: isDark
+                                      ? primaryColor.withOpacity(0.14)
+                                      : primaryColor.withOpacity(0.1),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: Icon(
+                                  Icons.router,
+                                  size: logoSize * 0.39,
+                                  color: primaryColor,
+                                ),
+                              );
+                            },
                           );
                         },
                       ),
@@ -590,6 +596,24 @@ class _LoginScreenState extends State<LoginScreen> {
                                   ),
                                 ],
                               ),
+                      ),
+                    ),
+
+                    const SizedBox(height: 20),
+                    // شماره تماس پشتیبانی
+                    Center(
+                      child: Text(
+                        'شماره تماس: 0799509494',
+                        textAlign: TextAlign.center,
+                        textDirection: TextDirection.rtl,
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                          color: isDark
+                              ? colorScheme.onSurface.withOpacity(0.7)
+                              : Colors.grey.shade700,
+                          letterSpacing: 0.3,
+                        ),
                       ),
                     ),
 

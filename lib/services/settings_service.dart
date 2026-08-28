@@ -70,7 +70,7 @@ class SettingsService {
     }
   }
 
-  /// دریافت Port — همیشه پورت API پروژه (2752)
+  /// دریافت Port — همیشه پورت API پروژه (8728)
   Future<int> getPort() async {
     if (_cachedPort == MikroTikConnection.apiPort) {
       return MikroTikConnection.apiPort;
@@ -90,7 +90,7 @@ class SettingsService {
     return MikroTikConnection.apiPort;
   }
 
-  /// ذخیره Port — پورت API همیشه 2752 است
+  /// ذخیره Port — پورت API همیشه 8728 است
   Future<void> setPort(int port) async {
     _cachedPort = MikroTikConnection.apiPort;
     try {

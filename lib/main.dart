@@ -1,6 +1,6 @@
 import 'dart:async';
 
-/// Internet Management Application
+/// Abar Tawseeh ICT — شرکت خدمات تکنالوژی ابر توسعه
 ///
 /// Developer: Mersad Karimi
 /// Email: mersadkarimi001@gmail.com
@@ -202,7 +202,7 @@ class _MyAppState extends State<MyApp> {
         themeMode: _themeMode,
         home: Scaffold(
           body: Center(
-            child: CircularProgressIndicator(color: AppTheme.primary),
+            child: CircularProgressIndicator(color: AppTheme.primaryFor(Theme.of(context).brightness)),
           ),
         ),
       );
@@ -212,7 +212,7 @@ class _MyAppState extends State<MyApp> {
       create: (_) => ClientsProvider(),
       child: MaterialApp(
         navigatorKey: _navigatorKey,
-        title: 'Internet Management',
+        title: 'Abar Tawseeh ICT',
         debugShowCheckedModeBanner: false,
         theme: AppTheme.buildTheme(
           brightness: Brightness.light,
@@ -325,21 +325,20 @@ class _SplashScreenState extends State<SplashScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Scaffold(
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Image.asset(
-              isDark
-                  ? 'assets/images/logos/logo_dark.png'
-                  : 'assets/images/logos/logo.png',
-              width: 120,
-              height: 120,
+              'assets/images/logos/Abar_Tawseeh_ICT_logo.png',
+              width: 220,
+              fit: BoxFit.contain,
             ),
             const SizedBox(height: 24),
-            const CircularProgressIndicator(color: AppTheme.primary),
+            CircularProgressIndicator(
+              color: AppTheme.primaryFor(Theme.of(context).brightness),
+            ),
           ],
         ),
       ),
@@ -527,7 +526,7 @@ class _MainScaffoldState extends State<MainScaffold>
                 BoxShadow(
                   color: theme.brightness == Brightness.dark
                       ? Colors.black.withOpacity(0.28)
-                      : AppTheme.primary.withOpacity(0.12),
+                      : AppTheme.primaryFor(Theme.of(context).brightness).withOpacity(0.12),
                   blurRadius: 24,
                   offset: const Offset(0, 12),
                 ),
@@ -769,7 +768,7 @@ class _HomePageState extends State<HomePage> with RouteAware {
     required Future<void> Function() onRefresh,
   }) {
     return RefreshIndicator.adaptive(
-      color: AppTheme.primary,
+      color: AppTheme.primaryFor(Theme.of(context).brightness),
       onRefresh: onRefresh,
       child: child,
     );
@@ -802,7 +801,7 @@ class _HomePageState extends State<HomePage> with RouteAware {
         preferredSize: const Size.fromHeight(kToolbarHeight),
         child: Container(
           decoration: BoxDecoration(
-            color: AppTheme.primaryFor(theme.brightness),
+            color: AppTheme.appBarFor(theme.brightness),
             boxShadow: [
               BoxShadow(
                 color: theme.brightness == Brightness.dark
@@ -816,19 +815,42 @@ class _HomePageState extends State<HomePage> with RouteAware {
           child: Builder(
             builder: (context) {
               final l10n = AppLocalizations.of(context);
+              final title =
+                  l10n?.appTitle ?? 'Abar Tawseeh ICT';
+              final onBar = AppTheme.onAppBar(theme.brightness);
               return AppBar(
-                title: Text(
-                  l10n?.appTitle ?? 'Internet Management',
-                  style: TextStyle(
-                    color: theme.brightness == Brightness.dark
-                        ? colorScheme.onSurface
-                        : Colors.white,
-                  ),
+                title: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final maxW = constraints.maxWidth.isFinite
+                        ? constraints.maxWidth
+                        : MediaQuery.sizeOf(context).width - 48;
+                    final fontSize = maxW < 280
+                        ? 14.0
+                        : maxW < 360
+                            ? 15.5
+                            : 17.0;
+                    return SizedBox(
+                      width: maxW,
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: AlignmentDirectional.centerStart,
+                        child: Text(
+                          title,
+                          maxLines: 1,
+                          softWrap: false,
+                          style: TextStyle(
+                            color: onBar,
+                            fontSize: fontSize,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    );
+                  },
                 ),
                 backgroundColor: Colors.transparent,
-                foregroundColor: theme.brightness == Brightness.dark
-                    ? colorScheme.onSurface
-                    : Colors.white,
+                foregroundColor: onBar,
+                iconTheme: IconThemeData(color: onBar),
                 elevation: 0,
                 shadowColor: Colors.transparent,
                 surfaceTintColor: Colors.transparent,
@@ -1316,8 +1338,8 @@ class _HomePageState extends State<HomePage> with RouteAware {
                         icon: const Icon(Icons.refresh),
                         label: Text(l10n?.retry ?? 'Retry'),
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: AppTheme.primary,
-                          foregroundColor: Colors.white,
+                          backgroundColor: AppTheme.primaryFor(Theme.of(context).brightness),
+                          foregroundColor: AppTheme.pureWhite,
                         ),
                       );
                     },
@@ -1331,6 +1353,22 @@ class _HomePageState extends State<HomePage> with RouteAware {
     }
 
     if (provider.clientsForDisplay.isEmpty) {
+      // تا تشخیص آنلاین (phase2) اسکلتون؛ بعد از آن پیام خالی
+      if (!provider.phase2Complete) {
+        return Column(
+          children: [
+            Expanded(
+              child: ListView.builder(
+                itemCount: 5,
+                itemBuilder: (context, index) {
+                  return _buildSkeletonCard();
+                },
+              ),
+            ),
+          ],
+        );
+      }
+
       return Builder(
         builder: (context) {
           final theme = Theme.of(context);
@@ -1361,8 +1399,10 @@ class _HomePageState extends State<HomePage> with RouteAware {
                           builder: (context) {
                             final l10n = AppLocalizations.of(context);
                             return Text(
-                              l10n?.noConnectedDevices ??
-                                  'No connected devices found',
+                              l10n?.locale.languageCode == 'fa'
+                                  ? 'دستگاه آنلاینی یافت نشد'
+                                  : (l10n?.noConnectedDevices ??
+                                        'No online devices found'),
                               style: TextStyle(
                                 color: theme.brightness == Brightness.dark
                                     ? colorScheme.onSurface.withOpacity(0.6)
@@ -1746,9 +1786,9 @@ class _HomePageState extends State<HomePage> with RouteAware {
                     builder: (context) {
                       final l10n = AppLocalizations.of(context);
                       return IconButton(
-                        icon: const Icon(
+                        icon: Icon(
                           Icons.lock_open,
-                          color: AppTheme.primary,
+                          color: AppTheme.primaryFor(Theme.of(context).brightness),
                         ),
                         tooltip: l10n?.unbanDeviceTooltip ?? 'Unban Device',
                         onPressed: () async {
@@ -1787,8 +1827,8 @@ class _HomePageState extends State<HomePage> with RouteAware {
                                 ElevatedButton(
                                   onPressed: () => Navigator.pop(context, true),
                                   style: ElevatedButton.styleFrom(
-                                    backgroundColor: AppTheme.primary,
-                                    foregroundColor: Colors.white,
+                                    backgroundColor: AppTheme.primaryFor(Theme.of(context).brightness),
+                                    foregroundColor: AppTheme.pureWhite,
                                   ),
                                   child: Text(l10n?.unban ?? 'Unban'),
                                 ),
@@ -1833,7 +1873,7 @@ class _HomePageState extends State<HomePage> with RouteAware {
                                           ),
                                         ],
                                       ),
-                                      backgroundColor: AppTheme.primary,
+                                      backgroundColor: AppTheme.primaryFor(Theme.of(context).brightness),
                                       behavior: SnackBarBehavior.floating,
                                       duration: Duration(seconds: 3),
                                     ),
@@ -1954,7 +1994,7 @@ class _HomePageState extends State<HomePage> with RouteAware {
             content: Text(
               l10n?.deviceBannedSuccess ?? 'Device banned successfully',
             ),
-            backgroundColor: AppTheme.primary,
+            backgroundColor: AppTheme.primaryFor(Theme.of(context).brightness),
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -1998,7 +2038,7 @@ class _HomePageState extends State<HomePage> with RouteAware {
                           : (l10n?.rejectError ?? 'Error rejecting device'))),
           ),
           backgroundColor: success
-              ? (approve ? AppTheme.primary : Colors.red)
+              ? (approve ? AppTheme.primaryFor(Theme.of(context).brightness) : Colors.red)
               : Colors.red,
           behavior: SnackBarBehavior.floating,
         ),
@@ -2010,7 +2050,7 @@ class _HomePageState extends State<HomePage> with RouteAware {
       required String label,
       required IconData icon,
     }) {
-      final color = approve ? AppTheme.primary : Colors.red.shade600;
+      final color = approve ? AppTheme.primaryFor(Theme.of(context).brightness) : Colors.red.shade600;
       return SizedBox(
         height: 38,
         child: ElevatedButton.icon(
@@ -2325,11 +2365,12 @@ class _HomePageState extends State<HomePage> with RouteAware {
             ),
           ),
           if (showOperationProgress)
-            const RepaintBoundary(
+            RepaintBoundary(
               child: LinearProgressIndicator(
                 minHeight: 2,
-                color: AppTheme.primary,
-                backgroundColor: AppTheme.primaryTint,
+                color: AppTheme.primaryFor(Theme.of(context).brightness),
+                backgroundColor:
+                    AppTheme.tintFor(Theme.of(context).brightness),
               ),
             ),
         ],

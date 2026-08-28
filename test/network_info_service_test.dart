@@ -1,5 +1,5 @@
-import 'package:Ariyabod/services/network_info_service.dart';
-import 'package:Ariyabod/utils/windows_default_gateway.dart';
+﻿import 'package:abar_tawseeh_ict/services/network_info_service.dart';
+import 'package:abar_tawseeh_ict/utils/windows_default_gateway.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
