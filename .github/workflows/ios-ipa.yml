@@ -11,6 +11,9 @@ on:
       - 'ios/**'
       - '.github/workflows/ios-ipa.yml'
 
+permissions:
+  contents: write
+
 jobs:
   build-ios-ipa:
     runs-on: macos-latest
@@ -55,3 +58,15 @@ jobs:
           name: Abar_Tawseeh_ICT-ipa
           path: Abar_Tawseeh_ICT-*.ipa
           retention-days: 90
+
+      - name: Publish IPA to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ios-ipa-${{ steps.version.outputs.app_version }}
+          name: iOS IPA ${{ steps.version.outputs.app_version }} (unsigned)
+          files: Abar_Tawseeh_ICT-*.ipa
+          prerelease: true
+          make_latest: true
+          body: |
+            Unsigned IPA for Scarlet / Sideloadly import.
+            Version from pubspec.yaml.
