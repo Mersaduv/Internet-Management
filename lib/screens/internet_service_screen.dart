@@ -84,12 +84,13 @@ class _InternetServiceScreenState extends State<InternetServiceScreen> {
 
   Future<void> _loadUrl() async {
     try {
-      final url = widget.fixedUrl ?? await _settingsService.getServiceUrl();
+      final url = (widget.fixedUrl ?? await _settingsService.getServiceUrl()).trim();
       if (mounted) {
         setState(() {
-          _currentUrl = url;
+          _currentUrl = url.isEmpty ? null : url;
           _errorMessage = null;
           _showError = false;
+          _isLoading = url.isNotEmpty;
         });
       }
     } catch (e) {
@@ -185,6 +186,12 @@ class _InternetServiceScreenState extends State<InternetServiceScreen> {
       await _settingsService.setServiceUrl(url);
 
       if (_webViewController != null) {
+        setState(() {
+          _currentUrl = url;
+          _errorMessage = null;
+          _showError = false;
+          _isLoading = true;
+        });
         await _webViewController!.loadUrl(
           urlRequest: URLRequest(url: WebUri(url)),
         );
@@ -193,6 +200,7 @@ class _InternetServiceScreenState extends State<InternetServiceScreen> {
           _currentUrl = url;
           _errorMessage = null;
           _showError = false;
+          _isLoading = true;
         });
       }
     }
@@ -265,8 +273,8 @@ class _InternetServiceScreenState extends State<InternetServiceScreen> {
       ),
       body: Stack(
         children: [
-          // WebView
-          if (!_showError && _currentUrl != null)
+          // WebView — فقط وقتی URL تنظیم شده باشد
+          if (!_showError && _currentUrl != null && _currentUrl!.isNotEmpty)
             InAppWebView(
               preventGestureDelay: true,
               initialUserScripts: UnmodifiableListView<UserScript>([
@@ -451,6 +459,57 @@ class _InternetServiceScreenState extends State<InternetServiceScreen> {
                         style: OutlinedButton.styleFrom(
                           foregroundColor: primaryColor,
                           side: BorderSide(color: primaryColor),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 24,
+                            vertical: 12,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            )
+          else if (_currentUrl == null || _currentUrl!.isEmpty)
+            // بدون URL پیش‌فرض — درخواست ورود آدرس
+            Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24.0),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.link_off,
+                      size: 64,
+                      color: Colors.grey.shade400,
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'آدرسی تنظیم نشده است',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.grey.shade800,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'برای باز کردن سرویس اینترنت، آدرس سایت را وارد کنید.',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey.shade600,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    if (widget.allowUrlChange) ...[
+                      const SizedBox(height: 24),
+                      ElevatedButton.icon(
+                        onPressed: _showUrlInputDialog,
+                        icon: const Icon(Icons.link),
+                        label: const Text('ورود آدرس'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: primaryColor,
+                          foregroundColor: Colors.white,
                           padding: const EdgeInsets.symmetric(
                             horizontal: 24,
                             vertical: 12,

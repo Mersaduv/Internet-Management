@@ -30,7 +30,9 @@ class SettingsService {
   // مقادیر پیش‌فرض
   static const String _defaultHost = '192.168.88.1';
   static const bool _defaultUseSsl = false;
-  static const String _defaultServiceUrl = 'http://user.ariyabod.af/users';
+  /// بدون لینک پیش‌فرض — کاربر آدرس را از صفحهٔ سرویس وارد می‌کند
+  static const String _defaultServiceUrl = '';
+  static const String _legacyDefaultServiceUrl = 'http://user.ariyabod.af/users';
   static const String _defaultLanguage = 'fa'; // 默认语言：波斯语
   static const String _defaultThemeMode = 'light'; // 默认主题：跟随系统
 
@@ -129,20 +131,32 @@ class SettingsService {
     }
   }
 
-  /// دریافت URL سرویس اینترنت
+  /// دریافت URL سرویس اینترنت (خالی = هنوز تنظیم نشده)
   Future<String> getServiceUrl() async {
     if (_cachedServiceUrl != null) {
       return _cachedServiceUrl!;
     }
-    
+
     try {
       final prefs = await SharedPreferences.getInstance();
-      _cachedServiceUrl = prefs.getString(_keyServiceUrl) ?? _defaultServiceUrl;
+      var url = prefs.getString(_keyServiceUrl) ?? _defaultServiceUrl;
+      // لینک قدیمی پیش‌فرض را پاک کن تا دیگر خودکار باز نشود
+      if (_isLegacyDefaultServiceUrl(url)) {
+        await prefs.remove(_keyServiceUrl);
+        url = _defaultServiceUrl;
+      }
+      _cachedServiceUrl = url;
       return _cachedServiceUrl!;
     } catch (e) {
       _cachedServiceUrl = _defaultServiceUrl;
       return _defaultServiceUrl;
     }
+  }
+
+  bool _isLegacyDefaultServiceUrl(String url) {
+    final normalized = url.trim().replaceAll(RegExp(r'/+$'), '');
+    final legacy = _legacyDefaultServiceUrl.replaceAll(RegExp(r'/+$'), '');
+    return normalized == legacy;
   }
 
   /// ذخیره URL سرویس اینترنت
