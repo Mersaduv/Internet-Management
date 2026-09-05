@@ -1,20 +1,14 @@
-# Abar Tawseeh ICT
+# Jahan Bit / جهان بیت
 
-شرکت خدمات تکنالوژی ابر توسعه — Abar Tawseeh ICT
+جهان بیت — Jahan Bit internet management
 
-A Flutter application for managing internet connections and MikroTik routers.
-
-## Developer
-
-**Name:** Mersad Karimi  
-**Email:** mersadkarimi001@gmail.com
-
-## Getting Started
+## Build
 
 ```bash
-flutter clean
 flutter pub get
 dart run flutter_launcher_icons
 flutter build apk --release
 flutter build windows --release
 ```
+
+Windows installer: `Jahan_Bit.iss` → `dist/installer/Jahan_Bit-Setup.exe`

@@ -1,6 +1,6 @@
 import 'dart:async';
 
-/// Abar Tawseeh ICT — شرکت خدمات تکنالوژی ابر توسعه
+/// Jahan Bit — جهان بیت
 ///
 /// Developer: Mersad Karimi
 /// Email: mersadkarimi001@gmail.com
@@ -15,6 +15,7 @@ import 'screens/login_screen.dart';
 import 'screens/connection_test_screen.dart';
 import 'screens/device_detail_screen.dart';
 import 'screens/internet_service_screen.dart';
+import 'screens/internet_packages_screen.dart';
 import 'screens/app_settings_screen.dart';
 import 'screens/wifi_settings_screen.dart';
 import 'services/mikrotik_service_manager.dart';
@@ -212,7 +213,7 @@ class _MyAppState extends State<MyApp> {
       create: (_) => ClientsProvider(),
       child: MaterialApp(
         navigatorKey: _navigatorKey,
-        title: 'Abar Tawseeh ICT',
+        title: 'Jahan Bit',
         debugShowCheckedModeBanner: false,
         theme: AppTheme.buildTheme(
           brightness: Brightness.light,
@@ -331,7 +332,7 @@ class _SplashScreenState extends State<SplashScreen> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Image.asset(
-              'assets/images/logos/Abar_Tawseeh_ICT_logo.png',
+              'assets/images/logos/new_logo_bit.png',
               width: 220,
               fit: BoxFit.contain,
             ),
@@ -504,6 +505,7 @@ class _MainScaffoldState extends State<MainScaffold>
         children: const [
           HomePage(),
           InternetServiceScreen(),
+          InternetPackagesScreen(),
           AppSettingsScreen(),
         ],
       ),
@@ -549,10 +551,16 @@ class _MainScaffoldState extends State<MainScaffold>
                     isActive: _currentIndex == 1,
                   ),
                   _buildNavItem(
-                    icon: Icons.settings_outlined,
-                    activeIcon: Icons.settings,
+                    icon: Icons.style_outlined,
+                    activeIcon: Icons.style,
                     index: 2,
                     isActive: _currentIndex == 2,
+                  ),
+                  _buildNavItem(
+                    icon: Icons.settings_outlined,
+                    activeIcon: Icons.settings,
+                    index: 3,
+                    isActive: _currentIndex == 3,
                   ),
                 ],
               ),
@@ -575,7 +583,7 @@ class _MainScaffoldState extends State<MainScaffold>
 
     return Expanded(
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 2),
         child: InkWell(
           onTap: () => _onTabTapped(index),
           borderRadius: BorderRadius.circular(22),
@@ -616,8 +624,8 @@ class _MainScaffoldState extends State<MainScaffold>
               children: [
                 AnimatedContainer(
                   duration: const Duration(milliseconds: 220),
-                  width: 44,
-                  height: 44,
+                  width: 40,
+                  height: 40,
                   decoration: BoxDecoration(
                     color: isActive
                         ? Colors.white.withOpacity(0.2)
@@ -629,7 +637,7 @@ class _MainScaffoldState extends State<MainScaffold>
                   child: Icon(
                     isActive ? activeIcon : icon,
                     color: isActive ? Colors.white : primaryColor,
-                    size: 30,
+                    size: 26,
                   ),
                 ),
               ],
@@ -816,7 +824,7 @@ class _HomePageState extends State<HomePage> with RouteAware {
             builder: (context) {
               final l10n = AppLocalizations.of(context);
               final title =
-                  l10n?.appTitle ?? 'Abar Tawseeh ICT';
+                  l10n?.appTitle ?? 'Jahan Bit';
               final onBar = AppTheme.onAppBar(theme.brightness);
               return AppBar(
                 title: LayoutBuilder(

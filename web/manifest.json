@@ -1,11 +1,11 @@
 {
-    "name": "Abar Tawseeh ICT",
-    "short_name": "Abar Tawseeh",
+    "name": "Jahan Bit",
+    "short_name": "Jahan Bit",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#FFFFFF",
-    "theme_color": "#00183C",
-    "description": "شرکت خدمات تکنالوژی ابر توسعه — Abar Tawseeh ICT",
+    "theme_color": "#0B1E3B",
+    "description": "جهان بیت — Jahan Bit internet management",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

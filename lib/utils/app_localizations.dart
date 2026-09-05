@@ -26,9 +26,8 @@ class AppLocalizations {
       : 'خطا در تغییر زبان';
 
   // 应用标题
-  String get appTitle => locale.languageCode == 'en'
-      ? 'Abar Tawseeh ICT'
-      : 'خدمات تکنالوژی ابر توسعه';
+  String get appTitle =>
+      locale.languageCode == 'en' ? 'Jahan Bit' : 'جهان بیت';
 
   // 设置页面
   String get settings => locale.languageCode == 'en' ? 'Settings' : 'تنظیمات';
@@ -100,6 +99,55 @@ class AppLocalizations {
   String get home => locale.languageCode == 'en' ? 'Home' : 'خانه';
   String get internetService =>
       locale.languageCode == 'en' ? 'Internet Service' : 'سرویس انترنت';
+  String get internetPackagesTitle => locale.languageCode == 'en'
+      ? 'Internet Packages'
+      : 'بسته‌های اینترنتی';
+  String get unlimitedPackagesTab => locale.languageCode == 'en'
+      ? 'Unlimited'
+      : 'نامحدود';
+  String get volumePackagesTab =>
+      locale.languageCode == 'en' ? 'Volume' : 'حجمی';
+  String get dedicatedPackagesTab =>
+      locale.languageCode == 'en' ? 'Dedicated' : 'ددیکیت';
+  String get unlimitedPackageBadge => locale.languageCode == 'en'
+      ? 'Unlimited Package'
+      : 'بسته نامحدود';
+  String get volumePackageBadge =>
+      locale.languageCode == 'en' ? 'Volume Package' : 'بسته حجمی';
+  String get dedicatedPackageBadge => locale.languageCode == 'en'
+      ? 'Dedicated Package'
+      : 'بسته ددیکیت';
+  String get daySpeedLabel =>
+      locale.languageCode == 'en' ? 'Day speed' : 'سرعت روزانه';
+  String get nightSpeedLabel =>
+      locale.languageCode == 'en' ? 'Night speed' : 'سرعت شبانه';
+  String get unlimitedPackagesNote => locale.languageCode == 'en'
+      ? 'Note: Unlimited package speed doubles from 11 PM to 7 AM.'
+      : 'نوت: سرعت بسته‌های نامحدود از ساعت ۱۱ شب تا ۷ صبح دو برابر می‌باشد.';
+  String get volumePackagesNote => locale.languageCode == 'en'
+      ? 'Note: Usage is free from 12 AM to 8 AM.'
+      : 'نوت: استفاده از این بسته‌ها از ساعت ۱۲ شب تا ۸ صبح رایگان می‌باشد.';
+  String durationMonthsLabel(int months) {
+    if (locale.languageCode == 'en') {
+      if (months == 12) return '1 Year';
+      if (months == 1) return '1 Month';
+      return '$months Months';
+    }
+    switch (months) {
+      case 1:
+        return 'یک ماه';
+      case 2:
+        return 'دو ماه';
+      case 3:
+        return 'سه ماه';
+      case 6:
+        return 'شش ماه';
+      case 12:
+        return 'یک سال';
+      default:
+        return '$months ماه';
+    }
+  }
   String get wifiInfo =>
       locale.languageCode == 'en' ? 'WiFi Information' : 'اطلاعات Wifi';
   String get wifiInfoSubtitle => locale.languageCode == 'en'

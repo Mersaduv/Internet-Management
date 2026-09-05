@@ -1,5 +1,5 @@
-name: abar_tawseeh_ict
-description: "شرکت خدمات تکنالوژی ابر توسعه — Abar Tawseeh ICT internet management"
+name: jahan_bit
+description: "جهان بیت — Jahan Bit internet management"
 # Developer Information
 # Developer: Mersad Karimi
 # Email: mersadkarimi001@gmail.com
@@ -20,7 +20,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.2.0+3
+version: 1.0.0+1
 
 environment:
   sdk: ^3.10.4
@@ -66,7 +66,7 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
 
-  # The "flutter_lints" package below contains a set of recommended lints to
+  # The "flutter_lints" package below contains a set of recommended lints that
   # encourage good coding practices. The lint set provided by the package is
   # activated in the `analysis_options.yaml` file located at the root of your
   # package. See that file for information about deactivating specific lint
@@ -89,10 +89,10 @@ flutter:
 
   # Assets
   assets:
-    - assets/images/logos/Abar_Tawseeh_ICT_logo.png
-    - assets/images/logos/Abar_Tawseeh_ICT_logo_circle.png
-    - assets/icons/Abar_Tawseeh_ICT_logo_circle.png
-    - assets/icon/Abar_Tawseeh_ICT_logo_circle.png
+    - assets/images/logos/new_logo_bit.png
+    - assets/images/logos/new_logo_bit_2.png
+    - assets/icons/new_logo_bit_2.png
+    - assets/icon/new_logo_bit_2.png
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images
@@ -117,20 +117,22 @@ flutter:
         - asset: assets/fonts/vazir/Vazir-Black.ttf
           weight: 900
 
-# تنظیمات Flutter Launcher Icons
+# تنظیمات Flutter Launcher Icons — از new_logo_bit، پس‌زمینه سفید، زوم بالا برای iOS/Windows
 flutter_launcher_icons:
   android: true
   ios: true
   web:
     generate: true
-    image_path: "assets/icon/Abar_Tawseeh_ICT_logo_circle_launcher.png"
+    image_path: "assets/icon/new_logo_bit_launcher.png"
     background_color: "#FFFFFF"
-    theme_color: "#00183C"
+    theme_color: "#0B1E3B"
   windows:
     generate: true
-    image_path: "assets/icon/Abar_Tawseeh_ICT_logo_circle_launcher.png"
+    image_path: "assets/icon/new_logo_bit_launcher.png"
     icon_size: 256
-  image_path: "assets/icon/Abar_Tawseeh_ICT_logo_circle_launcher.png"
+  image_path: "assets/icon/new_logo_bit_launcher.png"
   adaptive_icon_background: "#FFFFFF"
-  adaptive_icon_foreground: "assets/icon/Abar_Tawseeh_ICT_logo_circle_launcher.png"
-  remove_alpha_ios: true  # حذف alpha channel برای iOS (مطابق با قوانین App Store)
+  adaptive_icon_foreground: "assets/icon/new_logo_bit_launcher.png"
+  # inset کمتر = لوگو بزرگ‌تر در آیکون اندروید
+  adaptive_icon_foreground_inset: 8
+  remove_alpha_ios: true

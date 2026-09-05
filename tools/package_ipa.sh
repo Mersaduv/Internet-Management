@@ -6,7 +6,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
 VERSION="$(grep '^version:' pubspec.yaml | sed 's/version: //' | tr -d ' ')"
-OUT="Abar_Tawseeh_ICT-${VERSION}.ipa"
+OUT="Jahan_Bit-${VERSION}.ipa"
 APP="build/ios/iphoneos/Runner.app"
 
 if [[ ! -d "$APP" ]]; then

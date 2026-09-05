@@ -1,5 +1,5 @@
-﻿import 'package:abar_tawseeh_ict/models/client_info.dart';
-import 'package:abar_tawseeh_ict/utils/current_device_policy.dart';
+import 'package:jahan_bit/models/client_info.dart';
+import 'package:jahan_bit/utils/current_device_policy.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

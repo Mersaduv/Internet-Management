@@ -1,5 +1,5 @@
-﻿import 'package:abar_tawseeh_ict/services/network_info_service.dart';
-import 'package:abar_tawseeh_ict/utils/windows_default_gateway.dart';
+import 'package:jahan_bit/services/network_info_service.dart';
+import 'package:jahan_bit/utils/windows_default_gateway.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

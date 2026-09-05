@@ -26,10 +26,12 @@ class MikroTikService {
 
   static const Duration _apiTimeout = MikrotikTimeouts.defaultTalk;
   static const Duration _phaseTalkTimeout = MikrotikTimeouts.phaseTalk;
-  static const String _appPrefix = 'AbarTawseeh';
+  static const String _appPrefix = 'JahanBit';
   static const String _banMarker = '[$_appPrefix BAN]';
+  static const String _legacyBanMarker = '[AbarTawseeh BAN]';
   static const String _staticOnlyPool = 'static-only';
   static const String _staticMarker = '[$_appPrefix STATIC]';
+  static const String _legacyStaticMarker = '[AbarTawseeh STATIC]';
   static const Set<String> _wirelessUnsupportedBoardKeys = {
     'lhg5',
     'rblhg5nd',
@@ -137,9 +139,19 @@ class MikroTikService {
         rule['forwarding']?.toLowerCase() == 'no';
   }
 
+  bool _commentHasBanMarker(String? comment) {
+    final value = comment ?? '';
+    return value.contains(_banMarker) || value.contains(_legacyBanMarker);
+  }
+
+  bool _commentHasStaticMarker(String? comment) {
+    final value = comment ?? '';
+    return value.contains(_staticMarker) || value.contains(_legacyStaticMarker);
+  }
+
   bool _isManagedBanComment(String? comment) {
     final value = comment ?? '';
-    return value.contains(_banMarker) ||
+    return _commentHasBanMarker(value) ||
         value.contains('Banned via Flutter App') ||
         value.startsWith('Auto-banned:') ||
         value.startsWith('Banned:');
@@ -171,10 +183,15 @@ class MikroTikService {
   }
 
   String _withoutMarker(String? comment, String marker) {
-    return (comment ?? '')
-        .replaceAll(marker, '')
-        .replaceAll(RegExp(r'\s{2,}'), ' ')
-        .trim();
+    var value = comment ?? '';
+    value = value.replaceAll(marker, '');
+    if (marker == _banMarker) {
+      value = value.replaceAll(_legacyBanMarker, '');
+    }
+    if (marker == _staticMarker) {
+      value = value.replaceAll(_legacyStaticMarker, '');
+    }
+    return value.replaceAll(RegExp(r'\s{2,}'), ' ').trim();
   }
 
   String _leaseCommentWithDisplayName(
@@ -183,10 +200,10 @@ class MikroTikService {
   ) {
     final value = existingComment?.trim() ?? '';
     final preserved = <String>[];
-    if (value.contains(_staticMarker)) {
+    if (_commentHasStaticMarker(value)) {
       preserved.add(_staticMarker);
     }
-    if (value.contains(_banMarker)) {
+    if (_commentHasBanMarker(value)) {
       preserved.add(_banMarker);
     }
 
@@ -862,7 +879,7 @@ class MikroTikService {
 
       final comment = lease['comment'];
       final isBlocked = _isTruthy(lease['block-access']);
-      final hasMarker = (comment ?? '').contains(_banMarker);
+      final hasMarker = _commentHasBanMarker(comment);
 
       if (block) {
         if (isBlocked && !hasMarker) {
@@ -920,8 +937,7 @@ class MikroTikService {
       )) {
         continue;
       }
-      if (_isManagedBanComment(rule['comment']) ||
-          (rule['comment'] ?? '').contains(_banMarker)) {
+      if (_isManagedBanComment(rule['comment'])) {
         return true;
       }
     }
@@ -932,8 +948,7 @@ class MikroTikService {
     );
     for (final lease in leases) {
       if (_isTruthy(lease['block-access']) &&
-          ((lease['comment'] ?? '').contains(_banMarker) ||
-              _isManagedBanComment(lease['comment']))) {
+          _isManagedBanComment(lease['comment'])) {
         return true;
       }
     }

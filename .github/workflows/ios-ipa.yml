@@ -44,7 +44,7 @@ jobs:
       - name: Package IPA
         run: |
           VERSION="${{ steps.version.outputs.app_version }}"
-          OUT="Abar_Tawseeh_ICT-${VERSION}.ipa"
+          OUT="Jahan_Bit-${VERSION}.ipa"
           mkdir -p build/ipa/Payload
           cp -R build/ios/iphoneos/Runner.app build/ipa/Payload/
           cd build/ipa
@@ -55,8 +55,8 @@ jobs:
       - name: Upload IPA artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Abar_Tawseeh_ICT-ipa
-          path: Abar_Tawseeh_ICT-*.ipa
+          name: Jahan_Bit-ipa
+          path: Jahan_Bit-*.ipa
           retention-days: 90
 
       - name: Publish IPA to GitHub Release
@@ -64,7 +64,7 @@ jobs:
         with:
           tag_name: ios-ipa-${{ steps.version.outputs.app_version }}
           name: iOS IPA ${{ steps.version.outputs.app_version }} (unsigned)
-          files: Abar_Tawseeh_ICT-*.ipa
+          files: Jahan_Bit-*.ipa
           prerelease: true
           make_latest: true
           body: |

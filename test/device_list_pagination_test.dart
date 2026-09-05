@@ -1,6 +1,6 @@
-﻿import 'package:flutter_test/flutter_test.dart';
-import 'package:abar_tawseeh_ict/models/client_info.dart';
-import 'package:abar_tawseeh_ict/utils/device_list_pagination.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:jahan_bit/models/client_info.dart';
+import 'package:jahan_bit/utils/device_list_pagination.dart';
 
 void main() {
   group('DeviceListPagination', () {

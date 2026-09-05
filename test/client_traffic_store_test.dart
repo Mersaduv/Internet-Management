@@ -1,7 +1,7 @@
-﻿import 'package:flutter_test/flutter_test.dart';
-import 'package:abar_tawseeh_ict/models/client_info.dart';
-import 'package:abar_tawseeh_ict/models/client_traffic_rate.dart';
-import 'package:abar_tawseeh_ict/services/client_traffic_store.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:jahan_bit/models/client_info.dart';
+import 'package:jahan_bit/models/client_traffic_rate.dart';
+import 'package:jahan_bit/services/client_traffic_store.dart';
 
 void main() {
   test('tracking includes pending dynamic leases in display list', () {

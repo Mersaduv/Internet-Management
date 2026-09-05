@@ -1,6 +1,6 @@
-﻿import 'package:flutter_test/flutter_test.dart';
-import 'package:abar_tawseeh_ict/screens/wifi_settings_screen.dart';
-import 'package:abar_tawseeh_ict/utils/wifi_webview_boards.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:jahan_bit/screens/wifi_settings_screen.dart';
+import 'package:jahan_bit/utils/wifi_webview_boards.dart';
 
 void main() {
   group('catalog', () {

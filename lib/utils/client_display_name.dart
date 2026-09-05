@@ -2,8 +2,13 @@ import '../models/client_info.dart';
 
 /// Resolves human-readable device labels consistently across list and detail UI.
 abstract final class ClientDisplayName {
-  static const String banMarker = '[AbarTawseeh BAN]';
-  static const String staticMarker = '[AbarTawseeh STATIC]';
+  static const String banMarker = '[JahanBit BAN]';
+  static const String staticMarker = '[JahanBit STATIC]';
+  static const String legacyBanMarker = '[AbarTawseeh BAN]';
+  static const String legacyStaticMarker = '[AbarTawseeh STATIC]';
+
+  static const List<String> banMarkers = [banMarker, legacyBanMarker];
+  static const List<String> staticMarkers = [staticMarker, legacyStaticMarker];
 
   /// Best known friendly name, or null when only IP/MAC fallbacks remain.
   static String? resolveHostName(ClientInfo client) {
@@ -89,6 +94,8 @@ abstract final class ClientDisplayName {
     value = value
         .replaceAll(banMarker, '')
         .replaceAll(staticMarker, '')
+        .replaceAll(legacyBanMarker, '')
+        .replaceAll(legacyStaticMarker, '')
         .replaceAll(RegExp(r'\s{2,}'), ' ')
         .trim();
 
@@ -102,7 +109,7 @@ abstract final class ClientDisplayName {
   }
 
   static bool _isBannedComment(String value) {
-    return value.contains(banMarker) ||
+    return banMarkers.any(value.contains) ||
         value.contains('Banned via Flutter App') ||
         value.startsWith('Auto-banned:') ||
         value.startsWith('Banned:');

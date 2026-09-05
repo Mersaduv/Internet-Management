@@ -1,6 +1,6 @@
-﻿import 'package:flutter_test/flutter_test.dart';
-import 'package:abar_tawseeh_ict/models/client_info.dart';
-import 'package:abar_tawseeh_ict/utils/client_display_name.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:jahan_bit/models/client_info.dart';
+import 'package:jahan_bit/utils/client_display_name.dart';
 
 void main() {
   group('ClientDisplayName', () {
@@ -46,8 +46,19 @@ void main() {
 
     test('ignores ban markers in lease comment', () {
       expect(
+        ClientDisplayName.displayNameFromLeaseComment('[JahanBit BAN] Guest'),
+        isNull,
+      );
+      expect(
         ClientDisplayName.displayNameFromLeaseComment('[AbarTawseeh BAN] Guest'),
         isNull,
+      );
+      expect(
+        ClientDisplayName.displayNameFromLease({
+          'comment': '[JahanBit STATIC] Office PC',
+          'host-name': 'pc-01',
+        }),
+        'Office PC',
       );
       expect(
         ClientDisplayName.displayNameFromLease({

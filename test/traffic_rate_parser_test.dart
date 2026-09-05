@@ -1,6 +1,6 @@
-﻿import 'package:flutter_test/flutter_test.dart';
-import 'package:abar_tawseeh_ict/utils/format_traffic_rate.dart';
-import 'package:abar_tawseeh_ict/utils/traffic_rate_parser.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:jahan_bit/utils/format_traffic_rate.dart';
+import 'package:jahan_bit/utils/traffic_rate_parser.dart';
 
 void main() {
   group('TrafficRateParser', () {

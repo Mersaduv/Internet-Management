@@ -217,13 +217,13 @@ class _LoginScreenState extends State<LoginScreen> {
                     // لوگو (بزرگ‌تر و کمی پایین‌تر تا به فیلدها نزدیک شود)
                     Center(
                       child: Image.asset(
-                        'assets/images/logos/Abar_Tawseeh_ICT_logo.png',
+                        'assets/images/logos/new_logo_bit.png',
                         height: logoSize,
                         fit: BoxFit.contain,
                         errorBuilder: (context, error, stackTrace) {
-                          // اگر لوگو پیدا نشد، از آیکون دایره‌ای استفاده کن
+                          // اگر لوگو پیدا نشد، از آیکون برند استفاده کن
                           return Image.asset(
-                            'assets/icons/Abar_Tawseeh_ICT_logo_circle.png',
+                            'assets/images/logos/new_logo_bit_2.png',
                             height: logoSize,
                             width: logoSize,
                             fit: BoxFit.contain,
@@ -600,20 +600,51 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
 
                     const SizedBox(height: 20),
-                    // شماره تماس پشتیبانی
+                    // شماره خدمات پشتیبانی
                     Center(
-                      child: Text(
-                        'شماره تماس: 0799509494',
-                        textAlign: TextAlign.center,
-                        textDirection: TextDirection.rtl,
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w500,
-                          color: isDark
-                              ? colorScheme.onSurface.withOpacity(0.7)
-                              : Colors.grey.shade700,
-                          letterSpacing: 0.3,
-                        ),
+                      child: Column(
+                        children: [
+                          Text(
+                            'شماره خدمات',
+                            textAlign: TextAlign.center,
+                            textDirection: TextDirection.rtl,
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: isDark
+                                  ? colorScheme.onSurface.withOpacity(0.65)
+                                  : Colors.grey.shade600,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            '0795336608',
+                            textAlign: TextAlign.center,
+                            textDirection: TextDirection.ltr,
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                              color: isDark
+                                  ? colorScheme.onSurface.withOpacity(0.85)
+                                  : Colors.grey.shade800,
+                              letterSpacing: 0.4,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            '0700336608',
+                            textAlign: TextAlign.center,
+                            textDirection: TextDirection.ltr,
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                              color: isDark
+                                  ? colorScheme.onSurface.withOpacity(0.85)
+                                  : Colors.grey.shade800,
+                              letterSpacing: 0.4,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
 

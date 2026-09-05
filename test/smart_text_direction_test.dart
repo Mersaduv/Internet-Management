@@ -1,6 +1,6 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:abar_tawseeh_ict/utils/smart_text_direction.dart';
+import 'package:jahan_bit/utils/smart_text_direction.dart';
 
 void main() {
   test('English text is LTR', () {
@@ -8,7 +8,7 @@ void main() {
   });
 
   test('Persian text is RTL', () {
-    expect(detectInputTextDirection('وایفای خانه'), TextDirection.rtl);
+    expect(detectInputTextDirection('?????? ????'), TextDirection.rtl);
   });
 
   test('empty text defaults to LTR', () {

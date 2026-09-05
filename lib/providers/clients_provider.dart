@@ -28,7 +28,8 @@ class ClientsProvider extends ChangeNotifier {
   static const Duration _onlineRefreshTimeout = MikrotikTimeouts.onlineRefresh;
   static const Duration _unbanTimeout = Duration(seconds: 45);
   static const Duration _lockStatusCacheTtl = Duration(seconds: 30);
-  static const String _banMarker = '[AbarTawseeh BAN]';
+  static const String _banMarker = '[JahanBit BAN]';
+  static const String _legacyBanMarker = '[AbarTawseeh BAN]';
   static const int offlineThresholdSeconds = 300;
   static const Duration statusRefreshInterval =
       MikrotikTimeouts.statusRefreshInterval;
@@ -767,6 +768,7 @@ class ClientsProvider extends ChangeNotifier {
   bool _isBannedComment(String? comment) {
     final value = comment ?? '';
     return value.contains(_banMarker) ||
+        value.contains(_legacyBanMarker) ||
         value.contains('Banned via Flutter App') ||
         value.startsWith('Auto-banned:') ||
         value.startsWith('Banned:');

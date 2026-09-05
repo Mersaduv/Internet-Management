@@ -6,8 +6,9 @@ import 'routeros_client_v2.dart';
 /// company PCQ/group queues already match first, so extra queues stay at 0/0
 /// and pollute the router. Home and company both use read-only sampling instead.
 class TrafficMonitorQueueSync {
-  static const monitorComment = '[AbarTawseeh TRAFFIC MONITOR]';
-  static const namePrefix = 'abmon-';
+  static const monitorComment = '[JahanBit TRAFFIC MONITOR]';
+  static const legacyMonitorComment = '[AbarTawseeh TRAFFIC MONITOR]';
+  static const namePrefix = 'jbmon-';
 
   Future<void> ensureMonitorQueues({
     required RouterOSClientV2 client,

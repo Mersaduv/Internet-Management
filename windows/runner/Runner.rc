@@ -89,13 +89,13 @@ BEGIN
     BEGIN
         BLOCK "040904e4"
         BEGIN
-            VALUE "CompanyName", "Abar Tawseeh ICT" "\0"
-            VALUE "FileDescription", "Abar Tawseeh ICT" "\0"
+            VALUE "CompanyName", "Jahan Bit" "\0"
+            VALUE "FileDescription", "Jahan Bit" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
-            VALUE "InternalName", "Abar_Tawseeh_ICT" "\0"
-            VALUE "LegalCopyright", "Copyright (C) 2026 Abar Tawseeh ICT. All rights reserved." "\0"
-            VALUE "OriginalFilename", "Abar_Tawseeh_ICT.exe" "\0"
-            VALUE "ProductName", "Abar Tawseeh ICT" "\0"
+            VALUE "InternalName", "Jahan_Bit" "\0"
+            VALUE "LegalCopyright", "Copyright (C) 2026 Jahan Bit. All rights reserved." "\0"
+            VALUE "OriginalFilename", "Jahan_Bit.exe" "\0"
+            VALUE "ProductName", "Jahan Bit" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END
