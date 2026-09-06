@@ -9,7 +9,7 @@ import '../utils/app_localizations.dart';
 import '../utils/app_theme.dart';
 import '../widgets/desktop_content.dart';
 
-/// صفحهٔ کاتالوگ بسته‌های اینترنتی — تم هماهنگ با روشن/تاریک پروژه.
+/// صفحهٔ کاتالوگ بسته‌های اینترنتی ابر توسعه.
 class InternetPackagesScreen extends StatefulWidget {
   const InternetPackagesScreen({super.key});
 
@@ -18,16 +18,16 @@ class InternetPackagesScreen extends StatefulWidget {
 }
 
 class _InternetPackagesScreenState extends State<InternetPackagesScreen> {
-  InternetPackageKind _selectedKind = InternetPackageKind.dedicated;
+  InternetPackageKind _selectedKind = InternetPackageKind.unlimited;
 
   String? _noteForKind(AppLocalizations? l10n) {
     switch (_selectedKind) {
       case InternetPackageKind.unlimited:
         return l10n?.unlimitedPackagesNote;
-      case InternetPackageKind.volume:
-        return l10n?.volumePackagesNote;
-      case InternetPackageKind.dedicated:
-        return null;
+      case InternetPackageKind.family:
+        return l10n?.familyPackagesNote;
+      case InternetPackageKind.limited:
+        return l10n?.limitedPackagesNote;
     }
   }
 
@@ -95,11 +95,10 @@ class _InternetPackagesScreenState extends State<InternetPackagesScreen> {
                         if (kind == _selectedKind) return;
                         setState(() => _selectedKind = kind);
                       },
-                      dedicatedLabel:
-                          l10n?.dedicatedPackagesTab ?? 'ددیکیت',
                       unlimitedLabel:
                           l10n?.unlimitedPackagesTab ?? 'نامحدود',
-                      volumeLabel: l10n?.volumePackagesTab ?? 'حجمی',
+                      familyLabel: l10n?.familyPackagesTab ?? 'خانواده',
+                      limitedLabel: l10n?.limitedPackagesTab ?? 'محدود',
                     ),
                   ),
                   Expanded(
@@ -111,12 +110,11 @@ class _InternetPackagesScreenState extends State<InternetPackagesScreen> {
                               ? 3
                               : (constraints.maxWidth < 340 ? 1 : 2);
                           final mainAxisExtent = switch (_selectedKind) {
-                            InternetPackageKind.volume =>
-                              crossAxisCount == 1 ? 272.0 : 288.0,
-                            InternetPackageKind.unlimited =>
-                              crossAxisCount == 1 ? 272.0 : 288.0,
-                            InternetPackageKind.dedicated =>
-                              crossAxisCount == 1 ? 248.0 : 262.0,
+                            InternetPackageKind.limited =>
+                              crossAxisCount == 1 ? 300.0 : 318.0,
+                            InternetPackageKind.unlimited ||
+                            InternetPackageKind.family =>
+                              crossAxisCount == 1 ? 280.0 : 298.0,
                           };
 
                           return Column(
@@ -141,18 +139,19 @@ class _InternetPackagesScreenState extends State<InternetPackagesScreen> {
                                     return _PackageCard(
                                       package: packages[index],
                                       durationLabel:
-                                          l10n?.durationMonthsLabel(
-                                                packages[index].durationMonths,
+                                          l10n?.durationDaysLabel(
+                                                packages[index].durationDays,
                                               ) ??
-                                              '${packages[index].durationMonths} Month',
-                                      dedicatedBadge:
-                                          l10n?.dedicatedPackageBadge ??
-                                              'بسته ددیکیت',
+                                              '${packages[index].durationDays} Day',
                                       unlimitedBadge:
                                           l10n?.unlimitedPackageBadge ??
                                               'بسته نامحدود',
-                                      volumeBadge: l10n?.volumePackageBadge ??
-                                          'بسته حجمی',
+                                      familyBadge:
+                                          l10n?.familyPackageBadge ??
+                                              'بسته خانواده',
+                                      limitedBadge:
+                                          l10n?.limitedPackageBadge ??
+                                              'بسته محدود',
                                       daySpeedCaption:
                                           l10n?.daySpeedLabel ?? 'سرعت روزانه',
                                       nightSpeedCaption:
@@ -192,29 +191,21 @@ class _PackageKindTabs extends StatelessWidget {
   const _PackageKindTabs({
     required this.selected,
     required this.onChanged,
-    required this.dedicatedLabel,
     required this.unlimitedLabel,
-    required this.volumeLabel,
+    required this.familyLabel,
+    required this.limitedLabel,
   });
 
   final InternetPackageKind selected;
   final ValueChanged<InternetPackageKind> onChanged;
-  final String dedicatedLabel;
   final String unlimitedLabel;
-  final String volumeLabel;
+  final String familyLabel;
+  final String limitedLabel;
 
   @override
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Expanded(
-          child: _TabChip(
-            label: dedicatedLabel,
-            selected: selected == InternetPackageKind.dedicated,
-            onTap: () => onChanged(InternetPackageKind.dedicated),
-          ),
-        ),
-        const SizedBox(width: 8),
         Expanded(
           child: _TabChip(
             label: unlimitedLabel,
@@ -225,9 +216,17 @@ class _PackageKindTabs extends StatelessWidget {
         const SizedBox(width: 8),
         Expanded(
           child: _TabChip(
-            label: volumeLabel,
-            selected: selected == InternetPackageKind.volume,
-            onTap: () => onChanged(InternetPackageKind.volume),
+            label: familyLabel,
+            selected: selected == InternetPackageKind.family,
+            onTap: () => onChanged(InternetPackageKind.family),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: _TabChip(
+            label: limitedLabel,
+            selected: selected == InternetPackageKind.limited,
+            onTap: () => onChanged(InternetPackageKind.limited),
           ),
         ),
       ],
@@ -364,25 +363,25 @@ class _PackageCard extends StatelessWidget {
   const _PackageCard({
     required this.package,
     required this.durationLabel,
-    required this.dedicatedBadge,
     required this.unlimitedBadge,
-    required this.volumeBadge,
+    required this.familyBadge,
+    required this.limitedBadge,
     required this.daySpeedCaption,
     required this.nightSpeedCaption,
   });
 
   final InternetPackage package;
   final String durationLabel;
-  final String dedicatedBadge;
   final String unlimitedBadge;
-  final String volumeBadge;
+  final String familyBadge;
+  final String limitedBadge;
   final String daySpeedCaption;
   final String nightSpeedCaption;
 
   String get _badge {
-    if (package.isVolume) return volumeBadge;
-    if (package.isUnlimited) return unlimitedBadge;
-    return dedicatedBadge;
+    if (package.isLimited) return limitedBadge;
+    if (package.isFamily) return familyBadge;
+    return unlimitedBadge;
   }
 
   @override
@@ -414,7 +413,7 @@ class _PackageCard extends StatelessWidget {
           );
 
     final specs = <Widget>[
-      if (package.isVolume) ...[
+      if (package.isLimited) ...[
         _SpecRow(
           icon: Icons.layers_outlined,
           label: package.volumeLabel,
@@ -426,7 +425,7 @@ class _PackageCard extends StatelessWidget {
           label: package.speedLabel,
           color: muted,
         ),
-      ] else if (package.isUnlimited) ...[
+      ] else ...[
         _SpecRow(
           icon: Icons.wb_sunny_outlined,
           label: '${package.speedLabel} · $daySpeedCaption',
@@ -436,12 +435,6 @@ class _PackageCard extends StatelessWidget {
         _SpecRow(
           icon: Icons.nights_stay_outlined,
           label: '${package.nightSpeedLabel} · $nightSpeedCaption',
-          color: muted,
-        ),
-      ] else ...[
-        _SpecRow(
-          icon: Icons.wifi_rounded,
-          label: package.speedLabel,
           color: muted,
         ),
       ],
@@ -457,6 +450,20 @@ class _PackageCard extends StatelessWidget {
         label: package.priceLabel,
         color: muted,
       ),
+      if (package.footnote != null) ...[
+        const SizedBox(height: 8),
+        Text(
+          package.footnote!,
+          maxLines: 3,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            color: muted,
+            fontSize: 11,
+            height: 1.35,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+      ],
     ];
 
     return Material(
@@ -504,7 +511,19 @@ class _PackageCard extends StatelessWidget {
                   ),
                 ),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 8),
+              Text(
+                package.name,
+                textAlign: TextAlign.center,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: muted,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 8),
               Expanded(
                 child: Center(
                   child: FittedBox(
@@ -515,7 +534,7 @@ class _PackageCard extends StatelessWidget {
                       textDirection: TextDirection.ltr,
                       style: TextStyle(
                         color: isDark ? AppTheme.pureWhite : AppTheme.primary,
-                        fontSize: package.isUnlimited ? 22 : 28,
+                        fontSize: package.hasNightSpeed ? 20 : 28,
                         fontWeight: FontWeight.w800,
                         height: 1.1,
                         letterSpacing: 0.2,

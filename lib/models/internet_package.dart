@@ -1,37 +1,46 @@
-enum InternetPackageKind { dedicated, unlimited, volume }
+enum InternetPackageKind { unlimited, family, limited }
 
-/// یک بستهٔ اینترنتی — دادهٔ کاتالوگ بسته‌ها.
+/// یک بستهٔ اینترنتی — کاتالوگ ابر توسعه.
 class InternetPackage {
   const InternetPackage({
     required this.id,
     required this.kind,
+    required this.name,
     required this.speedMbps,
-    required this.durationMonths,
+    required this.durationDays,
     required this.priceAf,
     this.volumeGb,
     this.nightSpeedMbps,
+    this.footnote,
   });
 
   final String id;
   final InternetPackageKind kind;
 
+  /// نام نمایشی (مثلاً ابر توسعه - A)
+  final String name;
+
   /// سرعت روزانه / ثابت (Mbps)
   final double speedMbps;
 
-  /// سرعت شبانه — فقط بسته‌های نامحدود
+  /// سرعت شبانه — بسته‌های نامحدود / خانواده
   final double? nightSpeedMbps;
 
-  /// حجم به گیگابایت — فقط بسته‌های حجمی
+  /// حجم به گیگابایت — بسته‌های محدود
   final int? volumeGb;
 
-  /// مدت اعتبار به ماه (۱۲ = یک سال)
-  final int durationMonths;
+  /// مدت اعتبار به روز
+  final int durationDays;
 
   final int priceAf;
 
-  bool get isDedicated => kind == InternetPackageKind.dedicated;
+  /// توضیح تکمیلی کارت (مثلاً قسط ماهانه)
+  final String? footnote;
+
   bool get isUnlimited => kind == InternetPackageKind.unlimited;
-  bool get isVolume => kind == InternetPackageKind.volume;
+  bool get isFamily => kind == InternetPackageKind.family;
+  bool get isLimited => kind == InternetPackageKind.limited;
+  bool get hasNightSpeed => nightSpeedMbps != null;
 
   static String formatMbps(double speed) {
     final value = speed == speed.roundToDouble()
@@ -51,8 +60,8 @@ class InternetPackage {
 
   /// مقدار اصلی کارت
   String get heroLabel {
-    if (isVolume) return volumeLabel;
-    if (isUnlimited && nightSpeedMbps != null) {
+    if (isLimited) return volumeLabel;
+    if (hasNightSpeed) {
       return '${formatMbps(speedMbps)} / ${formatMbps(nightSpeedMbps!)}';
     }
     return speedLabel;

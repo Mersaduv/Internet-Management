@@ -106,47 +106,49 @@ class AppLocalizations {
   String get unlimitedPackagesTab => locale.languageCode == 'en'
       ? 'Unlimited'
       : 'نامحدود';
-  String get volumePackagesTab =>
-      locale.languageCode == 'en' ? 'Volume' : 'حجمی';
-  String get dedicatedPackagesTab =>
-      locale.languageCode == 'en' ? 'Dedicated' : 'ددیکیت';
+  String get familyPackagesTab =>
+      locale.languageCode == 'en' ? 'Family' : 'خانواده';
+  String get limitedPackagesTab =>
+      locale.languageCode == 'en' ? 'Limited' : 'محدود';
   String get unlimitedPackageBadge => locale.languageCode == 'en'
       ? 'Unlimited Package'
       : 'بسته نامحدود';
-  String get volumePackageBadge =>
-      locale.languageCode == 'en' ? 'Volume Package' : 'بسته حجمی';
-  String get dedicatedPackageBadge => locale.languageCode == 'en'
-      ? 'Dedicated Package'
-      : 'بسته ددیکیت';
+  String get familyPackageBadge => locale.languageCode == 'en'
+      ? 'Family Package'
+      : 'بسته خانواده';
+  String get limitedPackageBadge =>
+      locale.languageCode == 'en' ? 'Limited Package' : 'بسته محدود';
   String get daySpeedLabel =>
       locale.languageCode == 'en' ? 'Day speed' : 'سرعت روزانه';
   String get nightSpeedLabel =>
       locale.languageCode == 'en' ? 'Night speed' : 'سرعت شبانه';
   String get unlimitedPackagesNote => locale.languageCode == 'en'
-      ? 'Note: Unlimited package speed doubles from 11 PM to 7 AM.'
-      : 'نوت: سرعت بسته‌های نامحدود از ساعت ۱۱ شب تا ۷ صبح دو برابر می‌باشد.';
-  String get volumePackagesNote => locale.languageCode == 'en'
-      ? 'Note: Usage is free from 12 AM to 8 AM.'
-      : 'نوت: استفاده از این بسته‌ها از ساعت ۱۲ شب تا ۸ صبح رایگان می‌باشد.';
-  String durationMonthsLabel(int months) {
+      ? 'Note: Nighttime internet is from 11 PM to 7 AM.'
+      : 'نوت: تایم اینترنت شبانه از ساعت ۱۱ شب الی ۷ صبح می‌باشد.';
+  String get familyPackagesNote => locale.languageCode == 'en'
+      ? 'Note: Nighttime internet is from 6 PM to 6 AM.'
+      : 'نوت: تایم اینترنت شبانه از ساعت ۶ عصر الی ۶ صبح می‌باشد.';
+  String get limitedPackagesNote => locale.languageCode == 'en'
+      ? 'Info & activation: 0799509494'
+      : 'معلومات و فعال‌سازی: ۰۷۹۹۵۰۹۴۹۴';
+  String durationDaysLabel(int days) {
     if (locale.languageCode == 'en') {
-      if (months == 12) return '1 Year';
-      if (months == 1) return '1 Month';
-      return '$months Months';
+      if (days == 1) return '1 Day';
+      return '$days Days';
     }
-    switch (months) {
-      case 1:
-        return 'یک ماه';
-      case 2:
-        return 'دو ماه';
-      case 3:
-        return 'سه ماه';
-      case 6:
-        return 'شش ماه';
-      case 12:
-        return 'یک سال';
+    switch (days) {
+      case 30:
+        return '۳۰ روز';
+      case 60:
+        return '۶۰ روز';
+      case 90:
+        return '۹۰ روز';
+      case 120:
+        return '۱۲۰ روز';
+      case 180:
+        return '۱۸۰ روز';
       default:
-        return '$months ماه';
+        return '$days روز';
     }
   }
   String get wifiInfo =>

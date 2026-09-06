@@ -1,197 +1,154 @@
 import '../models/internet_package.dart';
 
-/// دادهٔ بسته‌های اینترنتی (کاتالوگ ثابت).
+/// دادهٔ بسته‌های ابر توسعه از پوسترهای رسمی (unlimited / unlimited2 / limited / limited2).
 abstract final class InternetPackagesData {
-  /// بسته های دیدیکیت
-  static const List<InternetPackage> dedicated = [
-    InternetPackage(
-      id: 'd-1-1',
-      kind: InternetPackageKind.dedicated,
-      speedMbps: 1,
-      durationMonths: 1,
-      priceAf: 500,
-    ),
-    InternetPackage(
-      id: 'd-2-1',
-      kind: InternetPackageKind.dedicated,
-      speedMbps: 2,
-      durationMonths: 1,
-      priceAf: 850,
-    ),
-    InternetPackage(
-      id: 'd-3-1',
-      kind: InternetPackageKind.dedicated,
-      speedMbps: 3,
-      durationMonths: 1,
-      priceAf: 1100,
-    ),
-    InternetPackage(
-      id: 'd-4-1',
-      kind: InternetPackageKind.dedicated,
-      speedMbps: 4,
-      durationMonths: 1,
-      priceAf: 1600,
-    ),
-    InternetPackage(
-      id: 'd-5-1',
-      kind: InternetPackageKind.dedicated,
-      speedMbps: 5,
-      durationMonths: 1,
-      priceAf: 1900,
-    ),
-    InternetPackage(
-      id: 'd-6-1',
-      kind: InternetPackageKind.dedicated,
-      speedMbps: 6,
-      durationMonths: 1,
-      priceAf: 2100,
-    ),
-  ];
-
-  /// بسته های نامحدود (روزانه / شبانه)
+  /// بسته‌های نامحدود — پوستر unlimited.jpg
   static const List<InternetPackage> unlimited = [
     InternetPackage(
-      id: 'u-2-4-1',
+      id: 'u-a',
       kind: InternetPackageKind.unlimited,
-      speedMbps: 2,
-      nightSpeedMbps: 4,
-      durationMonths: 1,
-      priceAf: 1000,
+      name: 'ابر توسعه - A',
+      speedMbps: 1.5,
+      nightSpeedMbps: 3,
+      durationDays: 30,
+      priceAf: 700,
     ),
     InternetPackage(
-      id: 'u-4-8-1',
+      id: 'u-b',
       kind: InternetPackageKind.unlimited,
-      speedMbps: 4,
-      nightSpeedMbps: 8,
-      durationMonths: 1,
-      priceAf: 1700,
+      name: 'ابر توسعه - B',
+      speedMbps: 2.5,
+      nightSpeedMbps: 5,
+      durationDays: 30,
+      priceAf: 1200,
     ),
     InternetPackage(
-      id: 'u-8-16-1',
+      id: 'u-c',
       kind: InternetPackageKind.unlimited,
-      speedMbps: 8,
-      nightSpeedMbps: 16,
-      durationMonths: 1,
-      priceAf: 2800,
+      name: 'ابر توسعه - C',
+      speedMbps: 3.5,
+      nightSpeedMbps: 7,
+      durationDays: 30,
+      priceAf: 1400,
+    ),
+    InternetPackage(
+      id: 'u-d',
+      kind: InternetPackageKind.unlimited,
+      name: 'ابر توسعه - D',
+      speedMbps: 5,
+      nightSpeedMbps: 7,
+      durationDays: 30,
+      priceAf: 1950,
+    ),
+    InternetPackage(
+      id: 'u-e',
+      kind: InternetPackageKind.unlimited,
+      name: 'ابر توسعه - E',
+      speedMbps: 10,
+      nightSpeedMbps: 15,
+      durationDays: 30,
+      priceAf: 3800,
     ),
   ];
 
-  /// بسته های حجمی
-  static const List<InternetPackage> volume = [
+  /// بسته‌های خانواده نامحدود — پوستر unlimited2.jpg
+  static const List<InternetPackage> family = [
     InternetPackage(
-      id: 'v-75-3-1',
-      kind: InternetPackageKind.volume,
+      id: 'f-1',
+      kind: InternetPackageKind.family,
+      name: 'بسته خانواده - ۱',
+      speedMbps: 2,
+      nightSpeedMbps: 3,
+      durationDays: 30,
+      priceAf: 1090,
+    ),
+    InternetPackage(
+      id: 'f-2',
+      kind: InternetPackageKind.family,
+      name: 'بسته خانواده - ۲',
       speedMbps: 3,
-      volumeGb: 75,
-      durationMonths: 1,
-      priceAf: 500,
+      nightSpeedMbps: 5,
+      durationDays: 30,
+      priceAf: 1490,
     ),
+  ];
+
+  /// بسته‌های محدود — پوستر limited2.jpg + limited.jpg
+  static const List<InternetPackage> limited = [
     InternetPackage(
-      id: 'v-100-4-1',
-      kind: InternetPackageKind.volume,
-      speedMbps: 4,
-      volumeGb: 100,
-      durationMonths: 1,
-      priceAf: 650,
-    ),
-    InternetPackage(
-      id: 'v-160-5-1',
-      kind: InternetPackageKind.volume,
+      id: 'l-1',
+      kind: InternetPackageKind.limited,
+      name: 'ابر توسعه - ۱',
       speedMbps: 5,
-      volumeGb: 160,
-      durationMonths: 1,
-      priceAf: 850,
+      volumeGb: 150,
+      durationDays: 30,
+      priceAf: 800,
     ),
     InternetPackage(
-      id: 'v-200-5-1',
-      kind: InternetPackageKind.volume,
+      id: 'l-2',
+      kind: InternetPackageKind.limited,
+      name: 'ابر توسعه - ۲',
+      speedMbps: 5,
+      volumeGb: 350,
+      durationDays: 30,
+      priceAf: 1400,
+    ),
+    InternetPackage(
+      id: 'l-3',
+      kind: InternetPackageKind.limited,
+      name: 'ابر توسعه - ۳',
       speedMbps: 5,
       volumeGb: 200,
-      durationMonths: 1,
-      priceAf: 900,
+      durationDays: 60,
+      priceAf: 1000,
     ),
     InternetPackage(
-      id: 'v-300-6-1',
-      kind: InternetPackageKind.volume,
-      speedMbps: 6,
+      id: 'l-4',
+      kind: InternetPackageKind.limited,
+      name: 'ابر توسعه - ۴',
+      speedMbps: 5,
       volumeGb: 300,
-      durationMonths: 1,
-      priceAf: 1000,
+      durationDays: 60,
+      priceAf: 1400,
     ),
     InternetPackage(
-      id: 'v-400-6-1',
-      kind: InternetPackageKind.volume,
-      speedMbps: 6,
-      volumeGb: 400,
-      durationMonths: 1,
-      priceAf: 1300,
-    ),
-    InternetPackage(
-      id: 'v-100-5-2',
-      kind: InternetPackageKind.volume,
+      id: 'l-5',
+      kind: InternetPackageKind.limited,
+      name: 'ابر توسعه - ۵',
       speedMbps: 5,
-      volumeGb: 100,
-      durationMonths: 2,
-      priceAf: 750,
-    ),
-    InternetPackage(
-      id: 'v-200-6-2',
-      kind: InternetPackageKind.volume,
-      speedMbps: 6,
-      volumeGb: 200,
-      durationMonths: 2,
-      priceAf: 1100,
-    ),
-    InternetPackage(
-      id: 'v-200-5-3',
-      kind: InternetPackageKind.volume,
-      speedMbps: 5,
-      volumeGb: 200,
-      durationMonths: 3,
-      priceAf: 1000,
-    ),
-    InternetPackage(
-      id: 'v-400-6-3',
-      kind: InternetPackageKind.volume,
-      speedMbps: 6,
       volumeGb: 400,
-      durationMonths: 3,
+      durationDays: 90,
       priceAf: 1800,
     ),
     InternetPackage(
-      id: 'v-600-6-3',
-      kind: InternetPackageKind.volume,
-      speedMbps: 6,
-      volumeGb: 600,
-      durationMonths: 3,
-      priceAf: 2100,
+      id: 'l-6',
+      kind: InternetPackageKind.limited,
+      name: 'ابر توسعه - ۶',
+      speedMbps: 5,
+      volumeGb: 500,
+      durationDays: 120,
+      priceAf: 2200,
     ),
     InternetPackage(
-      id: 'v-600-6-6',
-      kind: InternetPackageKind.volume,
-      speedMbps: 6,
-      volumeGb: 600,
-      durationMonths: 6,
-      priceAf: 2400,
-    ),
-    InternetPackage(
-      id: 'v-1000-8-12',
-      kind: InternetPackageKind.volume,
-      speedMbps: 8,
-      volumeGb: 1000,
-      durationMonths: 12,
-      priceAf: 5000,
+      id: 'l-8',
+      kind: InternetPackageKind.limited,
+      name: 'ابر توسعه - ۸',
+      speedMbps: 5,
+      volumeGb: 800,
+      durationDays: 180,
+      priceAf: 3500,
+      footnote: 'با پرداخت هر ماه فقط ۵۸۰ افغانی، ۱۳۳ GB اینترنت دریافت کنید',
     ),
   ];
 
   static List<InternetPackage> byKind(InternetPackageKind kind) {
     switch (kind) {
-      case InternetPackageKind.dedicated:
-        return dedicated;
       case InternetPackageKind.unlimited:
         return unlimited;
-      case InternetPackageKind.volume:
-        return volume;
+      case InternetPackageKind.family:
+        return family;
+      case InternetPackageKind.limited:
+        return limited;
     }
   }
 }
