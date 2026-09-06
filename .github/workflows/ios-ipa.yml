@@ -3,7 +3,7 @@ name: Build iOS IPA
 on:
   workflow_dispatch:
   push:
-    branches: [master]
+    branches: [master, 'release/**']
     paths:
       - 'lib/**'
       - 'pubspec.yaml'
