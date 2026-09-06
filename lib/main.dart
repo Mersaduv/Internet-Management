@@ -15,6 +15,7 @@ import 'screens/login_screen.dart';
 import 'screens/connection_test_screen.dart';
 import 'screens/device_detail_screen.dart';
 import 'screens/internet_service_screen.dart';
+import 'screens/internet_packages_screen.dart';
 import 'screens/app_settings_screen.dart';
 import 'screens/wifi_settings_screen.dart';
 import 'services/mikrotik_service_manager.dart';
@@ -504,6 +505,7 @@ class _MainScaffoldState extends State<MainScaffold>
         children: const [
           HomePage(),
           InternetServiceScreen(),
+          InternetPackagesScreen(),
           AppSettingsScreen(),
         ],
       ),
@@ -549,10 +551,16 @@ class _MainScaffoldState extends State<MainScaffold>
                     isActive: _currentIndex == 1,
                   ),
                   _buildNavItem(
-                    icon: Icons.settings_outlined,
-                    activeIcon: Icons.settings,
+                    icon: Icons.style_outlined,
+                    activeIcon: Icons.style,
                     index: 2,
                     isActive: _currentIndex == 2,
+                  ),
+                  _buildNavItem(
+                    icon: Icons.settings_outlined,
+                    activeIcon: Icons.settings,
+                    index: 3,
+                    isActive: _currentIndex == 3,
                   ),
                 ],
               ),
