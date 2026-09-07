@@ -63,6 +63,7 @@ class _InternetServiceScreenState extends State<InternetServiceScreen> {
 
   bool _isLoading = true;
   double _progress = 0.0;
+  /// بلافاصله با پیش‌فرض شناخته‌شده شروع می‌شود تا صفحه خالی دیده نشود
   String? _currentUrl;
   String? _pageTitle;
   bool _canGoBack = false;
@@ -79,25 +80,51 @@ class _InternetServiceScreenState extends State<InternetServiceScreen> {
   @override
   void initState() {
     super.initState();
+    // برای تب سرویس اینترنت، بلافاصله پیش‌فرض را نشان بده
+    if (widget.fixedUrl == null) {
+      _currentUrl = SettingsService.defaultServiceUrl;
+      _isLoading = true;
+    } else {
+      _currentUrl = widget.fixedUrl;
+      _isLoading = widget.fixedUrl!.trim().isNotEmpty;
+    }
     _loadUrl();
   }
 
   Future<void> _loadUrl() async {
     try {
-      final url = (widget.fixedUrl ?? await _settingsService.getServiceUrl()).trim();
+      final resolved = (widget.fixedUrl ?? await _settingsService.getServiceUrl())
+          .trim();
+      final url = resolved.isEmpty
+          ? SettingsService.defaultServiceUrl
+          : resolved;
+      final previous = _currentUrl;
       if (mounted) {
         setState(() {
-          _currentUrl = url.isEmpty ? null : url;
+          _currentUrl = url;
           _errorMessage = null;
           _showError = false;
           _isLoading = url.isNotEmpty;
         });
       }
+      // اگر WebView قبلاً با پیش‌فرض ساخته شده و URL واقعی فرق دارد، دوباره بارگذاری کن
+      if (_webViewController != null &&
+          previous != null &&
+          previous != url &&
+          url.isNotEmpty) {
+        await _webViewController!.loadUrl(
+          urlRequest: URLRequest(url: WebUri(url)),
+        );
+      }
     } catch (e) {
       if (mounted) {
         setState(() {
-          _errorMessage = 'خطا در بارگذاری URL: $e';
-          _showError = true;
+          _currentUrl ??=
+              widget.fixedUrl ?? SettingsService.defaultServiceUrl;
+          if (_currentUrl == null || _currentUrl!.isEmpty) {
+            _errorMessage = 'خطا در بارگذاری URL: $e';
+            _showError = true;
+          }
         });
       }
     }
@@ -143,10 +170,26 @@ class _InternetServiceScreenState extends State<InternetServiceScreen> {
     }
   }
 
+  /// برای IP محلی/پنل‌ها از http و برای دامنه از https استفاده می‌کند.
+  String _normalizeServiceUrl(String raw) {
+    var url = raw.trim();
+    if (url.isEmpty) {
+      return url;
+    }
+    if (!url.startsWith('http://') && !url.startsWith('https://')) {
+      final host = url.split('/').first.split(':').first;
+      final isIp = RegExp(r'^\d{1,3}(\.\d{1,3}){3}$').hasMatch(host);
+      url = '${isIp ? 'http' : 'https'}://$url';
+    }
+    return url;
+  }
+
   Future<void> _showUrlInputDialog() async {
     if (!widget.allowUrlChange) return;
 
-    final urlController = TextEditingController(text: _currentUrl);
+    final urlController = TextEditingController(
+      text: _currentUrl ?? SettingsService.defaultServiceUrl,
+    );
 
     final result = await showDialog<String>(
       context: context,
@@ -156,7 +199,7 @@ class _InternetServiceScreenState extends State<InternetServiceScreen> {
           controller: urlController,
           decoration: const InputDecoration(
             labelText: 'URL',
-            hintText: 'https://example.com',
+            hintText: 'http://165.99.189.40:9394/users/',
             border: OutlineInputBorder(),
           ),
           keyboardType: TextInputType.url,
@@ -177,10 +220,7 @@ class _InternetServiceScreenState extends State<InternetServiceScreen> {
     );
 
     if (result != null && result.isNotEmpty) {
-      String url = result.trim();
-      if (!url.startsWith('http://') && !url.startsWith('https://')) {
-        url = 'https://$url';
-      }
+      final url = _normalizeServiceUrl(result);
 
       // ذخیره URL در تنظیمات
       await _settingsService.setServiceUrl(url);
@@ -209,7 +249,6 @@ class _InternetServiceScreenState extends State<InternetServiceScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
     final primaryColor = AppTheme.primaryFor(theme.brightness);
 
     return Scaffold(

@@ -616,6 +616,230 @@ class AppLocalizations {
     // 如果无法匹配，返回原始消息
     return errorMessage;
   }
+
+  // راهنمای مشترکین
+  String get subscriberHelp =>
+      locale.languageCode == 'en' ? 'Subscriber Guide' : 'راهنمایی مشترکین';
+  String get subscriberHelpSettingsSubtitle => locale.languageCode == 'en'
+      ? 'Learn devices, Wi‑Fi, and service step by step'
+      : 'آموزش مدیریت دستگاه، وای‌فای و سرویس';
+  String get phoneCopied =>
+      locale.languageCode == 'en' ? 'Phone number copied' : 'شماره کپی شد';
+  String get subscriberHelpIntroTitle => locale.languageCode == 'en'
+      ? 'Simple guide to using the app'
+      : 'راهنمای ساده استفاده از برنامه';
+  String get subscriberHelpIntroBody => locale.languageCode == 'en'
+      ? 'Read each section in order. Every button shows the same icon used in the app so you can quickly find what it does and where it is.'
+      : 'هر بخش را به‌ترتیب بخوانید. کنار هر دکمه، آیکون همان دکمه در برنامه نشان داده شده تا سریع پیدا کنید چه کاری انجام می‌دهد و از کجا باز می‌شود.';
+
+  String get helpDevicesSectionTitle => locale.languageCode == 'en'
+      ? 'Manage devices (Home)'
+      : 'مدیریت دستگاه‌ها (صفحه خانه)';
+  String get helpDevicesSectionSubtitle => locale.languageCode == 'en'
+      ? 'Priority 1 — see and control devices on your network'
+      : 'اولویت اول — دیدن و کنترل دستگاه‌های وصل‌شده به شبکه';
+  String get helpDevicesWhere => locale.languageCode == 'en'
+      ? 'Where: bottom bar → Home icon'
+      : 'از کجا: نوار پایین → آیکون خانه';
+  String get helpOpenHome =>
+      locale.languageCode == 'en' ? 'Go to Home' : 'رفتن به صفحه خانه';
+  String get helpDevActHomeTitle =>
+      locale.languageCode == 'en' ? 'Home icon' : 'آیکون خانه';
+  String get helpDevActHomeDetail => locale.languageCode == 'en'
+      ? 'In the bottom bar, tap the first icon (Home) to open the main page.'
+      : 'در نوار پایین برنامه، اولین آیکون (خانه) را بزنید تا صفحه اصلی باز شود.';
+  String get helpDevActRouterTitle => locale.languageCode == 'en'
+      ? 'Router info (top of page)'
+      : 'اطلاعات روتر (بالای صفحه)';
+  String get helpDevActRouterDetail => locale.languageCode == 'en'
+      ? 'At the top you see router name and user. Info only — not a button.'
+      : 'بالای صفحه نام روتر و کاربر را می‌بینید. فقط برای اطلاع است؛ دکمه‌ای برای فشار دادن نیست.';
+  String get helpDevActLockTitle => locale.languageCode == 'en'
+      ? 'Lock new connections button'
+      : 'دکمه قفل اتصال جدید';
+  String get helpDevActLockDetail => locale.languageCode == 'en'
+      ? 'Below router info. When on, new devices are restricted. Tap again to unlock.'
+      : 'این دکمه زیر اطلاعات روتر است. اگر روشن باشد، دستگاه‌های تازه‌وارد محدود می‌شوند. دوباره بزنید تا باز شود.';
+  String get helpDevActConnectedTitle =>
+      locale.languageCode == 'en' ? '“Connected” tab' : 'زبانه «متصل»';
+  String get helpDevActConnectedDetail => locale.languageCode == 'en'
+      ? 'Devices icon — lists phones and laptops currently on the network.'
+      : 'آیکون چند دستگاه — فهرست گوشی‌ها و لپ‌تاپ‌هایی که الان به شبکه وصل‌اند را نشان می‌دهد.';
+  String get helpDevActBannedTitle =>
+      locale.languageCode == 'en' ? '“Banned” tab' : 'زبانه «مسدود»';
+  String get helpDevActBannedDetail => locale.languageCode == 'en'
+      ? 'Blocked-circle icon — devices you previously banned are here.'
+      : 'آیکون دایره با خط — دستگاه‌هایی که قبلاً مسدود کرده‌اید اینجاست.';
+  String get helpDevActRefreshTitle => locale.languageCode == 'en'
+      ? 'Pull down to refresh'
+      : 'کشیدن صفحه به پایین';
+  String get helpDevActRefreshDetail => locale.languageCode == 'en'
+      ? 'Pull the list down to refresh and see newly joined devices.'
+      : 'لیست را با انگشت به پایین بکشید تا تازه‌سازی شود و دستگاه‌های جدید دیده شوند.';
+  String get helpDevActTapTitle => locale.languageCode == 'en'
+      ? 'Tap a device'
+      : 'لمس روی یک دستگاه';
+  String get helpDevActTapDetail => locale.languageCode == 'en'
+      ? 'Tap a device row to open details (speed limit, ban, and more).'
+      : 'روی نام یا ردیف دستگاه بزنید تا صفحه جزئیات باز شود (سرعت، مسدودسازی و …).';
+  String get helpDevActSpeedTitle =>
+      locale.languageCode == 'en' ? 'Limit speed' : 'محدود کردن سرعت';
+  String get helpDevActSpeedDetail => locale.languageCode == 'en'
+      ? 'On the device page, set download/upload speed and save.'
+      : 'داخل صفحه دستگاه، سرعت دانلود/آپلود را تنظیم و ذخیره کنید.';
+  String get helpDevActBanTitle =>
+      locale.languageCode == 'en' ? 'Ban a device' : 'مسدود کردن دستگاه';
+  String get helpDevActBanDetail => locale.languageCode == 'en'
+      ? 'On the same details page, ban the device so it moves to the Banned tab.'
+      : 'در همان صفحه جزئیات، گزینه مسدودسازی را بزنید تا دستگاه از اینترنت قطع شود و به زبانه «مسدود» برود.';
+  String get helpDevActUnbanTitle =>
+      locale.languageCode == 'en' ? 'Unban' : 'رفع مسدودیت';
+  String get helpDevActUnbanDetail => locale.languageCode == 'en'
+      ? 'In the Banned tab, tap the unlock icon next to a device to free it.'
+      : 'در زبانه «مسدود»، آیکون قفل باز کنار دستگاه را بزنید تا دوباره آزاد شود.';
+
+  String get helpWifiSectionTitle =>
+      locale.languageCode == 'en' ? 'Wi‑Fi settings' : 'تنظیمات وای‌فای';
+  String get helpWifiSectionSubtitle => locale.languageCode == 'en'
+      ? 'Priority 2 — change network name and Wi‑Fi password'
+      : 'اولویت دوم — تغییر نام شبکه و رمز وای‌فای';
+  String get helpWifiWhere => locale.languageCode == 'en'
+      ? 'Where: bottom bar → Settings → WiFi Settings'
+      : 'از کجا: نوار پایین → تنظیمات → تنظیمات وایفای';
+  String get helpOpenWifiSettings => locale.languageCode == 'en'
+      ? 'Open Wi‑Fi settings'
+      : 'باز کردن تنظیمات وای‌فای';
+  String get helpWifiActSettingsTitle =>
+      locale.languageCode == 'en' ? 'Settings icon' : 'آیکون تنظیمات';
+  String get helpWifiActSettingsDetail => locale.languageCode == 'en'
+      ? 'In the bottom bar, tap the last icon (gear) to open Settings.'
+      : 'در نوار پایین، آخرین آیکون (چرخ‌دنده) را بزنید تا صفحه تنظیمات باز شود.';
+  String get helpWifiActItemTitle => locale.languageCode == 'en'
+      ? '“WiFi Settings” item'
+      : 'گزینه «تنظیمات وایفای»';
+  String get helpWifiActItemDetail => locale.languageCode == 'en'
+      ? 'First item in Settings. Tap it to change name and password.'
+      : 'اولین گزینه در لیست تنظیمات است. روی آن بزنید تا صفحه تغییر نام و رمز باز شود.';
+  String get helpWifiActSsidTitle =>
+      locale.languageCode == 'en' ? 'Network name (SSID)' : 'نام شبکه (SSID)';
+  String get helpWifiActSsidDetail => locale.languageCode == 'en'
+      ? 'The name phones see in Wi‑Fi lists. You can change it.'
+      : 'نامی که گوشی‌ها در لیست وای‌فای می‌بینند. می‌توانید عوض کنید.';
+  String get helpWifiActPassTitle =>
+      locale.languageCode == 'en' ? 'Password' : 'رمز عبور';
+  String get helpWifiActPassDetail => locale.languageCode == 'en'
+      ? 'Enter a new password. Usually at least 8 characters.'
+      : 'رمز جدید را وارد کنید. معمولاً حداقل ۸ کاراکتر لازم است.';
+  String get helpWifiActHideTitle => locale.languageCode == 'en'
+      ? 'Hide network name'
+      : 'مخفی کردن نام شبکه';
+  String get helpWifiActHideDetail => locale.languageCode == 'en'
+      ? 'If on, the network name is hidden from Wi‑Fi lists (optional).'
+      : 'اگر روشن باشد، نام شبکه در لیست وای‌فای دیده نمی‌شود (اختیاری).';
+  String get helpWifiActSaveTitle =>
+      locale.languageCode == 'en' ? 'Save button' : 'دکمه ذخیره';
+  String get helpWifiActSaveDetail => locale.languageCode == 'en'
+      ? 'After filling fields, tap Save and wait for the success message.'
+      : 'بعد از پر کردن فیلدها، ذخیره را بزنید و صبر کنید تا پیام موفقیت بیاید.';
+  String get helpWifiActReconnectTitle => locale.languageCode == 'en'
+      ? 'Reconnect devices'
+      : 'وصل شدن دوباره دستگاه‌ها';
+  String get helpWifiActReconnectDetail => locale.languageCode == 'en'
+      ? 'After changing the password, all devices must reconnect with the new password.'
+      : 'بعد از تغییر رمز، همه گوشی‌ها و لپ‌تاپ‌ها باید با رمز جدید دوباره وصل شوند.';
+  String get helpWifiActWebTitle => locale.languageCode == 'en'
+      ? 'Some antennas (LHG / SXT / …)'
+      : 'بعضی آنتن‌ها (LHG / SXT / …)';
+  String get helpWifiActWebDetail => locale.languageCode == 'en'
+      ? 'On some models an in-app browser opens instead of the form. Change name and password there.'
+      : 'در برخی مدل‌ها به‌جای فرم، صفحه مرورگر داخلی باز می‌شود. همان‌جا نام و رمز را عوض کنید.';
+
+  String get helpInternetSectionTitle =>
+      locale.languageCode == 'en' ? 'Internet service' : 'سرویس اینترنت';
+  String get helpInternetSectionSubtitle => locale.languageCode == 'en'
+      ? 'Open the user panel and subscription status'
+      : 'دیدن پنل کاربری و وضعیت اشتراک';
+  String get helpInternetWhere => locale.languageCode == 'en'
+      ? 'Where: bottom bar → globe icon'
+      : 'از کجا: نوار پایین → آیکون کره زمین';
+  String get helpOpenInternetService => locale.languageCode == 'en'
+      ? 'Open internet service'
+      : 'باز کردن سرویس اینترنت';
+  String get helpNetActTabTitle => locale.languageCode == 'en'
+      ? 'Internet Service icon'
+      : 'آیکون سرویس انترنت';
+  String get helpNetActTabDetail => locale.languageCode == 'en'
+      ? 'Tap the second bottom icon (globe). The user panel opens automatically.'
+      : 'دومین آیکون نوار پایین (کره) را بزنید. پنل کاربری خودکار باز می‌شود.';
+  String get helpNetActLoginTitle =>
+      locale.languageCode == 'en' ? 'Sign in to panel' : 'ورود به پنل';
+  String get helpNetActLoginDetail => locale.languageCode == 'en'
+      ? 'Sign in with your username and password to see subscription status.'
+      : 'با نام کاربری و رمز اختصاصی خود وارد شوید تا وضعیت اشتراک را ببینید.';
+  String get helpNetActBackTitle =>
+      locale.languageCode == 'en' ? 'Back (header)' : 'دکمه بازگشت (هدر)';
+  String get helpNetActBackDetail => locale.languageCode == 'en'
+      ? 'Left arrow at the top — goes to the previous page inside the panel.'
+      : 'آیکون فلش چپ در بالای صفحه — صفحه قبلی داخل پنل را نشان می‌دهد.';
+  String get helpNetActForwardTitle =>
+      locale.languageCode == 'en' ? 'Forward (header)' : 'دکمه جلو (هدر)';
+  String get helpNetActForwardDetail => locale.languageCode == 'en'
+      ? 'Right arrow — goes forward again if you went back.'
+      : 'آیکون فلش راست — اگر قبلاً برگشته باشید، دوباره جلو می‌رود.';
+  String get helpNetActReloadTitle =>
+      locale.languageCode == 'en' ? 'Refresh' : 'دکمه تازه‌سازی';
+  String get helpNetActReloadDetail => locale.languageCode == 'en'
+      ? 'Circular arrow icon — reloads the panel page.'
+      : 'آیکون دایره فلش‌دار — صفحه پنل را دوباره بارگذاری می‌کند.';
+  String get helpNetActLinkTitle =>
+      locale.languageCode == 'en' ? 'Change address' : 'دکمه تغییر آدرس';
+  String get helpNetActLinkDetail => locale.languageCode == 'en'
+      ? 'Link icon in the header — change the panel URL only if needed.'
+      : 'آیکون لینک در هدر — فقط اگر لازم شد آدرس پنل را عوض کنید.';
+
+  String get helpPackagesSectionTitle =>
+      locale.languageCode == 'en' ? 'Internet packages' : 'بسته‌های اینترنتی';
+  String get helpPackagesSectionSubtitle => locale.languageCode == 'en'
+      ? 'Browse package types and speeds'
+      : 'مشاهده انواع بسته و سرعت‌ها';
+  String get helpPackagesWhere => locale.languageCode == 'en'
+      ? 'Where: bottom bar → Packages icon'
+      : 'از کجا: نوار پایین → آیکون بسته‌ها';
+  String get helpOpenPackages =>
+      locale.languageCode == 'en' ? 'Go to packages' : 'رفتن به بسته‌ها';
+  String get helpPkgActTabTitle =>
+      locale.languageCode == 'en' ? 'Packages icon' : 'آیکون بسته‌ها';
+  String get helpPkgActTabDetail => locale.languageCode == 'en'
+      ? 'Tap the third bottom icon to open the packages list.'
+      : 'سومین آیکون نوار پایین را بزنید تا فهرست بسته‌ها باز شود.';
+  String get helpPkgActTabsTitle =>
+      locale.languageCode == 'en' ? 'Top tabs' : 'زبانه‌های بالا';
+  String get helpPkgActTabsDetail => locale.languageCode == 'en'
+      ? 'Switch Unlimited / Volume / Dedicated and review speed and duration.'
+      : 'بین نامحدود، حجمی و ددیکیت جابه‌جا شوید و سرعت و مدت هر بسته را ببینید.';
+
+  String get helpTipsTitle =>
+      locale.languageCode == 'en' ? 'Simple tips' : 'نکات ساده';
+  String get helpTip1 => locale.languageCode == 'en'
+      ? 'Before using the app, connect to your router Wi‑Fi.'
+      : 'قبل از کار با برنامه، به وای‌فای همان شبکه روتر وصل باشید.';
+  String get helpTip2 => locale.languageCode == 'en'
+      ? 'If the device list is empty, pull down to refresh or wait a moment.'
+      : 'اگر لیست دستگاه‌ها خالی بود، صفحه را به پایین بکشید یا کمی صبر کنید.';
+  String get helpTip3 => locale.languageCode == 'en'
+      ? 'After changing the Wi‑Fi password, reconnect devices with the new password.'
+      : 'بعد از عوض کردن رمز وای‌فای، دستگاه‌ها را با رمز جدید وصل کنید.';
+  String get helpTip4 => locale.languageCode == 'en'
+      ? 'If the service panel does not open, tap Refresh (circular arrow).'
+      : 'اگر پنل سرویس باز نشد، دکمه تازه‌سازی (دایره فلش‌دار) را بزنید.';
+  String get helpTip5 => locale.languageCode == 'en'
+      ? 'For login issues or forgotten password, contact support.'
+      : 'برای مشکل ورود یا رمز فراموش‌شده، با پشتیبانی تماس بگیرید.';
+  String get helpSupportTitle =>
+      locale.languageCode == 'en' ? 'Contact support' : 'تماس با پشتیبانی';
+  String get helpSupportSubtitle => locale.languageCode == 'en'
+      ? 'Tap a number to copy it'
+      : 'برای کپی شماره، روی آن ضربه بزنید';
 }
 
 class _AppLocalizationsDelegate

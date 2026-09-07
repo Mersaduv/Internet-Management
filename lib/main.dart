@@ -18,6 +18,7 @@ import 'screens/internet_service_screen.dart';
 import 'screens/internet_packages_screen.dart';
 import 'screens/app_settings_screen.dart';
 import 'screens/wifi_settings_screen.dart';
+import 'screens/subscriber_help_screen.dart';
 import 'services/mikrotik_service_manager.dart';
 import 'services/settings_service.dart';
 import 'services/network_info_service.dart';
@@ -30,6 +31,9 @@ import 'utils/app_theme.dart';
 import 'widgets/client_live_traffic_badge.dart';
 import 'widgets/traffic_list_item_visibility.dart';
 import 'utils/wifi_panel_url_resolver.dart';
+import 'utils/main_navigation.dart';
+
+export 'utils/main_navigation.dart' show mainBottomTabRequest;
 
 // 全局回调函数，用于从子组件通知主应用更改语言
 Function(Locale)? onLanguageChanged;
@@ -260,6 +264,7 @@ class _MyAppState extends State<MyApp> {
             defaultTitle: 'اطلاعات Wifi',
             allowUrlChange: false,
           ),
+          '/subscriber-help': (context) => const SubscriberHelpScreen(),
         },
         builder: (context, child) {
           final mediaQuery = MediaQuery.of(context);
@@ -365,14 +370,25 @@ class _MainScaffoldState extends State<MainScaffold>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    mainBottomTabRequest.addListener(_onMainBottomTabRequested);
     _checkLoginExpiration();
     _loadNetworkInfo();
   }
 
   @override
   void dispose() {
+    mainBottomTabRequest.removeListener(_onMainBottomTabRequested);
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
+  }
+
+  void _onMainBottomTabRequested() {
+    final index = mainBottomTabRequest.value;
+    if (index == null || !mounted) {
+      return;
+    }
+    mainBottomTabRequest.value = null;
+    _onTabTapped(index);
   }
 
   @override
@@ -856,6 +872,46 @@ class _HomePageState extends State<HomePage> with RouteAware {
                     );
                   },
                 ),
+                actions: [
+                  Padding(
+                    padding: const EdgeInsetsDirectional.only(end: 10),
+                    child: Center(
+                      child: Tooltip(
+                        message: l10n?.subscriberHelp ?? 'راهنمای مشترکین',
+                        child: Material(
+                          color: Colors.transparent,
+                          child: InkWell(
+                            onTap: () {
+                              Navigator.of(context)
+                                  .pushNamed('/subscriber-help');
+                            },
+                            borderRadius: BorderRadius.circular(12),
+                            child: Ink(
+                              decoration: BoxDecoration(
+                                color: Colors.white.withValues(alpha: 0.16),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: Colors.white.withValues(alpha: 0.28),
+                                ),
+                              ),
+                              child: const Padding(
+                                padding: EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 8,
+                                ),
+                                child: Icon(
+                                  Icons.headset_mic_rounded,
+                                  size: 22,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
                 backgroundColor: Colors.transparent,
                 foregroundColor: onBar,
                 iconTheme: IconThemeData(color: onBar),

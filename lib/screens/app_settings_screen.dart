@@ -371,14 +371,14 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
                   ListTile(
                     leading: Icon(Icons.wifi, color: primaryColor),
                     title: Text(
-                      l10n?.wifiSettings ?? '??????? ??????',
+                      l10n?.wifiSettings ?? 'تنظیمات وایفای',
                       style: const TextStyle(
                         fontWeight: FontWeight.bold,
                         fontSize: 16,
                       ),
                     ),
                     subtitle: Text(
-                      l10n?.wifiSettingsSubtitle ?? '????? ??? ? ??? ????',
+                      l10n?.wifiSettingsSubtitle ?? 'تغییر نام و رمز شبکه',
                       style: TextStyle(
                         color: Colors.grey.shade600,
                         fontSize: 14,
@@ -394,7 +394,34 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
                     },
                   ),
                   const Divider(height: 1),
-                  // ????
+                  ListTile(
+                    leading: Icon(Icons.headset_mic_rounded, color: primaryColor),
+                    title: Text(
+                      l10n?.subscriberHelp ?? 'راهنمایی مشترکین',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                    ),
+                    subtitle: Text(
+                      l10n?.subscriberHelpSettingsSubtitle ??
+                          'آموزش مدیریت دستگاه، وای‌فای و سرویس',
+                      style: TextStyle(
+                        color: Colors.grey.shade600,
+                        fontSize: 14,
+                      ),
+                    ),
+                    trailing: Icon(
+                      Icons.arrow_forward_ios,
+                      size: 16,
+                      color: AppTheme.primaryFor(theme.brightness),
+                    ),
+                    onTap: () {
+                      Navigator.of(context).pushNamed('/subscriber-help');
+                    },
+                  ),
+                  const Divider(height: 1),
+                  // زبان
                   ListTile(
                     leading: Icon(Icons.g_translate, color: primaryColor),
                     title: Text(
