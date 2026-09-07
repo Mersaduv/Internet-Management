@@ -1,83 +1,68 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-  بیلد فقط Android APK (release) + کپی به dist\android
+  Build Android release APK into dist\android
 
 .EXAMPLE
   .\tools\build_android.ps1
 #>
 [CmdletBinding()]
-param(
-  [switch]$SkipIcons
-)
+param()
 
 $ErrorActionPreference = 'Stop'
-[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$Root = Resolve-Path (Join-Path $PSScriptRoot '..')
+Set-Location -LiteralPath $Root
 
 function Write-Step([string]$Message) {
   Write-Host ""
-  Write-Host "══ $Message" -ForegroundColor Cyan
+  Write-Host "== $Message" -ForegroundColor Cyan
 }
 
-function Invoke-Flutter([string[]]$FlutterArgs) {
-  Write-Host (">> flutter " + ($FlutterArgs -join ' ')) -ForegroundColor DarkGray
-  & flutter @FlutterArgs
+function Invoke-Flutter([string[]]$Args) {
+  Write-Host (">> flutter " + ($Args -join ' ')) -ForegroundColor DarkGray
+  & flutter @Args
   if ($LASTEXITCODE -ne 0) {
-    throw "flutter $($FlutterArgs -join ' ') failed (exit $LASTEXITCODE)"
+    throw "flutter $($Args -join ' ') failed (exit $LASTEXITCODE)"
   }
 }
 
 function Get-AppVersion {
-  $line = Get-Content -Path (Join-Path $Root 'pubspec.yaml') |
+  $line = Get-Content (Join-Path $Root 'pubspec.yaml') |
     Where-Object { $_ -match '^\s*version:\s*' } |
     Select-Object -First 1
-  if (-not $line) { return @{ Name = '1.0.0'; Build = '1' } }
-  $raw = ($line -replace '^\s*version:\s*', '').Trim()
+  $raw = if ($line) { ($line -replace '^\s*version:\s*', '').Trim() } else { '1.0.0+1' }
   $parts = $raw.Split('+')
   return @{
     Name  = $parts[0]
     Build = $(if ($parts.Count -gt 1) { $parts[1] } else { '1' })
+    Full  = $raw
   }
 }
 
-$Root = Resolve-Path (Join-Path $PSScriptRoot '..')
-Set-Location -LiteralPath $Root
-
 if (-not (Get-Command flutter -ErrorAction SilentlyContinue)) {
-  Write-Host "[X] flutter در PATH نیست." -ForegroundColor Red
+  Write-Host "[X] flutter not found in PATH." -ForegroundColor Red
   exit 1
 }
 
 $ver = Get-AppVersion
-Write-Step "Android APK build — v$($ver.Name)+$($ver.Build)"
+Write-Step "Android APK — v$($ver.Full)"
 Write-Host "Root: $Root"
 
 Invoke-Flutter @('pub', 'get')
-
-if (-not $SkipIcons) {
-  try {
-    & dart run flutter_launcher_icons 2>$null
-  } catch { }
-}
-
 Write-Step "flutter build apk --release"
 Invoke-Flutter @('build', 'apk', '--release')
 
 $apkSrc = Join-Path $Root 'build\app\outputs\flutter-apk\app-release.apk'
 if (-not (Test-Path -LiteralPath $apkSrc)) {
-  Write-Host "[X] APK پیدا نشد: $apkSrc" -ForegroundColor Red
+  Write-Host "[X] APK not found: $apkSrc" -ForegroundColor Red
   exit 1
 }
 
-$distApk = Join-Path $Root 'dist\android'
-if (-not (Test-Path -LiteralPath $distApk)) {
-  New-Item -ItemType Directory -Path $distApk -Force | Out-Null
-}
+$distDir = Join-Path $Root 'dist\android'
+New-Item -ItemType Directory -Force -Path $distDir | Out-Null
 $apkName = "Jahan_Bit-v$($ver.Name)($($ver.Build))-release.apk"
-$apkDest = Join-Path $distApk $apkName
+$apkDest = Join-Path $distDir $apkName
 Copy-Item -LiteralPath $apkSrc -Destination $apkDest -Force
 
 Write-Host "[OK] $apkDest" -ForegroundColor Green
-Write-Host ""
-Write-Host "تمام شد." -ForegroundColor Green
 exit 0
