@@ -56,6 +56,12 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
   Color get _primaryColor =>
       AppTheme.primaryFor(Theme.of(context).brightness);
 
+  Color get _actionColor =>
+      AppTheme.actionFor(Theme.of(context).brightness);
+
+  Color get _onActionColor =>
+      AppTheme.onActionFor(Theme.of(context).brightness);
+
   bool get _allowDeviceActions =>
       ClientDisplayPolicy.shouldAllowDeviceActions(widget.device);
 
@@ -517,8 +523,8 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
                                               'Save',
                                         ),
                                         style: ElevatedButton.styleFrom(
-                                          backgroundColor: _primaryColor,
-                                          foregroundColor: Colors.white,
+                                          backgroundColor: _actionColor,
+                                          foregroundColor: _onActionColor,
                                           minimumSize: const Size.fromHeight(
                                             48,
                                           ),
@@ -1070,8 +1076,8 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
                             },
                           ),
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: _primaryColor,
-                            foregroundColor: Colors.white,
+                            backgroundColor: _actionColor,
+                            foregroundColor: _onActionColor,
                             padding: const EdgeInsets.symmetric(
                               horizontal: 28,
                               vertical: 14,
@@ -1634,8 +1640,8 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
                 : const Icon(Icons.save_outlined),
             label: Text(l10n?.save ?? 'Save'),
             style: ElevatedButton.styleFrom(
-              backgroundColor: _primaryColor,
-              foregroundColor: Colors.white,
+              backgroundColor: _actionColor,
+              foregroundColor: _onActionColor,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),
               ),
@@ -1854,8 +1860,8 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
             ElevatedButton(
               onPressed: () => Navigator.pop(context, true),
               style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.primaryFor(Theme.of(context).brightness),
-                foregroundColor: Colors.white,
+                backgroundColor: AppTheme.actionFor(Theme.of(context).brightness),
+                foregroundColor: AppTheme.onActionFor(Theme.of(context).brightness),
               ),
               child: Text(l10n?.unbanDevice ?? 'Unban Device'),
             ),
@@ -2386,11 +2392,8 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
                                     },
                                   ),
                                   style: ElevatedButton.styleFrom(
-                                    backgroundColor:
-                                        theme.brightness == Brightness.dark
-                                        ? _darkenColor(_primaryColor, 0.2)
-                                        : _primaryColor,
-                                    foregroundColor: Colors.white,
+                                    backgroundColor: _actionColor,
+                                    foregroundColor: _onActionColor,
                                     padding: const EdgeInsets.symmetric(
                                       vertical: 16,
                                     ),
@@ -2452,7 +2455,7 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
                                   style: ElevatedButton.styleFrom(
                                     backgroundColor:
                                         theme.brightness == Brightness.dark
-                                        ? _darkenColor(Colors.red, 0.3)
+                                        ? const Color(0xFF8B1E2D)
                                         : Colors.red,
                                     foregroundColor: Colors.white,
                                     padding: const EdgeInsets.symmetric(
@@ -2482,11 +2485,8 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
                                     },
                                   ),
                                   style: ElevatedButton.styleFrom(
-                                    backgroundColor:
-                                        theme.brightness == Brightness.dark
-                                        ? AppTheme.primaryDark
-                                        : AppTheme.primaryFor(Theme.of(context).brightness),
-                                    foregroundColor: Colors.white,
+                                    backgroundColor: _actionColor,
+                                    foregroundColor: _onActionColor,
                                     padding: const EdgeInsets.symmetric(
                                       vertical: 16,
                                     ),
@@ -2678,13 +2678,5 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
       default:
         return AppLocalizations.of(context)?.unknown ?? 'Unknown';
     }
-  }
-
-  /// تیره کردن رنگ برای تم تاریک
-  Color _darkenColor(Color color, double amount) {
-    assert(amount >= 0 && amount <= 1);
-    final hsl = HSLColor.fromColor(color);
-    final lightness = (hsl.lightness * (1 - amount)).clamp(0.0, 1.0);
-    return hsl.withLightness(lightness).toColor();
   }
 }

@@ -5,6 +5,7 @@ import '../services/settings_service.dart';
 import '../services/network_info_service.dart';
 import '../utils/app_localizations.dart';
 import '../utils/app_theme.dart';
+import '../widgets/cosmic_background.dart';
 
 /// صفحه ورود مدرن و حرفه‌ای
 class LoginScreen extends StatefulWidget {
@@ -196,8 +197,11 @@ class _LoginScreenState extends State<LoginScreen> {
     final logoSize = screenWidth >= 900 ? 180.0 : 230.0;
 
     return Scaffold(
-      backgroundColor: colorScheme.surface,
-      body: SafeArea(
+      backgroundColor: isDark ? AppTheme.darkScaffold : colorScheme.surface,
+      body: CosmicBackground(
+        showStars: isDark,
+        showGlow: isDark,
+        child: SafeArea(
         child: Center(
           child: SingleChildScrollView(
             padding: const EdgeInsets.symmetric(
@@ -261,7 +265,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           style: TextStyle(
                             fontSize: 16,
                             color: isDark
-                                ? colorScheme.onSurface.withOpacity(0.7)
+                                ? AppTheme.darkTextSecondary
                                 : Colors.grey.shade600,
                           ),
                           textAlign: TextAlign.center,
@@ -558,21 +562,29 @@ class _LoginScreenState extends State<LoginScreen> {
                       child: ElevatedButton(
                         onPressed: _isConnecting ? null : _handleLogin,
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: primaryColor,
-                          foregroundColor: Colors.white,
+                          backgroundColor: AppTheme.actionFor(theme.brightness),
+                          foregroundColor: AppTheme.onActionFor(theme.brightness),
+                          disabledBackgroundColor: AppTheme.actionFor(
+                            theme.brightness,
+                          ).withValues(alpha: 0.45),
+                          disabledForegroundColor: AppTheme.onActionFor(
+                            theme.brightness,
+                          ).withValues(alpha: 0.7),
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          minimumSize: const Size.fromHeight(52),
                           shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
+                            borderRadius: BorderRadius.circular(AppTheme.radiusMd),
                           ),
                           elevation: 0,
                         ),
                         child: _isConnecting
-                            ? const SizedBox(
+                            ? SizedBox(
                                 width: 24,
                                 height: 24,
                                 child: CircularProgressIndicator(
                                   strokeWidth: 2.5,
                                   valueColor: AlwaysStoppedAnimation<Color>(
-                                    Colors.white,
+                                    AppTheme.onActionFor(theme.brightness),
                                   ),
                                 ),
                               )
@@ -698,6 +710,7 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
             ),
           ),
+        ),
         ),
       ),
     );

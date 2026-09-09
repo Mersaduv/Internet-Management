@@ -1,5 +1,5 @@
-﻿name: jahan_bit
-description: "Ø¬Ù‡Ø§Ù† Ø¨ÛŒØª â€” Jahan Bit internet management"
+name: jahan_bit
+description: "جهان بیت — Jahan Bit internet management"
 # Developer Information
 # Developer: Mersad Karimi
 # Email: mersadkarimi001@gmail.com
@@ -41,25 +41,25 @@ dependencies:
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
   
-  # RouterOS Client - Ú©ØªØ§Ø¨Ø®Ø§Ù†Ù‡ Ø¢Ù…Ø§Ø¯Ù‡ Ø¨Ø±Ø§ÛŒ Ø§ØªØµØ§Ù„ Ø¨Ù‡ MikroTik RouterOS
+  # RouterOS Client - کتابخانه آماده برای اتصال به MikroTik RouterOS
   router_os_client: ^2.0.0
   
-  # Crypto library for MD5 hashing (Ø¨Ø±Ø§ÛŒ ÙØ§ÛŒÙ„ Ù‚Ø¯ÛŒÙ…ÛŒ - Ù…ÛŒâ€ŒØªÙˆØ§Ù†Ø¯ Ø­Ø°Ù Ø´ÙˆØ¯)
+  # Crypto library for MD5 hashing (برای فایل قدیمی - می‌تواند حذف شود)
   crypto: ^3.0.5
   
-  # Shared Preferences Ø¨Ø±Ø§ÛŒ Ø°Ø®ÛŒØ±Ù‡ ØªÙ†Ø¸ÛŒÙ…Ø§Øª
+  # Shared Preferences برای ذخیره تنظیمات
   shared_preferences: ^2.2.2
 
-  # Ø°Ø®ÛŒØ±Ù‡ Ø§Ù…Ù† Ø§Ø¹ØªØ¨Ø§Ø±Ù†Ø§Ù…Ù‡ Ø¨Ø±Ø§ÛŒ auto-login
+  # ذخیره امن اعتبارنامه برای auto-login
   flutter_secure_storage: ^9.2.2
   
-  # Provider Ø¨Ø±Ø§ÛŒ Ù…Ø¯ÛŒØ±ÛŒØª state
+  # Provider برای مدیریت state
   provider: ^6.1.1
   
-  # WebView Ø¨Ø±Ø§ÛŒ Ù†Ù…Ø§ÛŒØ´ ÙˆØ¨â€ŒØ³Ø§ÛŒØª Ø¯Ø± Ø¨Ø±Ù†Ø§Ù…Ù‡
+  # WebView برای نمایش وب‌سایت در برنامه
   flutter_inappwebview: ^6.1.0+11
 
-  # Default gateway ÙˆØ§Ù‚Ø¹ÛŒ Ø¯Ø³ØªÚ¯Ø§Ù‡ Ø§Ø² OS (Android/iOS/macOS/Linux/Windows)
+  # Default gateway واقعی دستگاه از OS (Android/iOS/macOS/Linux/Windows)
   network_info_plus: ^7.0.0
 
 dev_dependencies:
@@ -73,7 +73,7 @@ dev_dependencies:
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
   
-  # Flutter Launcher Icons - Ø¨Ø±Ø§ÛŒ ØªÙˆÙ„ÛŒØ¯ Ø¢ÛŒÚ©ÙˆÙ† Ø¨Ø±Ù†Ø§Ù…Ù‡
+  # Flutter Launcher Icons - برای تولید آیکون برنامه
   flutter_launcher_icons: ^0.13.1
 
 # For information on the generic Dart part of this file, see the
@@ -100,7 +100,7 @@ flutter:
   # For details regarding adding assets from package dependencies, see
   # https://flutter.dev/to/asset-from-package
 
-  # ÙÙˆÙ†Øª ÙØ§Ø±Ø³ÛŒ ÙˆØ²ÛŒØ±
+  # فونت فارسی وزیر
   fonts:
     - family: Vazir
       fonts:
@@ -117,7 +117,7 @@ flutter:
         - asset: assets/fonts/vazir/Vazir-Black.ttf
           weight: 900
 
-# ØªÙ†Ø¸ÛŒÙ…Ø§Øª Flutter Launcher Icons â€” Ø§Ø² new_logo_bitØŒ Ù¾Ø³â€ŒØ²Ù…ÛŒÙ†Ù‡ Ø³ÙÛŒØ¯ØŒ Ø²ÙˆÙ… Ø¨Ø§Ù„Ø§ Ø¨Ø±Ø§ÛŒ iOS/Windows
+# تنظیمات Flutter Launcher Icons — iOS/Windows زوم بالا؛ Android کمی کوچک‌تر تا لوگو کامل دیده شود
 flutter_launcher_icons:
   android: true
   ios: true
@@ -131,8 +131,9 @@ flutter_launcher_icons:
     image_path: "assets/icon/new_logo_bit_launcher.png"
     icon_size: 256
   image_path: "assets/icon/new_logo_bit_launcher.png"
+  image_path_android: "assets/icon/new_logo_bit_launcher_android.png"
   adaptive_icon_background: "#FFFFFF"
-  adaptive_icon_foreground: "assets/icon/new_logo_bit_launcher.png"
-  # inset Ú©Ù…ØªØ± = Ù„ÙˆÚ¯Ùˆ Ø¨Ø²Ø±Ú¯â€ŒØªØ± Ø¯Ø± Ø¢ÛŒÚ©ÙˆÙ† Ø§Ù†Ø¯Ø±ÙˆÛŒØ¯
-  adaptive_icon_foreground_inset: 8
+  adaptive_icon_foreground: "assets/icon/new_logo_bit_launcher_android.png"
+  # inset بیشتر = لوگو کوچک‌تر داخل ماسک لانچر اندروید
+  adaptive_icon_foreground_inset: 18
   remove_alpha_ios: true

@@ -22,11 +22,11 @@ function Write-Step([string]$Message) {
   Write-Host "== $Message" -ForegroundColor Cyan
 }
 
-function Invoke-Flutter([string[]]$Args) {
-  Write-Host (">> flutter " + ($Args -join ' ')) -ForegroundColor DarkGray
-  & flutter @Args
+function Invoke-Flutter([string[]]$FlutterArgs) {
+  Write-Host (">> flutter " + ($FlutterArgs -join ' ')) -ForegroundColor DarkGray
+  & flutter @FlutterArgs
   if ($LASTEXITCODE -ne 0) {
-    throw "flutter $($Args -join ' ') failed (exit $LASTEXITCODE)"
+    throw "flutter $($FlutterArgs -join ' ') failed (exit $LASTEXITCODE)"
   }
 }
 

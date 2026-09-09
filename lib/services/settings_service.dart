@@ -18,6 +18,7 @@ class SettingsService {
   static const String _keyRememberMe = 'remember_me';
   static const String _keyLanguage = 'app_language';
   static const String _keyThemeMode = 'app_theme_mode';
+  static const String _keyPackageProvince = 'package_province';
 
   static const _secureStorage = FlutterSecureStorage(
     aOptions: AndroidOptions(encryptedSharedPreferences: true),
@@ -34,7 +35,7 @@ class SettingsService {
   static const String _defaultServiceUrl = 'http://165.99.189.40:9394/users/';
   static const String _legacyDefaultServiceUrl = 'http://user.ariyabod.af/users';
   static const String _defaultLanguage = 'fa'; // 默认语言：波斯语
-  static const String _defaultThemeMode = 'light'; // 默认主题：跟随系统
+  static const String _defaultThemeMode = 'dark'; // پیش‌فرض: دارک‌مود cosmic
 
   // Cache برای تنظیمات (برای جلوگیری از خطا در صورت مشکل shared_preferences)
   String? _cachedHost;
@@ -43,6 +44,7 @@ class SettingsService {
   String? _cachedServiceUrl;
   String? _cachedLanguage;
   String? _cachedThemeMode;
+  String? _cachedPackageProvince;
 
   /// دریافت Host
   Future<String> getHost() async {
@@ -339,7 +341,7 @@ class SettingsService {
       case 'system':
         return ThemeMode.system;
       default:
-        return ThemeMode.light; // Default fallback: light
+        return ThemeMode.dark; // Default fallback: dark
     }
   }
 
@@ -377,6 +379,32 @@ class SettingsService {
     return stringToThemeMode(mode);
   }
 
+  /// ولایت بسته‌های اینترنتی ذخیره‌شده — null یعنی هنوز انتخاب نشده
+  Future<String?> getPackageProvinceId() async {
+    if (_cachedPackageProvince != null) {
+      return _cachedPackageProvince!.isEmpty ? null : _cachedPackageProvince;
+    }
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final value = prefs.getString(_keyPackageProvince);
+      _cachedPackageProvince = value ?? '';
+      return (value == null || value.isEmpty) ? null : value;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// ذخیره ولایت پیش‌فرض بسته‌ها
+  Future<void> setPackageProvinceId(String provinceId) async {
+    _cachedPackageProvince = provinceId;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_keyPackageProvince, provinceId);
+    } catch (_) {
+      // فقط در حافظه نگه دار
+    }
+  }
+
   /// بازنشانی به تنظیمات پیش‌فرض
   Future<void> resetToDefaults() async {
     _cachedHost = null;
@@ -385,6 +413,7 @@ class SettingsService {
     _cachedServiceUrl = null;
     _cachedLanguage = null;
     _cachedThemeMode = null;
+    _cachedPackageProvince = null;
     
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -394,6 +423,7 @@ class SettingsService {
       await prefs.remove(_keyServiceUrl);
       await prefs.remove(_keyLanguage);
       await prefs.remove(_keyThemeMode);
+      await prefs.remove(_keyPackageProvince);
     } catch (e) {
       // اگر shared_preferences کار نکرد، فقط cache را پاک کن
     }

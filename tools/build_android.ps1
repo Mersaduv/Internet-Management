@@ -30,7 +30,7 @@ function Get-AppVersion {
   $line = Get-Content (Join-Path $Root 'pubspec.yaml') |
     Where-Object { $_ -match '^\s*version:\s*' } |
     Select-Object -First 1
-  $raw = if ($line) { ($line -replace '^\s*version:\s*', '').Trim() } else { '1.0.0+1' }
+  $raw = if ($line) { ($line -replace '^\s*version:\s*', '').Trim() } else { '1.2.0+1' }
   $parts = $raw.Split('+')
   return @{
     Name  = $parts[0]

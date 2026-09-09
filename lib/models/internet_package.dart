@@ -34,6 +34,10 @@ class InternetPackage {
   bool get isVolume => kind == InternetPackageKind.volume;
 
   static String formatMbps(double speed) {
+    if (speed > 0 && speed < 1) {
+      final kbps = (speed * 1000).round();
+      return '${kbps}Kbps';
+    }
     final value = speed == speed.roundToDouble()
         ? speed.toInt().toString()
         : speed.toString();

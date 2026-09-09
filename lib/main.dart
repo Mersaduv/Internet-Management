@@ -29,6 +29,7 @@ import 'utils/client_display_name.dart';
 import 'utils/app_localizations.dart';
 import 'utils/app_theme.dart';
 import 'widgets/client_live_traffic_badge.dart';
+import 'widgets/cosmic_background.dart';
 import 'widgets/traffic_list_item_visibility.dart';
 import 'utils/wifi_panel_url_resolver.dart';
 import 'utils/main_navigation.dart';
@@ -58,7 +59,7 @@ class MyApp extends StatefulWidget {
 class _MyAppState extends State<MyApp> {
   final SettingsService _settingsService = SettingsService();
   Locale _locale = const Locale('fa', 'IR'); // 默认语言：波斯语
-  ThemeMode _themeMode = ThemeMode.light; // 默认主题：跟随系统
+  ThemeMode _themeMode = ThemeMode.dark; // پیش‌فرض: دارک‌مود cosmic
   bool _isLoading = true;
   final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
 
@@ -145,7 +146,7 @@ class _MyAppState extends State<MyApp> {
     } catch (e) {
       setState(() {
         _locale = const Locale('fa', 'IR');
-        _themeMode = ThemeMode.light;
+        _themeMode = ThemeMode.dark;
         _isLoading = false;
       });
     }
@@ -515,7 +516,10 @@ class _MainScaffoldState extends State<MainScaffold>
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
+    final isDark = theme.brightness == Brightness.dark;
+
     return Scaffold(
+      backgroundColor: isDark ? AppTheme.darkScaffold : colorScheme.surface,
       body: IndexedStack(
         index: _currentIndex,
         children: const [
@@ -531,20 +535,21 @@ class _MainScaffoldState extends State<MainScaffold>
           minimum: const EdgeInsets.fromLTRB(12, 0, 12, 8),
           child: DecoratedBox(
             decoration: BoxDecoration(
-              color: theme.brightness == Brightness.dark
-                  ? colorScheme.surface.withOpacity(0.96)
-                  : Colors.white.withOpacity(0.96),
+              color: isDark
+                  ? AppTheme.darkNavBar.withValues(alpha: 0.96)
+                  : Colors.white.withValues(alpha: 0.96),
               borderRadius: BorderRadius.circular(28),
               border: Border.all(
-                color: colorScheme.outlineVariant.withOpacity(
-                  theme.brightness == Brightness.dark ? 0.35 : 0.55,
-                ),
+                color: isDark
+                    ? AppTheme.darkRim.withValues(alpha: 0.42)
+                    : colorScheme.outlineVariant.withValues(alpha: 0.55),
               ),
               boxShadow: [
                 BoxShadow(
-                  color: theme.brightness == Brightness.dark
-                      ? Colors.black.withOpacity(0.28)
-                      : AppTheme.primaryFor(Theme.of(context).brightness).withOpacity(0.12),
+                  color: isDark
+                      ? AppTheme.darkGlow.withValues(alpha: 0.12)
+                      : AppTheme.primaryFor(theme.brightness)
+                          .withValues(alpha: 0.12),
                   blurRadius: 24,
                   offset: const Offset(0, 12),
                 ),
@@ -594,8 +599,10 @@ class _MainScaffoldState extends State<MainScaffold>
     required bool isActive,
   }) {
     final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
     final primaryColor = AppTheme.primaryFor(theme.brightness);
+    final inactiveColor =
+        isDark ? AppTheme.darkTextSecondary : primaryColor;
 
     return Expanded(
       child: Padding(
@@ -611,24 +618,24 @@ class _MainScaffoldState extends State<MainScaffold>
               borderRadius: BorderRadius.circular(22),
               gradient: isActive
                   ? LinearGradient(
-                      colors: [
-                        primaryColor,
-                        Color.lerp(
+                      colors: isDark
+                          ? [
+                              AppTheme.darkGlowDeep,
+                              AppTheme.darkGlow,
+                            ]
+                          : [
                               primaryColor,
-                              Colors.white,
-                              theme.brightness == Brightness.dark ? 0.16 : 0.08,
-                            ) ??
-                            primaryColor,
-                      ],
+                              Color.lerp(primaryColor, Colors.white, 0.08) ??
+                                  primaryColor,
+                            ],
                     )
                   : null,
               color: isActive ? null : Colors.transparent,
               boxShadow: isActive
                   ? [
                       BoxShadow(
-                        color: primaryColor.withOpacity(
-                          theme.brightness == Brightness.dark ? 0.28 : 0.2,
-                        ),
+                        color: (isDark ? AppTheme.darkGlow : primaryColor)
+                            .withValues(alpha: isDark ? 0.35 : 0.2),
                         blurRadius: 20,
                         offset: const Offset(0, 8),
                       ),
@@ -644,15 +651,20 @@ class _MainScaffoldState extends State<MainScaffold>
                   height: 40,
                   decoration: BoxDecoration(
                     color: isActive
-                        ? Colors.white.withOpacity(0.2)
-                        : (theme.brightness == Brightness.dark
-                              ? colorScheme.surfaceContainerHighest
-                              : primaryColor.withOpacity(0.15)),
+                        ? Colors.white.withValues(alpha: 0.18)
+                        : (isDark
+                              ? AppTheme.darkSurface.withValues(alpha: 0.9)
+                              : primaryColor.withValues(alpha: 0.15)),
                     borderRadius: BorderRadius.circular(14),
+                    border: isDark && !isActive
+                        ? Border.all(
+                            color: AppTheme.darkRim.withValues(alpha: 0.35),
+                          )
+                        : null,
                   ),
                   child: Icon(
                     isActive ? activeIcon : icon,
-                    color: isActive ? Colors.white : primaryColor,
+                    color: isActive ? Colors.white : inactiveColor,
                     size: 26,
                   ),
                 ),
@@ -821,6 +833,9 @@ class _HomePageState extends State<HomePage> with RouteAware {
     final colorScheme = theme.colorScheme;
 
     return Scaffold(
+      backgroundColor: theme.brightness == Brightness.dark
+          ? AppTheme.darkScaffold
+          : colorScheme.surfaceContainerHighest,
       appBar: PreferredSize(
         preferredSize: const Size.fromHeight(kToolbarHeight),
         child: Container(
@@ -829,8 +844,8 @@ class _HomePageState extends State<HomePage> with RouteAware {
             boxShadow: [
               BoxShadow(
                 color: theme.brightness == Brightness.dark
-                    ? Colors.black.withOpacity(0.3)
-                    : Colors.black.withOpacity(0.05),
+                    ? AppTheme.darkGlow.withValues(alpha: 0.12)
+                    : Colors.black.withValues(alpha: 0.05),
                 blurRadius: 10,
                 offset: const Offset(0, 2),
               ),
@@ -927,17 +942,20 @@ class _HomePageState extends State<HomePage> with RouteAware {
         builder: (context) {
           final theme = Theme.of(context);
           final colorScheme = theme.colorScheme;
+          final isDark = theme.brightness == Brightness.dark;
 
-          return Container(
-            color: colorScheme.surfaceContainerHighest,
-            child: Column(
-              children: [
-                // اطلاعات اتصال
-                if (connection != null)
-                  Container(
+          final content = Column(
+            children: [
+              if (connection != null)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                  child: Container(
                     width: double.infinity,
                     padding: const EdgeInsets.all(16),
-                    color: colorScheme.surface,
+                    decoration: AppTheme.cosmicCardDecoration(
+                      radius: 20,
+                      brightness: theme.brightness,
+                    ),
                     child: !provider.phase3Complete
                         ? _buildConnectionHeaderSkeleton(context)
                         : Column(
@@ -945,41 +963,44 @@ class _HomePageState extends State<HomePage> with RouteAware {
                             children: [
                               Row(
                                 children: [
-                                  Icon(
-                                    Icons.router,
-                                    color: colorScheme.primary,
-                                    size: 20,
+                                  Container(
+                                    width: 40,
+                                    height: 40,
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      color: isDark
+                                          ? AppTheme.darkGlow.withValues(alpha: 0.18)
+                                          : colorScheme.primary.withValues(alpha: 0.1),
+                                      border: isDark
+                                          ? Border.all(
+                                              color: AppTheme.darkRim.withValues(alpha: 0.45),
+                                            )
+                                          : null,
+                                    ),
+                                    child: Icon(
+                                      Icons.router,
+                                      color: isDark
+                                          ? AppTheme.primaryDark
+                                          : colorScheme.primary,
+                                      size: 20,
+                                    ),
                                   ),
-                                  const SizedBox(width: 8),
+                                  const SizedBox(width: 12),
                                   Expanded(
                                     child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
+                                      crossAxisAlignment: CrossAxisAlignment.start,
                                       children: [
                                         Text(
-                                          provider.routerInfo?['identity'] !=
-                                                      null &&
-                                                  provider.routerInfo!['identity'] !=
-                                                      'Unknown' &&
-                                                  provider
-                                                      .routerInfo!['identity']!
-                                                      .toString()
-                                                      .isNotEmpty
-                                              ? provider
-                                                    .routerInfo!['identity']!
-                                              : provider.routerInfo?['board-name'] !=
-                                                        null &&
-                                                    provider.routerInfo!['board-name'] !=
-                                                        'Unknown'
-                                              ? provider
-                                                    .routerInfo!['board-name']!
+                                          provider.routerInfo?['identity'] != null &&
+                                                  provider.routerInfo!['identity'] != 'Unknown' &&
+                                                  provider.routerInfo!['identity']!.toString().isNotEmpty
+                                              ? provider.routerInfo!['identity']!
+                                              : provider.routerInfo?['board-name'] != null &&
+                                                    provider.routerInfo!['board-name'] != 'Unknown'
+                                              ? provider.routerInfo!['board-name']!
                                               : '${connection.host}:${connection.port}',
                                           style: TextStyle(
-                                            color:
-                                                theme.brightness ==
-                                                    Brightness.dark
-                                                ? colorScheme.onSurface
-                                                : Colors.black87,
+                                            color: isDark ? AppTheme.pureWhite : Colors.black87,
                                             fontSize: 16,
                                             fontWeight: FontWeight.bold,
                                           ),
@@ -990,18 +1011,19 @@ class _HomePageState extends State<HomePage> with RouteAware {
                                   if (connection.useSsl) ...[
                                     const SizedBox(width: 8),
                                     Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 8,
-                                        vertical: 4,
-                                      ),
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                       decoration: BoxDecoration(
-                                        color: colorScheme.primary,
-                                        borderRadius: BorderRadius.circular(4),
+                                        color: isDark
+                                            ? AppTheme.darkAction
+                                            : colorScheme.primary,
+                                        borderRadius: BorderRadius.circular(8),
                                       ),
-                                      child: const Text(
+                                      child: Text(
                                         'SSL',
                                         style: TextStyle(
-                                          color: Colors.white,
+                                          color: isDark
+                                              ? AppTheme.darkActionForeground
+                                              : Colors.white,
                                           fontSize: 10,
                                           fontWeight: FontWeight.bold,
                                         ),
@@ -1010,17 +1032,15 @@ class _HomePageState extends State<HomePage> with RouteAware {
                                   ],
                                 ],
                               ),
-                              const SizedBox(height: 4),
+                              const SizedBox(height: 8),
                               Builder(
                                 builder: (context) {
                                   final l10n = AppLocalizations.of(context);
                                   return Text(
                                     '${l10n?.user ?? 'User'}: ${connection.username}',
                                     style: TextStyle(
-                                      color: theme.brightness == Brightness.dark
-                                          ? colorScheme.onSurface.withOpacity(
-                                              0.7,
-                                            )
+                                      color: isDark
+                                          ? AppTheme.darkTextSecondary
                                           : Colors.grey.shade700,
                                       fontSize: 14,
                                     ),
@@ -1035,11 +1055,8 @@ class _HomePageState extends State<HomePage> with RouteAware {
                                     return Text(
                                       '${l10n?.yourDeviceIP ?? 'Your Device IP'}: ${provider.deviceIp}',
                                       style: TextStyle(
-                                        color:
-                                            theme.brightness == Brightness.dark
-                                            ? colorScheme.onSurface.withOpacity(
-                                                0.6,
-                                              )
+                                        color: isDark
+                                            ? AppTheme.darkTextSecondary.withValues(alpha: 0.85)
                                             : Colors.grey.shade600,
                                         fontSize: 12,
                                       ),
@@ -1050,126 +1067,116 @@ class _HomePageState extends State<HomePage> with RouteAware {
                             ],
                           ),
                   ),
-
-                // Tab Bar و لیست دستگاه‌ها
-                Expanded(
-                  child: Column(
-                    children: [
-                      // دکمه قفل اتصال جدید
-                      Container(
+                ),
+              Expanded(
+                child: Column(
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                      child: SizedBox(
                         width: double.infinity,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 8,
-                        ),
-                        color: colorScheme.surface,
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: ElevatedButton.icon(
-                                onPressed:
-                                    (!provider.phase1Complete &&
-                                            provider.isLoading) ||
-                                        provider.isLockUpdating
-                                    ? null
-                                    : () async {
-                                        final l10n = AppLocalizations.of(
-                                          context,
-                                        );
-                                        final messenger = ScaffoldMessenger.of(
-                                          context,
-                                        );
-                                        final activating =
-                                            !provider.isNewConnectionsLocked;
-                                        final success = await provider
-                                            .toggleNewConnectionsLock();
-                                        if (!mounted) return;
-                                        messenger.showSnackBar(
-                                          SnackBar(
-                                            content: Text(
-                                              success
-                                                  ? (activating
-                                                        ? (l10n?.lockNewConnectionsEnabled ??
-                                                              'New connections locked')
-                                                        : (l10n?.lockNewConnectionsDisabled ??
-                                                              'New connections unlocked'))
-                                                  : (provider.errorMessage ??
-                                                        (l10n?.lockStatusError ??
-                                                            'Error changing lock status')),
-                                            ),
-                                            backgroundColor: success
-                                                ? Theme.of(
-                                                    context,
-                                                  ).colorScheme.primary
-                                                : Colors.red,
-                                            behavior: SnackBarBehavior.floating,
-                                          ),
-                                        );
-                                      },
-                                icon: provider.isLockUpdating
-                                    ? const SizedBox(
-                                        width: 18,
-                                        height: 18,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2,
-                                          color: Colors.white,
-                                        ),
-                                      )
-                                    : Icon(
-                                        provider.isNewConnectionsLocked
-                                            ? Icons.lock
-                                            : Icons.lock_open,
-                                        size: 20,
+                        child: ElevatedButton.icon(
+                          onPressed: (!provider.phase1Complete && provider.isLoading) ||
+                                  provider.isLockUpdating
+                              ? null
+                              : () async {
+                                  final l10n = AppLocalizations.of(context);
+                                  final messenger = ScaffoldMessenger.of(context);
+                                  final activating = !provider.isNewConnectionsLocked;
+                                  final success = await provider.toggleNewConnectionsLock();
+                                  if (!mounted) return;
+                                  messenger.showSnackBar(
+                                    SnackBar(
+                                      content: Text(
+                                        success
+                                            ? (activating
+                                                  ? (l10n?.lockNewConnectionsEnabled ??
+                                                        'New connections locked')
+                                                  : (l10n?.lockNewConnectionsDisabled ??
+                                                        'New connections unlocked'))
+                                            : (provider.errorMessage ??
+                                                  (l10n?.lockStatusError ??
+                                                      'Error changing lock status')),
                                       ),
-                                label: Builder(
-                                  builder: (context) {
-                                    final l10n = AppLocalizations.of(context);
-                                    return Text(
-                                      provider.isNewConnectionsLocked
-                                          ? (l10n?.lockNewConnectionsActive ??
-                                                'Lock New Connections (Active)')
-                                          : (l10n?.lockNewConnections ??
-                                                'Lock New Connections'),
-                                      style: const TextStyle(fontSize: 14),
-                                    );
-                                  },
-                                ),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor:
-                                      provider.isNewConnectionsLocked
-                                      ? Colors.red.shade600
-                                      : (theme.brightness == Brightness.dark
-                                            ? colorScheme
-                                                  .surfaceContainerHighest
-                                            : Colors.grey.shade300),
-                                  foregroundColor:
-                                      provider.isNewConnectionsLocked
-                                      ? Colors.white
-                                      : (theme.brightness == Brightness.dark
-                                            ? colorScheme.onSurface
-                                            : Colors.black87),
-                                  padding: const EdgeInsets.symmetric(
-                                    vertical: 12,
+                                      backgroundColor: success
+                                          ? (isDark
+                                                ? AppTheme.darkCardTop
+                                                : Theme.of(context).colorScheme.primary)
+                                          : Colors.red,
+                                      behavior: SnackBarBehavior.floating,
+                                    ),
+                                  );
+                                },
+                          icon: provider.isLockUpdating
+                              ? const SizedBox(
+                                  width: 22,
+                                  height: 22,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2.5,
+                                    color: Colors.white,
                                   ),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
+                                )
+                              : Icon(
+                                  provider.isNewConnectionsLocked
+                                      ? Icons.lock
+                                      : Icons.lock_open,
+                                  size: 24,
                                 ),
+                          label: Builder(
+                            builder: (context) {
+                              final l10n = AppLocalizations.of(context);
+                              return Text(
+                                provider.isNewConnectionsLocked
+                                    ? (l10n?.lockNewConnectionsActive ??
+                                          'Lock New Connections (Active)')
+                                    : (l10n?.lockNewConnections ??
+                                          'Lock New Connections'),
+                                style: const TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              );
+                            },
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            minimumSize: const Size.fromHeight(56),
+                            backgroundColor: provider.isNewConnectionsLocked
+                                ? const Color(0xFFE11D48)
+                                : (isDark
+                                      ? AppTheme.darkOrange
+                                      : const Color(0xFFEA580C)),
+                            foregroundColor: Colors.white,
+                            disabledBackgroundColor: isDark
+                                ? AppTheme.darkOrangeDeep.withValues(alpha: 0.55)
+                                : const Color(0xFFEA580C).withValues(alpha: 0.45),
+                            disabledForegroundColor:
+                                Colors.white.withValues(alpha: 0.85),
+                            padding: const EdgeInsets.symmetric(
+                              vertical: 18,
+                              horizontal: 16,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(
+                                AppTheme.radiusMd,
                               ),
                             ),
-                          ],
+                          ),
                         ),
                       ),
-                      const SizedBox(height: 8),
-                      // Tab Bar
-                      Builder(
-                        builder: (context) {
-                          final theme = Theme.of(context);
-                          final colorScheme = theme.colorScheme;
-
-                          return Container(
+                    ),
+                    const SizedBox(height: 4),
+                    Builder(
+                      builder: (context) {
+                        final theme = Theme.of(context);
+                        final brightness = theme.brightness;
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          child: Container(
                             width: double.infinity,
-                            color: colorScheme.surface,
+                            decoration: AppTheme.cosmicCardDecoration(
+                              radius: 18,
+                              brightness: brightness,
+                            ),
                             child: Row(
                               mainAxisSize: MainAxisSize.max,
                               children: [
@@ -1199,7 +1206,8 @@ class _HomePageState extends State<HomePage> with RouteAware {
                                       return _buildTabButton(
                                         title: l10n?.locale.languageCode == 'fa'
                                             ? 'مسدود'
-                                            : (l10n?.bannedDevices ?? 'Banned'),
+                                            : (l10n?.bannedDevices ??
+                                                  'Banned'),
                                         count: provider.bannedTabCount,
                                         icon: Icons.block,
                                         isActive: _selectedTab == 1,
@@ -1210,24 +1218,28 @@ class _HomePageState extends State<HomePage> with RouteAware {
                                 ),
                               ],
                             ),
-                          );
-                        },
+                          ),
+                        );
+                      },
+                    ),
+                    Expanded(
+                      child: IndexedStack(
+                        index: _selectedTab,
+                        children: [
+                          _buildConnectedDevicesTab(provider),
+                          _buildBannedDevicesTab(provider),
+                        ],
                       ),
-                      // محتوای Tab
-                      Expanded(
-                        child: IndexedStack(
-                          index: _selectedTab,
-                          children: [
-                            _buildConnectedDevicesTab(provider),
-                            _buildBannedDevicesTab(provider),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
+              ),
+            ],
+          );
+
+          return CosmicBackground(
+            showStars: isDark,
+            child: content,
           );
         },
       ),
@@ -1244,8 +1256,6 @@ class _HomePageState extends State<HomePage> with RouteAware {
     return Builder(
       builder: (context) {
         final theme = Theme.of(context);
-        final colorScheme = theme.colorScheme;
-        final primaryColor = AppTheme.primaryFor(theme.brightness);
 
         // تشخیص اندازه صفحه برای ریسپانسیو کردن
         final screenWidth = MediaQuery.of(context).size.width;
@@ -1262,18 +1272,22 @@ class _HomePageState extends State<HomePage> with RouteAware {
 
         return InkWell(
           onTap: onTap,
+          borderRadius: BorderRadius.circular(16),
           child: Container(
             padding: padding,
             decoration: BoxDecoration(
               color: isActive
                   ? (theme.brightness == Brightness.dark
-                        ? primaryColor.withOpacity(0.2)
-                        : primaryColor.withOpacity(0.1))
+                        ? AppTheme.darkGlow.withValues(alpha: 0.22)
+                        : AppTheme.primary.withValues(alpha: 0.12))
                   : Colors.transparent,
+              borderRadius: BorderRadius.circular(16),
               border: Border(
                 bottom: BorderSide(
-                  color: isActive ? primaryColor : Colors.transparent,
-                  width: 3,
+                  color: theme.brightness == Brightness.dark
+                      ? Colors.transparent
+                      : Colors.transparent,
+                  width: 0,
                 ),
               ),
             ),
@@ -1285,9 +1299,11 @@ class _HomePageState extends State<HomePage> with RouteAware {
                   icon,
                   size: iconSize,
                   color: isActive
-                      ? primaryColor
+                      ? (theme.brightness == Brightness.dark
+                            ? AppTheme.pureWhite
+                            : AppTheme.primary)
                       : (theme.brightness == Brightness.dark
-                            ? colorScheme.onSurface.withOpacity(0.6)
+                            ? AppTheme.darkTextSecondary
                             : Colors.grey.shade600),
                 ),
                 SizedBox(width: spacing),
@@ -1300,9 +1316,11 @@ class _HomePageState extends State<HomePage> with RouteAware {
                           ? FontWeight.bold
                           : FontWeight.normal,
                       color: isActive
-                          ? primaryColor
+                          ? (theme.brightness == Brightness.dark
+                                ? AppTheme.pureWhite
+                                : AppTheme.primary)
                           : (theme.brightness == Brightness.dark
-                                ? colorScheme.onSurface.withOpacity(0.6)
+                                ? AppTheme.darkTextSecondary
                                 : Colors.grey.shade600),
                     ),
                     overflow: TextOverflow.ellipsis,
@@ -1740,8 +1758,10 @@ class _HomePageState extends State<HomePage> with RouteAware {
         final colorScheme = theme.colorScheme;
 
         return Material(
-          color: colorScheme.surface,
-          child: InkWell(
+          color: Colors.transparent,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 6, 16, 0),
+            child: InkWell(
             onTap: () {
               Navigator.pushNamed(
                 context,
@@ -1753,21 +1773,15 @@ class _HomePageState extends State<HomePage> with RouteAware {
                 },
               );
             },
-            splashColor: Colors.red.withOpacity(0.1),
-            highlightColor: Colors.red.withOpacity(0.05),
+            borderRadius: BorderRadius.circular(18),
+            splashColor: Colors.red.withValues(alpha: 0.1),
+            highlightColor: Colors.red.withValues(alpha: 0.05),
             child: Container(
               width: double.infinity,
-              margin: const EdgeInsets.symmetric(vertical: 1),
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              decoration: BoxDecoration(
-                border: Border(
-                  bottom: BorderSide(
-                    color: theme.brightness == Brightness.dark
-                        ? colorScheme.outline.withOpacity(0.2)
-                        : Colors.grey.shade300,
-                    width: 1,
-                  ),
-                ),
+              decoration: AppTheme.cosmicCardDecoration(
+                radius: 18,
+                brightness: theme.brightness,
               ),
               child: Row(
                 children: [
@@ -1996,6 +2010,7 @@ class _HomePageState extends State<HomePage> with RouteAware {
               ),
             ),
           ),
+          ),
         );
       },
     );
@@ -2185,53 +2200,54 @@ class _HomePageState extends State<HomePage> with RouteAware {
 
     final showOperationProgress = provider.isDeviceUnderOperation(client);
 
-    return Material(
-      color: colorScheme.surface,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          InkWell(
-            onTap: isPendingApproval ? null : openDeviceDetail,
-            splashColor: colorScheme.primary.withOpacity(0.1),
-            highlightColor: colorScheme.primary.withOpacity(0.05),
-            child: Container(
-              width: double.infinity,
-              margin: const EdgeInsets.symmetric(vertical: 1),
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              decoration: BoxDecoration(
-                border: Border(
-                  bottom: BorderSide(
-                    color: theme.brightness == Brightness.dark
-                        ? colorScheme.outline.withOpacity(0.2)
-                        : Colors.grey.shade300,
-                    width: 1,
-                  ),
-                ),
-              ),
-              child: Row(
-                children: [
-                  Stack(
+    final isDark = theme.brightness == Brightness.dark;
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 6, 16, 0),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: isPendingApproval ? null : openDeviceDetail,
+          borderRadius: BorderRadius.circular(18),
+          splashColor: colorScheme.primary.withValues(alpha: 0.1),
+          highlightColor: colorScheme.primary.withValues(alpha: 0.05),
+          child: Ink(
+            decoration: AppTheme.cosmicCardDecoration(
+              radius: 18,
+              brightness: theme.brightness,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  child: Row(
                     children: [
-                      if (showPhase2Skeleton)
-                        const _SkeletonBox(
-                          width: 48,
-                          height: 48,
-                          borderRadius: 24,
-                        )
-                      else
-                        CircleAvatar(
-                          backgroundColor: isCurrentDevice
-                              ? colorScheme.primary.withOpacity(0.2)
-                              : typeColor.withOpacity(0.2),
-                          child: Icon(
-                            typeIcon,
-                            color: isCurrentDevice
-                                ? colorScheme.primary
-                                : typeColor,
-                            size: 24,
-                          ),
-                        ),
-                      if (isCurrentDevice)
+                      Stack(
+                        children: [
+                          if (showPhase2Skeleton)
+                            const _SkeletonBox(
+                              width: 48,
+                              height: 48,
+                              borderRadius: 24,
+                            )
+                          else
+                            CircleAvatar(
+                              backgroundColor: isCurrentDevice
+                                  ? (isDark
+                                        ? AppTheme.darkGlow.withValues(alpha: 0.25)
+                                        : colorScheme.primary.withValues(alpha: 0.2))
+                                  : typeColor.withValues(alpha: 0.2),
+                              child: Icon(
+                                typeIcon,
+                                color: isCurrentDevice
+                                    ? (isDark ? AppTheme.primaryDark : colorScheme.primary)
+                                    : typeColor,
+                                size: 24,
+                              ),
+                            ),
+                          if (isCurrentDevice)
                         Positioned(
                           right: 0,
                           bottom: 0,
@@ -2427,17 +2443,19 @@ class _HomePageState extends State<HomePage> with RouteAware {
                 ],
               ),
             ),
-          ),
-          if (showOperationProgress)
-            RepaintBoundary(
-              child: LinearProgressIndicator(
-                minHeight: 2,
-                color: AppTheme.primaryFor(Theme.of(context).brightness),
-                backgroundColor:
-                    AppTheme.tintFor(Theme.of(context).brightness),
-              ),
+                if (showOperationProgress)
+                  RepaintBoundary(
+                    child: LinearProgressIndicator(
+                      minHeight: 2,
+                      color: AppTheme.primaryFor(Theme.of(context).brightness),
+                      backgroundColor:
+                          AppTheme.tintFor(Theme.of(context).brightness),
+                    ),
+                  ),
+              ],
             ),
-        ],
+          ),
+        ),
       ),
     );
   }

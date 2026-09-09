@@ -1,13 +1,13 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 
 import '../data/internet_packages_data.dart';
 import '../models/internet_package.dart';
+import '../services/settings_service.dart';
 import '../utils/app_layout.dart';
 import '../utils/app_localizations.dart';
 import '../utils/app_theme.dart';
 import '../widgets/desktop_content.dart';
+import '../widgets/cosmic_background.dart';
 
 /// صفحهٔ کاتالوگ بسته‌های اینترنتی — تم هماهنگ با روشن/تاریک پروژه.
 class InternetPackagesScreen extends StatefulWidget {
@@ -18,17 +18,71 @@ class InternetPackagesScreen extends StatefulWidget {
 }
 
 class _InternetPackagesScreenState extends State<InternetPackagesScreen> {
+  final SettingsService _settingsService = SettingsService();
+
+  PackageProvince? _province;
   InternetPackageKind _selectedKind = InternetPackageKind.dedicated;
+  bool _loadingProvince = true;
+  bool _pickerVisible = false;
+
+  ProvincePackageCatalog? get _catalog =>
+      _province == null ? null : InternetPackagesData.catalogFor(_province!);
+
+  @override
+  void initState() {
+    super.initState();
+    _loadProvince();
+  }
+
+  Future<void> _loadProvince() async {
+    final savedId = await _settingsService.getPackageProvinceId();
+    final saved = PackageProvinceX.tryParse(savedId);
+    if (!mounted) return;
+
+    if (saved == null) {
+      setState(() {
+        _province = null;
+        _loadingProvince = false;
+        _pickerVisible = true;
+      });
+      return;
+    }
+
+    final catalog = InternetPackagesData.catalogFor(saved);
+    setState(() {
+      _province = saved;
+      _selectedKind = catalog.availableKinds.isNotEmpty
+          ? catalog.availableKinds.first
+          : InternetPackageKind.volume;
+      _loadingProvince = false;
+      _pickerVisible = false;
+    });
+  }
+
+  Future<void> _selectProvince(
+    PackageProvince province, {
+    required bool persist,
+  }) async {
+    final catalog = InternetPackagesData.catalogFor(province);
+    final kinds = catalog.availableKinds;
+    setState(() {
+      _province = province;
+      if (!kinds.contains(_selectedKind)) {
+        _selectedKind =
+            kinds.isNotEmpty ? kinds.first : InternetPackageKind.volume;
+      }
+      _pickerVisible = false;
+    });
+    if (persist) {
+      await _settingsService.setPackageProvinceId(province.id);
+    }
+  }
 
   String? _noteForKind(AppLocalizations? l10n) {
-    switch (_selectedKind) {
-      case InternetPackageKind.unlimited:
-        return l10n?.unlimitedPackagesNote;
-      case InternetPackageKind.volume:
-        return l10n?.volumePackagesNote;
-      case InternetPackageKind.dedicated:
-        return null;
-    }
+    final catalog = _catalog;
+    if (catalog == null) return null;
+    final isEn = l10n?.locale.languageCode == 'en';
+    return catalog.noteForKind(_selectedKind, isEnglish: isEn == true);
   }
 
   @override
@@ -37,152 +91,402 @@ class _InternetPackagesScreenState extends State<InternetPackagesScreen> {
     final colorScheme = theme.colorScheme;
     final isDark = theme.brightness == Brightness.dark;
     final l10n = AppLocalizations.of(context);
-    final packages = InternetPackagesData.byKind(_selectedKind);
     final isDesktop = AppLayout.isDesktop(context);
-    final note = _noteForKind(l10n);
     final scaffoldBg =
         isDark ? AppTheme.darkScaffold : AppTheme.cableWhite;
 
+    final catalog = _catalog;
+    final packages = catalog?.byKind(_selectedKind) ?? const <InternetPackage>[];
+    final note = _noteForKind(l10n);
+
     return Scaffold(
       backgroundColor: scaffoldBg,
-      body: Stack(
-        fit: StackFit.expand,
-        children: [
-          DecoratedBox(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: isDark
-                    ? const [
-                        Color(0xFF0A1628),
-                        AppTheme.darkScaffold,
-                        Color(0xFF050B14),
-                      ]
-                    : [
-                        AppTheme.cableWhite,
-                        colorScheme.surface,
-                        AppTheme.cableWhite,
-                      ],
+      body: CosmicBackground(
+        showStars: isDark,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            if (_loadingProvince)
+              const Center(child: CircularProgressIndicator())
+            else if (_province != null)
+              _buildPackagesBody(
+                context,
+                l10n: l10n,
+                packages: packages,
+                isDesktop: isDesktop,
+                note: note,
+                colorScheme: colorScheme,
+              )
+            else
+              const SizedBox.shrink(),
+            if (_pickerVisible)
+              _ProvincePickerOverlay(
+                isEnglish: l10n?.locale.languageCode == 'en',
+                requiredChoice: _province == null,
+                selected: _province,
+                onSelected: (province) =>
+                    _selectProvince(province, persist: true),
+                onDismiss: _province == null
+                    ? null
+                    : () => setState(() => _pickerVisible = false),
               ),
-            ),
-          ),
-          if (isDark) const Positioned.fill(child: _StarField()),
-          SafeArea(
-            child: DesktopContent(
-              maxWidth: isDesktop ? 900 : AppLayout.pageMaxWidth,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPackagesBody(
+    BuildContext context, {
+    required AppLocalizations? l10n,
+    required List<InternetPackage> packages,
+    required bool isDesktop,
+    required String? note,
+    required ColorScheme colorScheme,
+  }) {
+    final isEn = l10n?.locale.languageCode == 'en';
+    final availableKinds = _catalog?.availableKinds ?? const [];
+
+    return SafeArea(
+      child: DesktopContent(
+        maxWidth: isDesktop ? 900 : AppLayout.pageMaxWidth,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+              child: Row(
                 children: [
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
+                  Expanded(
                     child: Text(
                       l10n?.internetPackagesTitle ?? 'بسته‌های اینترنتی',
-                      textAlign: TextAlign.center,
                       style: TextStyle(
                         color: colorScheme.onSurface,
-                        fontSize: 22,
+                        fontSize: 20,
                         fontWeight: FontWeight.w700,
                         height: 1.3,
                       ),
                     ),
                   ),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
-                    child: _PackageKindTabs(
-                      selected: _selectedKind,
-                      onChanged: (kind) {
-                        if (kind == _selectedKind) return;
-                        setState(() => _selectedKind = kind);
-                      },
-                      dedicatedLabel:
-                          l10n?.dedicatedPackagesTab ?? 'ددیکیت',
-                      unlimitedLabel:
-                          l10n?.unlimitedPackagesTab ?? 'نامحدود',
-                      volumeLabel: l10n?.volumePackagesTab ?? 'حجمی',
-                    ),
-                  ),
-                  Expanded(
-                    child: KeyedSubtree(
-                      key: ValueKey(_selectedKind),
-                      child: LayoutBuilder(
-                        builder: (context, constraints) {
-                          final crossAxisCount = isDesktop
-                              ? 3
-                              : (constraints.maxWidth < 340 ? 1 : 2);
-                          final mainAxisExtent = switch (_selectedKind) {
-                            InternetPackageKind.volume =>
-                              crossAxisCount == 1 ? 272.0 : 288.0,
-                            InternetPackageKind.unlimited =>
-                              crossAxisCount == 1 ? 272.0 : 288.0,
-                            InternetPackageKind.dedicated =>
-                              crossAxisCount == 1 ? 248.0 : 262.0,
-                          };
-
-                          return Column(
-                            children: [
-                              Expanded(
-                                child: GridView.builder(
-                                  padding: EdgeInsets.fromLTRB(
-                                    16,
-                                    4,
-                                    16,
-                                    note == null ? 24 : 8,
-                                  ),
-                                  gridDelegate:
-                                      SliverGridDelegateWithFixedCrossAxisCount(
-                                    crossAxisCount: crossAxisCount,
-                                    mainAxisSpacing: 14,
-                                    crossAxisSpacing: 14,
-                                    mainAxisExtent: mainAxisExtent,
-                                  ),
-                                  itemCount: packages.length,
-                                  itemBuilder: (context, index) {
-                                    return _PackageCard(
-                                      package: packages[index],
-                                      durationLabel:
-                                          l10n?.durationMonthsLabel(
-                                                packages[index].durationMonths,
-                                              ) ??
-                                              '${packages[index].durationMonths} Month',
-                                      dedicatedBadge:
-                                          l10n?.dedicatedPackageBadge ??
-                                              'بسته ددیکیت',
-                                      unlimitedBadge:
-                                          l10n?.unlimitedPackageBadge ??
-                                              'بسته نامحدود',
-                                      volumeBadge: l10n?.volumePackageBadge ??
-                                          'بسته حجمی',
-                                      daySpeedCaption:
-                                          l10n?.daySpeedLabel ?? 'سرعت روزانه',
-                                      nightSpeedCaption:
-                                          l10n?.nightSpeedLabel ??
-                                              'سرعت شبانه',
-                                    );
-                                  },
-                                ),
-                              ),
-                              if (note != null)
-                                Padding(
-                                  padding: const EdgeInsets.fromLTRB(
-                                    16,
-                                    4,
-                                    16,
-                                    16,
-                                  ),
-                                  child: _PackageNote(text: note),
-                                ),
-                            ],
-                          );
-                        },
-                      ),
-                    ),
+                  const SizedBox(width: 10),
+                  _ProvinceDropdown(
+                    value: _province!,
+                    isEnglish: isEn == true,
+                    onChanged: (p) => _selectProvince(p, persist: true),
                   ),
                 ],
               ),
             ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 4, 12, 12),
+              child: _PackageKindTabs(
+                selected: _selectedKind,
+                availableKinds: availableKinds,
+                onChanged: (kind) {
+                  if (kind == _selectedKind) return;
+                  setState(() => _selectedKind = kind);
+                },
+                dedicatedLabel: l10n?.dedicatedPackagesTab ?? 'ددیکیت',
+                unlimitedLabel: l10n?.unlimitedPackagesTab ?? 'نامحدود',
+                volumeLabel: l10n?.volumePackagesTab ?? 'حجمی',
+              ),
+            ),
+            Expanded(
+              child: KeyedSubtree(
+                key: ValueKey('${_province!.id}-$_selectedKind'),
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final crossAxisCount = isDesktop
+                        ? 3
+                        : (constraints.maxWidth < 340 ? 1 : 2);
+                    final mainAxisExtent = switch (_selectedKind) {
+                      InternetPackageKind.volume =>
+                        crossAxisCount == 1 ? 272.0 : 288.0,
+                      InternetPackageKind.unlimited =>
+                        crossAxisCount == 1 ? 272.0 : 288.0,
+                      InternetPackageKind.dedicated =>
+                        crossAxisCount == 1 ? 248.0 : 262.0,
+                    };
+
+                    if (packages.isEmpty) {
+                      return Center(
+                        child: Text(
+                          isEn == true
+                              ? 'No packages in this category'
+                              : 'بسته‌ای در این دسته نیست',
+                          style: TextStyle(
+                            color: colorScheme.onSurface.withValues(alpha: 0.65),
+                          ),
+                        ),
+                      );
+                    }
+
+                    return Column(
+                      children: [
+                        Expanded(
+                          child: GridView.builder(
+                            padding: EdgeInsets.fromLTRB(
+                              16,
+                              4,
+                              16,
+                              note == null ? 24 : 8,
+                            ),
+                            gridDelegate:
+                                SliverGridDelegateWithFixedCrossAxisCount(
+                              crossAxisCount: crossAxisCount,
+                              mainAxisSpacing: 14,
+                              crossAxisSpacing: 14,
+                              mainAxisExtent: mainAxisExtent,
+                            ),
+                            itemCount: packages.length,
+                            itemBuilder: (context, index) {
+                              return _PackageCard(
+                                package: packages[index],
+                                durationLabel:
+                                    l10n?.durationMonthsLabel(
+                                          packages[index].durationMonths,
+                                        ) ??
+                                        '${packages[index].durationMonths} Month',
+                                dedicatedBadge:
+                                    l10n?.dedicatedPackageBadge ??
+                                        'بسته ددیکیت',
+                                unlimitedBadge:
+                                    l10n?.unlimitedPackageBadge ??
+                                        'بسته نامحدود',
+                                volumeBadge: l10n?.volumePackageBadge ??
+                                    'بسته حجمی',
+                                daySpeedCaption:
+                                    l10n?.daySpeedLabel ?? 'سرعت روزانه',
+                                nightSpeedCaption:
+                                    l10n?.nightSpeedLabel ?? 'سرعت شبانه',
+                              );
+                            },
+                          ),
+                        ),
+                        if (note != null)
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+                            child: _PackageNote(text: note),
+                          ),
+                      ],
+                    );
+                  },
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ProvincePickerOverlay extends StatelessWidget {
+  const _ProvincePickerOverlay({
+    required this.isEnglish,
+    required this.requiredChoice,
+    required this.selected,
+    required this.onSelected,
+    this.onDismiss,
+  });
+
+  final bool isEnglish;
+  final bool requiredChoice;
+  final PackageProvince? selected;
+  final ValueChanged<PackageProvince> onSelected;
+  final VoidCallback? onDismiss;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    return Material(
+      color: Colors.black.withValues(alpha: 0.55),
+      child: SafeArea(
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 420),
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: DecoratedBox(
+                decoration: AppTheme.cosmicCardDecoration(
+                  radius: 24,
+                  brightness: theme.brightness,
+                  withGlow: true,
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 22, 20, 16),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Text(
+                        isEnglish
+                            ? 'Select your province'
+                            : 'ولایت خود را انتخاب کنید',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w700,
+                          color: theme.colorScheme.onSurface,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        isEnglish
+                            ? 'Packages differ by province. Your choice will be saved as default.'
+                            : 'بسته‌ها بر اساس ولایت متفاوت‌اند. انتخاب شما به‌عنوان پیش‌فرض ذخیره می‌شود.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 13.5,
+                          height: 1.45,
+                          color: isDark
+                              ? AppTheme.darkTextSecondary
+                              : Colors.grey.shade700,
+                        ),
+                      ),
+                      const SizedBox(height: 18),
+                      for (final province in PackageProvince.values) ...[
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 10),
+                          child: Material(
+                            color: Colors.transparent,
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(14),
+                              onTap: () => onSelected(province),
+                              child: Ink(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 14,
+                                  vertical: 14,
+                                ),
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(14),
+                                  color: selected == province
+                                      ? (isDark
+                                            ? AppTheme.darkAction
+                                            : AppTheme.primary
+                                                .withValues(alpha: 0.1))
+                                      : (isDark
+                                            ? AppTheme.darkCardBottom
+                                                .withValues(alpha: 0.65)
+                                            : Colors.white),
+                                  border: Border.all(
+                                    color: selected == province
+                                        ? (isDark
+                                              ? AppTheme.darkGlow
+                                              : AppTheme.primary)
+                                        : (isDark
+                                              ? AppTheme.darkRim
+                                                  .withValues(alpha: 0.4)
+                                              : AppTheme.lightRim),
+                                  ),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      Icons.location_on_outlined,
+                                      color: selected == province
+                                          ? (isDark
+                                                ? AppTheme.darkActionForeground
+                                                : AppTheme.primary)
+                                          : (isDark
+                                                ? AppTheme.darkTextSecondary
+                                                : AppTheme.primary),
+                                    ),
+                                    const SizedBox(width: 10),
+                                    Expanded(
+                                      child: Text(
+                                        province.title(isEnglish),
+                                        style: TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.w600,
+                                          color: selected == province && isDark
+                                              ? AppTheme.darkActionForeground
+                                              : theme.colorScheme.onSurface,
+                                        ),
+                                      ),
+                                    ),
+                                    if (selected == province)
+                                      Icon(
+                                        Icons.check_circle,
+                                        color: isDark
+                                            ? AppTheme.darkActionForeground
+                                            : AppTheme.primary,
+                                      ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                      if (!requiredChoice && onDismiss != null)
+                        TextButton(
+                          onPressed: onDismiss,
+                          child: Text(isEnglish ? 'Close' : 'بستن'),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
           ),
-        ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ProvinceDropdown extends StatelessWidget {
+  const _ProvinceDropdown({
+    required this.value,
+    required this.isEnglish,
+    required this.onChanged,
+  });
+
+  final PackageProvince value;
+  final bool isEnglish;
+  final ValueChanged<PackageProvince> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    return DecoratedBox(
+      decoration: AppTheme.cosmicCardDecoration(
+        radius: 14,
+        brightness: theme.brightness,
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<PackageProvince>(
+          value: value,
+          borderRadius: BorderRadius.circular(14),
+          dropdownColor: isDark ? AppTheme.darkSurface : AppTheme.pureWhite,
+          icon: Icon(
+            Icons.keyboard_arrow_down_rounded,
+            color: isDark ? AppTheme.darkTextSecondary : AppTheme.primary,
+          ),
+          padding: const EdgeInsetsDirectional.only(start: 12, end: 8),
+          items: PackageProvince.values
+              .map(
+                (p) => DropdownMenuItem(
+                  value: p,
+                  child: Text(
+                    p.title(isEnglish),
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      color: theme.colorScheme.onSurface,
+                    ),
+                  ),
+                ),
+              )
+              .toList(),
+          onChanged: (next) {
+            if (next != null) onChanged(next);
+          },
+        ),
       ),
     );
   }
@@ -191,6 +495,7 @@ class _InternetPackagesScreenState extends State<InternetPackagesScreen> {
 class _PackageKindTabs extends StatelessWidget {
   const _PackageKindTabs({
     required this.selected,
+    required this.availableKinds,
     required this.onChanged,
     required this.dedicatedLabel,
     required this.unlimitedLabel,
@@ -198,38 +503,41 @@ class _PackageKindTabs extends StatelessWidget {
   });
 
   final InternetPackageKind selected;
+  final List<InternetPackageKind> availableKinds;
   final ValueChanged<InternetPackageKind> onChanged;
   final String dedicatedLabel;
   final String unlimitedLabel;
   final String volumeLabel;
 
+  String _labelFor(InternetPackageKind kind) {
+    switch (kind) {
+      case InternetPackageKind.dedicated:
+        return dedicatedLabel;
+      case InternetPackageKind.unlimited:
+        return unlimitedLabel;
+      case InternetPackageKind.volume:
+        return volumeLabel;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (availableKinds.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
     return Row(
       children: [
-        Expanded(
-          child: _TabChip(
-            label: dedicatedLabel,
-            selected: selected == InternetPackageKind.dedicated,
-            onTap: () => onChanged(InternetPackageKind.dedicated),
+        for (var i = 0; i < availableKinds.length; i++) ...[
+          if (i > 0) const SizedBox(width: 8),
+          Expanded(
+            child: _TabChip(
+              label: _labelFor(availableKinds[i]),
+              selected: selected == availableKinds[i],
+              onTap: () => onChanged(availableKinds[i]),
+            ),
           ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: _TabChip(
-            label: unlimitedLabel,
-            selected: selected == InternetPackageKind.unlimited,
-            onTap: () => onChanged(InternetPackageKind.unlimited),
-          ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: _TabChip(
-            label: volumeLabel,
-            selected: selected == InternetPackageKind.volume,
-            onTap: () => onChanged(InternetPackageKind.volume),
-          ),
-        ),
+        ],
       ],
     );
   }
@@ -394,24 +702,8 @@ class _PackageCard extends StatelessWidget {
     final muted = onCard.withValues(alpha: isDark ? 0.92 : 0.75);
 
     final cardGradient = isDark
-        ? const LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              Color(0xFF163A66),
-              AppTheme.navyMid,
-              Color(0xFF0C1F3D),
-            ],
-          )
-        : LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              AppTheme.pureWhite,
-              Color.lerp(AppTheme.pureWhite, AppTheme.cableWhite, 0.65)!,
-              AppTheme.cableWhite,
-            ],
-          );
+        ? AppTheme.cosmicCardGradient()
+        : AppTheme.lightCardGradient();
 
     final specs = <Widget>[
       if (package.isVolume) ...[
@@ -575,37 +867,5 @@ class _SpecRow extends StatelessWidget {
   }
 }
 
-class _StarField extends StatelessWidget {
-  const _StarField();
 
-  @override
-  Widget build(BuildContext context) {
-    return const CustomPaint(
-      painter: _StarFieldPainter(),
-      child: SizedBox.expand(),
-    );
-  }
-}
 
-class _StarFieldPainter extends CustomPainter {
-  const _StarFieldPainter();
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()..style = PaintingStyle.fill;
-    final random = math.Random(42);
-
-    for (var i = 0; i < 90; i++) {
-      final x = random.nextDouble() * size.width;
-      final y = random.nextDouble() * size.height;
-      final radius = 0.4 + random.nextDouble() * 1.1;
-      paint.color = AppTheme.pureWhite.withValues(
-        alpha: 0.12 + random.nextDouble() * 0.35,
-      );
-      canvas.drawCircle(Offset(x, y), radius, paint);
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
-}

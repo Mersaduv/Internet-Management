@@ -18,7 +18,7 @@ class AppSettingsScreen extends StatefulWidget {
 class _AppSettingsScreenState extends State<AppSettingsScreen> {
   final MikroTikServiceManager _serviceManager = MikroTikServiceManager();
   final SettingsService _settingsService = SettingsService();
-  ThemeMode _selectedThemeMode = ThemeMode.light;
+  ThemeMode _selectedThemeMode = ThemeMode.dark;
   String _selectedLanguageCode = 'fa';
   bool _isLoading = true;
 
@@ -48,7 +48,7 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
     } catch (e) {
       setState(() {
         _selectedLanguageCode = 'fa';
-        _selectedThemeMode = ThemeMode.light;
+        _selectedThemeMode = ThemeMode.dark;
         _isLoading = false;
       });
     }
