@@ -15,14 +15,14 @@ Set-Location -LiteralPath $Root
 
 function Write-Step([string]$Message) {
   Write-Host ""
-  Write-Host "== $Message" -ForegroundColor Cyan
+  Write-Host ("== {0}" -f $Message) -ForegroundColor Cyan
 }
 
-function Invoke-Flutter([string[]]$Args) {
-  Write-Host (">> flutter " + ($Args -join ' ')) -ForegroundColor DarkGray
-  & flutter @Args
+function Invoke-Flutter([string[]]$FlutterArgs) {
+  Write-Host (">> flutter {0}" -f ($FlutterArgs -join ' ')) -ForegroundColor DarkGray
+  & flutter @FlutterArgs
   if ($LASTEXITCODE -ne 0) {
-    throw "flutter $($Args -join ' ') failed (exit $LASTEXITCODE)"
+    throw ("flutter {0} failed (exit {1})" -f ($FlutterArgs -join ' '), $LASTEXITCODE)
   }
 }
 
@@ -40,29 +40,29 @@ function Get-AppVersion {
 }
 
 if (-not (Get-Command flutter -ErrorAction SilentlyContinue)) {
-  Write-Host "[X] flutter not found in PATH." -ForegroundColor Red
+  Write-Host '[X] flutter not found in PATH.' -ForegroundColor Red
   exit 1
 }
 
 $ver = Get-AppVersion
-Write-Step "Android APK — v$($ver.Full)"
-Write-Host "Root: $Root"
+Write-Step ("Android APK - v{0}" -f $ver.Full)
+Write-Host ("Root: {0}" -f $Root)
 
 Invoke-Flutter @('pub', 'get')
-Write-Step "flutter build apk --release"
+Write-Step 'flutter build apk --release'
 Invoke-Flutter @('build', 'apk', '--release')
 
 $apkSrc = Join-Path $Root 'build\app\outputs\flutter-apk\app-release.apk'
 if (-not (Test-Path -LiteralPath $apkSrc)) {
-  Write-Host "[X] APK not found: $apkSrc" -ForegroundColor Red
+  Write-Host ("[X] APK not found: {0}" -f $apkSrc) -ForegroundColor Red
   exit 1
 }
 
 $distDir = Join-Path $Root 'dist\android'
 New-Item -ItemType Directory -Force -Path $distDir | Out-Null
-$apkName = "Jahan_Bit-v$($ver.Name)($($ver.Build))-release.apk"
+$apkName = "Jahan_Bit-v{0}({1})-release.apk" -f $ver.Name, $ver.Build
 $apkDest = Join-Path $distDir $apkName
 Copy-Item -LiteralPath $apkSrc -Destination $apkDest -Force
 
-Write-Host "[OK] $apkDest" -ForegroundColor Green
+Write-Host ("[OK] {0}" -f $apkDest) -ForegroundColor Green
 exit 0
